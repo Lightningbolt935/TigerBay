@@ -1,0 +1,49 @@
+name: Build App (Android & iOS)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: 'stable'
+          cache: true
+      - name: Install Dependencies
+        run: flutter pub get
+      - name: Build APK
+        run: flutter build apk --debug
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+
+  build-ios:
+    name: Build iOS App
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: 'stable'
+          cache: true
+      - name: Install Dependencies
+        run: flutter pub get
+      - name: Build iOS (No codesign for testing)
+        run: flutter build ios --debug --no-codesign
+      - name: Upload iOS Runner Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-runner-app
+          path: build/ios/iphoneos/Runner.app
