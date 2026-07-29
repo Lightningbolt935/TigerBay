@@ -59,19 +59,19 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
     final isButtonDisabled = _loadingAccount || _isProcessing;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.brandBlack,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: AppColors.brandBlack,
         elevation: 0,
         leading: IconButton(
           icon:
-              const Icon(Icons.arrow_back_ios, size: 20, color: Colors.black87),
+              const Icon(Icons.arrow_back_ios, size: 20, color: AppColors.textPrimary),
           onPressed: () => context.pop(),
         ),
         title: const Text(
           'Confirm Booking',
           style: TextStyle(
-              fontSize: 17, fontWeight: FontWeight.w600, color: Colors.black87),
+              fontSize: 17, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
         ),
         centerTitle: true,
       ),
@@ -83,10 +83,10 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: AppColors.gold.withValues(alpha: 0.06),
+                color: AppColors.surface,
                 borderRadius: BorderRadius.circular(16),
                 border:
-                    Border.all(color: AppColors.gold.withValues(alpha: 0.2)),
+                    Border.all(color: AppColors.gold.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
@@ -102,13 +102,13 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
                           style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
-                              color: Colors.black87),
+                              color: AppColors.textPrimary),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           'A £${depositAmount.toStringAsFixed(2)} deposit secures your table. Fully refundable if cancelled 24h in advance.',
-                          style: TextStyle(
-                              color: Colors.grey.shade600,
+                          style: const TextStyle(
+                              color: AppColors.textSecondary,
                               fontSize: 12,
                               height: 1.4),
                         ),
@@ -125,7 +125,7 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 1.2,
-                  color: Colors.black45),
+                  color: AppColors.textSecondary),
             ),
             const SizedBox(height: 14),
             _SummaryRow(
@@ -133,7 +133,7 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
                 value: '£${depositAmount.toStringAsFixed(2)}'),
             const SizedBox(height: 8),
             const _SummaryRow(label: 'Processing fee', value: '£0.00'),
-            Divider(color: Colors.grey.shade200, height: 28),
+            Divider(color: AppColors.border, height: 28),
             _SummaryRow(
               label: 'Total due today',
               value: '£${depositAmount.toStringAsFixed(2)}',
@@ -143,18 +143,18 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.grey.shade50,
+                color: AppColors.surface,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.grey.shade200),
+                border: Border.all(color: AppColors.border),
               ),
               child: const Row(
                 children: [
                   Icon(Icons.credit_card_outlined,
-                      color: Colors.black45, size: 22),
+                      color: AppColors.gold, size: 22),
                   SizedBox(width: 12),
                   Text(
                     'Card payment powered by Stripe',
-                    style: TextStyle(fontSize: 13, color: Colors.black54),
+                    style: TextStyle(fontSize: 13, color: AppColors.textPrimary),
                   ),
                 ],
               ),
@@ -334,14 +334,14 @@ class _SummaryRow extends StatelessWidget {
             style: TextStyle(
               fontSize: isBold ? 15 : 13,
               fontWeight: isBold ? FontWeight.w600 : FontWeight.w400,
-              color: isBold ? Colors.black87 : Colors.grey.shade500,
+              color: isBold ? AppColors.textPrimary : AppColors.textSecondary,
             )),
         const Spacer(),
         Text(value,
             style: TextStyle(
               fontSize: isBold ? 15 : 13,
               fontWeight: isBold ? FontWeight.w700 : FontWeight.w500,
-              color: Colors.black87,
+              color: isBold ? AppColors.gold : AppColors.textPrimary,
             )),
       ],
     );
@@ -379,18 +379,21 @@ class BookingDetailScreen extends ConsumerWidget {
         final booking = bookings.where((b) => b.id.toString() == bookingId).firstOrNull;
         if (booking == null) {
           return const Scaffold(
-            body: Center(child: Text('Booking not found')),
+            backgroundColor: AppColors.brandBlack,
+            body: Center(child: Text('Booking not found', style: TextStyle(color: AppColors.textSecondary))),
           );
         }
         return _buildDetail(context, ref, booking);
       },
       loading: () => const Scaffold(
+        backgroundColor: AppColors.brandBlack,
         body: Center(
             child: CircularProgressIndicator(
                 color: AppColors.gold, strokeWidth: 2)),
       ),
       error: (_, __) => const Scaffold(
-        body: Center(child: Text('Error loading booking')),
+        backgroundColor: AppColors.brandBlack,
+        body: Center(child: Text('Error loading booking', style: TextStyle(color: AppColors.textSecondary))),
       ),
     );
   }
@@ -398,19 +401,19 @@ class BookingDetailScreen extends ConsumerWidget {
   Widget _buildDetail(
       BuildContext context, WidgetRef ref, BookingModel booking) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.brandBlack,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: AppColors.brandBlack,
         elevation: 0,
         leading: IconButton(
           icon:
-              const Icon(Icons.arrow_back_ios, size: 20, color: Colors.black87),
+              const Icon(Icons.arrow_back_ios, size: 20, color: AppColors.textPrimary),
           onPressed: () => context.pop(),
         ),
         title: const Text(
           'Booking Details',
           style: TextStyle(
-              fontSize: 17, fontWeight: FontWeight.w600, color: Colors.black87),
+              fontSize: 17, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
         ),
         centerTitle: true,
       ),
@@ -423,12 +426,12 @@ class BookingDetailScreen extends ConsumerWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: AppColors.surface,
                 borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: Colors.grey.shade200),
+                border: Border.all(color: AppColors.border),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
+                    color: Colors.black.withValues(alpha: 0.25),
                     blurRadius: 12,
                     offset: const Offset(0, 3),
                   ),
@@ -441,9 +444,9 @@ class BookingDetailScreen extends ConsumerWidget {
                       style: const TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.w700,
-                          color: Colors.black87)),
+                          color: AppColors.gold)),
                   const SizedBox(height: 4),
-                  Divider(color: Colors.grey.shade100, height: 24),
+                  Divider(color: AppColors.border, height: 24),
                   _DetailRow(
                       icon: Icons.calendar_today_outlined,
                       label: 'Date',
@@ -470,7 +473,7 @@ class BookingDetailScreen extends ConsumerWidget {
                 child: OutlinedButton(
                   onPressed: () => context.push('${AppRoutes.myBookings}/new'),
                   style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Colors.black87),
+                    side: const BorderSide(color: AppColors.gold),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(28)),
                   ),
@@ -479,7 +482,7 @@ class BookingDetailScreen extends ConsumerWidget {
                     style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
-                        color: Colors.black87),
+                        color: AppColors.gold),
                   ),
                 ),
               ),
@@ -512,19 +515,20 @@ class BookingDetailScreen extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
+        backgroundColor: AppColors.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         title: const Text('Cancel Booking?',
-            style: TextStyle(fontWeight: FontWeight.w700)),
+            style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
         content: const Text(
           'Your deposit will be refunded within 3-5 business days if cancelled more than 24 hours before.',
-          style: TextStyle(fontSize: 13, height: 1.4),
+          style: TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.4),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Keep It',
                 style: TextStyle(
-                    color: Colors.black54, fontWeight: FontWeight.w500)),
+                    color: AppColors.textSecondary, fontWeight: FontWeight.w500)),
           ),
           TextButton(
             onPressed: () async {
@@ -554,16 +558,16 @@ class _DetailRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 16, color: Colors.grey.shade400),
+        Icon(icon, size: 16, color: AppColors.gold),
         const SizedBox(width: 10),
         Text(label,
-            style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+            style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
         const Spacer(),
         Text(value,
             style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: Colors.black87)),
+                color: AppColors.textPrimary)),
       ],
     );
   }

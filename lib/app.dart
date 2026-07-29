@@ -4,8 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-// ── 1. App Routes & Constants ────────────────────────────────────────────────
+// ── 1. App Routes & Constants & Theme ────────────────────────────────────────
 import 'package:tigerbay_app/core/constants/app_routes.dart';
+import 'package:tigerbay_app/core/theme/app_theme.dart';
 
 // ── 2. Providers & State Classes ─────────────────────────────────────────────
 import 'package:tigerbay_app/features/auth/providers/auth_provider.dart';
@@ -325,8 +326,10 @@ final routerProvider = Provider<GoRouter>((ref) {
   );
 });
 
+// ── 9. Theme System ─────────────────────────────────────────────────────────
+
 /// ═══════════════════════════════════════════════════════════════════════════
-/// TigerBay International — Root Application Widget (Light Theme)
+/// TigerBay International — Root Application Widget (Dark Luxury Theme)
 /// ═══════════════════════════════════════════════════════════════════════════
 class TigerBayApp extends ConsumerWidget {
   const TigerBayApp({super.key});
@@ -338,17 +341,11 @@ class TigerBayApp extends ConsumerWidget {
     return MaterialApp.router(
       title: 'TigerBay International',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.light,
-        scaffoldBackgroundColor: Colors.white,
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black,
-          elevation: 0,
-        ),
-      ),
-      themeMode: ThemeMode.light,
+      theme: AppTheme.darkTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: ThemeMode.dark,
       routerConfig: router,
     );
   }
 }
+
