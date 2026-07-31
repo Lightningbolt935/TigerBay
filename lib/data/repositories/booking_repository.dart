@@ -113,15 +113,19 @@ class BookingRepository {
     );
   }
 
-  /// Fetch the Stripe connected-account ID for a specific branch.
-  /// Returns `null` if the branch has no connected account configured.
-  Future<String?> fetchBranchStripeAccountId(String branchId) async {
-    final data = await _supabase
-        .from('branches')
-        .select('stripe_account_id')
-        .eq('id', branchId)
-        .maybeSingle();
-    return data?['stripe_account_id'] as String?;
+  /// Confirm a booking after its PayPal deposit payment succeeds.
+  /// Flips the row from `pending` to `upcoming` so it shows under
+  /// "Upcoming" in My Bookings.
+  Future<void> confirmBookingPaymentWithPayPal({
+    required int bookingId,
+  }) async {
+    await _supabase
+        .from('bookings')
+        .update({
+          'status': 'upcoming',
+          'updated_at': DateTime.now().toIso8601String(),
+        })
+        .eq('id', bookingId);
   }
 
   Stream<List<BookingModel>> watchUserBookings(String userId) {

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:tigerbay_app/core/constants/app_colors.dart';
 import 'package:tigerbay_app/core/constants/app_routes.dart';
+import 'package:tigerbay_app/core/services/paypal_service.dart';
 import 'package:tigerbay_app/data/models/booking_model.dart';
 import 'package:tigerbay_app/features/bookings/providers/booking_provider.dart';
 
@@ -18,45 +18,19 @@ class BookingConfirmScreen extends ConsumerStatefulWidget {
 }
 
 class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
-  String? _stripeAccountId;
-  bool _loadingAccount = true;
-  bool _isProcessing =
-      false; // Prevents frozen screen layouts during HTTP execution loops
+  bool _isProcessing = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _fetchBranchStripeAccount();
-  }
-
-  Future<void> _fetchBranchStripeAccount() async {
-    final branchId = widget.bookingData['branchId'] as String?;
-    if (branchId == null || branchId.isEmpty) {
-      setState(() => _loadingAccount = false);
-      return;
-    }
-    try {
-      final repo = ref.read(bookingRepositoryProvider);
-      final accountId = await repo.fetchBranchStripeAccountId(branchId);
-      setState(() {
-        _stripeAccountId = accountId;
-        _loadingAccount = false;
-      });
-    } catch (_) {
-      setState(() => _loadingAccount = false);
-    }
-  }
+  // Payment method selection — PayPal is default (live), Stripe is scaffolded
+  _BookingPaymentMethod _selectedMethod = _BookingPaymentMethod.paypal;
 
   @override
   Widget build(BuildContext context) {
     final bookingData = widget.bookingData;
-    final bookingId = bookingData['bookingId'] as String? ?? '';
-    final branchId = bookingData['branchId'] as String? ?? '';
+    final bookingId = bookingData['bookingId']?.toString() ?? '';
     final depositAmount =
         (bookingData['depositAmount'] as num?)?.toDouble() ?? 20.0;
 
-    // Button state determines whether execution inputs are allowed
-    final isButtonDisabled = _loadingAccount || _isProcessing;
+    final isButtonDisabled = _isProcessing;
 
     return Scaffold(
       backgroundColor: AppColors.brandBlack,
@@ -133,89 +107,64 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
                 value: '£${depositAmount.toStringAsFixed(2)}'),
             const SizedBox(height: 8),
             const _SummaryRow(label: 'Processing fee', value: '£0.00'),
-            Divider(color: AppColors.border, height: 28),
+            const Divider(color: AppColors.border, height: 28),
             _SummaryRow(
               label: 'Total due today',
               value: '£${depositAmount.toStringAsFixed(2)}',
               isBold: true,
             ),
-            const Spacer(),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.credit_card_outlined,
-                      color: AppColors.gold, size: 22),
-                  SizedBox(width: 12),
-                  Text(
-                    'Card payment powered by Stripe',
-                    style: TextStyle(fontSize: 13, color: AppColors.textPrimary),
-                  ),
-                ],
-              ),
+
+            const SizedBox(height: 24),
+
+            // ── Payment Method Selector ────────────────────────────────
+            const Text(
+              'PAY WITH',
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2,
+                  color: AppColors.textSecondary),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
+
+            // PayPal option
+            _PaymentMethodTile(
+              method: _BookingPaymentMethod.paypal,
+              selected: _selectedMethod,
+              onTap: () =>
+                  setState(() => _selectedMethod = _BookingPaymentMethod.paypal),
+              label: 'PayPal',
+              subtitle: 'Sandbox — pay securely via PayPal',
+              icon: const _PayPalIconSmall(),
+            ),
+            const SizedBox(height: 8),
+
+            // Stripe option (scaffolded — coming soon)
+            _PaymentMethodTile(
+              method: _BookingPaymentMethod.stripe,
+              selected: _selectedMethod,
+              onTap: null, // disabled until Stripe Edge Function is deployed
+              label: 'Card (Stripe)',
+              subtitle: 'Coming soon',
+              icon: const Icon(Icons.credit_card_rounded,
+                  color: AppColors.textSecondary, size: 20),
+              disabled: true,
+            ),
+
+            const Spacer(),
+
+            // ── Pay Button ────────────────────────────────────────────
             SizedBox(
               width: double.infinity,
               height: 54,
               child: ElevatedButton(
                 onPressed: isButtonDisabled
                     ? null
-                    : () async {
-                        setState(() => _isProcessing =
-                            true); // Lock UI input & trigger spinner update
-                        try {
-                          final response =
-                              await Supabase.instance.client.functions.invoke(
-                            'create-payment-intent',
-                            body: {
-                              'booking_id': bookingId,
-                              'branch_id': branchId,
-                              'amount': (depositAmount * 100).toInt(),
-                              'currency': 'gbp',
-                              if (_stripeAccountId != null)
-                                'transfer_data_destination': _stripeAccountId,
-                            },
-                          );
-
-                          if (response.status == 200) {
-                            if (!context.mounted) return;
-                            _showSuccess(context);
-                          } else {
-                            if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text(
-                                      'Payment function returned an error status.')),
-                            );
-                          }
-                        } catch (e) {
-                          // ── 🛠️ FALLBACK INJECTIONS FOR OFFLINE DEMOS ──────────────────
-                          // If Edge functions are missing/unconfigured locally, auto-bypass to show the success dialog box for the demo loop!
-                          if (e.toString().contains('Function not found') ||
-                              e.toString().contains('404')) {
-                            if (!context.mounted) return;
-                            _showSuccess(context);
-                          } else {
-                            if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                  content:
-                                      Text('Checkout Handshake Exception: $e')),
-                            );
-                          }
-                        } finally {
-                          if (mounted) {
-                            setState(() => _isProcessing =
-                                false); // Unlock UI interaction loops safely
-                          }
-                        }
-                      },
+                    : () => _handlePayment(
+                          context: context,
+                          bookingId: bookingId,
+                          depositAmount: depositAmount,
+                        ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.gold,
                   disabledBackgroundColor:
@@ -231,12 +180,23 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
                         child: CircularProgressIndicator(
                             color: Colors.white, strokeWidth: 2),
                       )
-                    : Text(
-                        'Pay £${depositAmount.toStringAsFixed(2)} & Confirm',
-                        style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white),
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (_selectedMethod == _BookingPaymentMethod.paypal)
+                            const _PayPalIconSmall(),
+                          if (_selectedMethod == _BookingPaymentMethod.paypal)
+                            const SizedBox(width: 8),
+                          Text(
+                            _selectedMethod == _BookingPaymentMethod.paypal
+                                ? 'Pay £${depositAmount.toStringAsFixed(2)} with PayPal'
+                                : 'Pay £${depositAmount.toStringAsFixed(2)} with Card',
+                            style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white),
+                          ),
+                        ],
                       ),
               ),
             ),
@@ -245,6 +205,67 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
         ),
       ),
     );
+  }
+
+  /// Routes to the PayPal checkout and confirms the booking on success.
+  Future<void> _handlePayment({
+    required BuildContext context,
+    required String bookingId,
+    required double depositAmount,
+  }) async {
+    setState(() => _isProcessing = true);
+
+    // Capture ScaffoldMessenger BEFORE any async gap
+    final messenger = ScaffoldMessenger.of(context);
+
+    try {
+      // ── PayPal: live sandbox checkout for the table deposit ────────────
+      final paid = await PayPalService.pay(
+        context: context,
+        amount: depositAmount.toStringAsFixed(2),
+        currency: 'GBP',
+        description: 'TigerBay Table Deposit',
+      );
+
+      if (!mounted) return;
+
+      if (paid) {
+        // Confirm the booking in the DB (status pending → upcoming)
+        await _confirmBookingInDb(bookingId);
+        if (!context.mounted) return;
+        _showSuccess(context);
+      } else {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('PayPal payment was cancelled or failed.'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
+  /// Flips a paid booking from `pending` to `upcoming` so it appears under
+  /// "Upcoming" in My Bookings. Demo/fake booking IDs are skipped.
+  Future<void> _confirmBookingInDb(String bookingId) async {
+    final bookingIdInt = int.tryParse(bookingId);
+    if (bookingIdInt == null) {
+      debugPrint(
+        '[BookingConfirm] Skipping DB confirm for demo booking: $bookingId',
+      );
+      return;
+    }
+    try {
+      await ref
+          .read(bookingRepositoryProvider)
+          .confirmBookingPaymentWithPayPal(bookingId: bookingIdInt);
+    } catch (error) {
+      // Non-blocking: booking stays 'pending' but the user flow completes.
+      debugPrint('[BookingConfirm] DB confirm failed (non-blocking): $error');
+    }
   }
 
   void _showSuccess(BuildContext context) {
@@ -348,6 +369,181 @@ class _SummaryRow extends StatelessWidget {
   }
 }
 
+// ── Payment Method Enum ───────────────────────────────────────────────────────
+enum _BookingPaymentMethod { paypal, stripe }
+
+// ── Payment Method Tile ───────────────────────────────────────────────────────
+class _PaymentMethodTile extends StatelessWidget {
+  final _BookingPaymentMethod method;
+  final _BookingPaymentMethod selected;
+  final VoidCallback? onTap;
+  final String label;
+  final String subtitle;
+  final Widget icon;
+  final bool disabled;
+
+  const _PaymentMethodTile({
+    required this.method,
+    required this.selected,
+    required this.onTap,
+    required this.label,
+    required this.subtitle,
+    required this.icon,
+    this.disabled = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isSelected = selected == method;
+    return Opacity(
+      opacity: disabled ? 0.45 : 1.0,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected ? AppColors.gold : AppColors.border,
+              width: isSelected ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              // Radio dot
+              Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color:
+                        isSelected ? AppColors.gold : AppColors.border,
+                    width: 2,
+                  ),
+                ),
+                child: isSelected
+                    ? Center(
+                        child: Container(
+                          width: 10,
+                          height: 10,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: AppColors.gold,
+                          ),
+                        ),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 12),
+              icon,
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: isSelected
+                          ? AppColors.textPrimary
+                          : AppColors.textSecondary,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textHint,
+                    ),
+                  ),
+                ],
+              ),
+              if (disabled) ...const [
+                Spacer(),
+                _ComingSoonBadge(),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Coming Soon Badge ─────────────────────────────────────────────────────────
+class _ComingSoonBadge extends StatelessWidget {
+  const _ComingSoonBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.border,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: const Text(
+        'Soon',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textHint,
+        ),
+      ),
+    );
+  }
+}
+
+// ── PayPal Icon (small inline) ────────────────────────────────────────────────
+class _PayPalIconSmall extends StatelessWidget {
+  const _PayPalIconSmall();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 16,
+          height: 16,
+          decoration: const BoxDecoration(
+            color: Color(0xFF003087),
+            shape: BoxShape.circle,
+          ),
+          child: const Center(
+            child: Text('P',
+                style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    height: 1)),
+          ),
+        ),
+        const SizedBox(width: 1),
+        Container(
+          width: 14,
+          height: 14,
+          decoration: const BoxDecoration(
+            color: Color(0xFF009CDE),
+            shape: BoxShape.circle,
+          ),
+          child: const Center(
+            child: Text('P',
+                style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    height: 1)),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 // ── Booking Detail Screen Re-Export Declaration ──────────────────────────────
 
 class BookingDetailScreen extends ConsumerWidget {
@@ -446,7 +642,7 @@ class BookingDetailScreen extends ConsumerWidget {
                           fontWeight: FontWeight.w700,
                           color: AppColors.gold)),
                   const SizedBox(height: 4),
-                  Divider(color: AppColors.border, height: 24),
+                  const Divider(color: AppColors.border, height: 24),
                   _DetailRow(
                       icon: Icons.calendar_today_outlined,
                       label: 'Date',
