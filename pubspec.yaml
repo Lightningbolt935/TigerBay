@@ -20,7 +20,7 @@ dependencies:
   go_router: ^13.2.0
 
   # Payments
-  flutter_stripe: ^10.1.1
+  flutter_stripe: ^11.0.0
 
   # Auth (Social)
   google_sign_in: ^6.2.1
