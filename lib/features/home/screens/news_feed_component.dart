@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Reactive home-screen feed component.
@@ -160,7 +161,9 @@ class _NewsFeedComponentState extends State<NewsFeedComponent> {
 class NewsFeedItem {
   final String id;
   final int? branchId;
-  final String imageUrl;
+  /// Sanitized image URL. Null when the DB value is empty or absent.
+  /// Relative paths are expanded to full Supabase Storage public URLs.
+  final String? imageUrl;
   final String title;
   final String previewText;
   final DateTime createdAt;
@@ -168,17 +171,33 @@ class NewsFeedItem {
   const NewsFeedItem({
     required this.id,
     required this.branchId,
-    required this.imageUrl,
+    this.imageUrl,
     required this.title,
     required this.previewText,
     required this.createdAt,
   });
 
   factory NewsFeedItem.fromJson(Map<String, dynamic> json) {
+    // Resolves a raw DB value into a usable URL:
+    //  • null / empty  → null
+    //  • already full URL → returned as-is
+    //  • relative path → expanded to Supabase Storage public URL
+    String? formatImageUrl(dynamic raw) {
+      if (raw == null) return null;
+      final clean = raw.toString().trim();
+      if (clean.isEmpty) return null;
+      if (clean.startsWith('http://') || clean.startsWith('https://')) {
+        return clean;
+      }
+      const supabaseUrl = 'https://xxnqlktcbwqhoyezlokv.supabase.co';
+      const bucket = 'news';
+      return '$supabaseUrl/storage/v1/object/public/$bucket/$clean';
+    }
+
     return NewsFeedItem(
       id: json['id'].toString(),
       branchId: json['branch_id'] as int?,
-      imageUrl: json['image_url'] as String? ?? '',
+      imageUrl: formatImageUrl(json['image_url'] ?? json['banner_url']),
       title: json['title'] as String? ?? '',
       previewText: json['preview_text'] as String? ?? '',
       createdAt: DateTime.tryParse(json['created_at'] as String? ?? '') ??
@@ -224,47 +243,7 @@ class _NewsFeedCard extends StatelessWidget {
           // ── Large premium image header ────────────────────────────────
           AspectRatio(
             aspectRatio: 16 / 9,
-            child: item.imageUrl.isNotEmpty
-                ? Image.network(
-                    item.imageUrl,
-                    fit: BoxFit.cover,
-
-                    // Shows an amber spinner while the image is fetching
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return Container(
-                        color: Colors.grey[900],
-                        child: const Center(
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Color(0xFFC9A84C), // gold / amber brand colour
-                          ),
-                        ),
-                      );
-                    },
-
-                    // Fallback UI when the URL is broken or returns a 4xx/5xx
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        color: Colors.grey[900],
-                        child: const Center(
-                          child: Icon(
-                            Icons.newspaper,
-                            color: Colors.grey,
-                            size: 40,
-                          ),
-                        ),
-                      );
-                    },
-                  )
-                : Container(
-                    color: Colors.grey.shade200,
-                    child: const Icon(
-                      Icons.image_outlined,
-                      size: 32,
-                      color: Color(0xFFAEAEB2),
-                    ),
-                  ),
+            child: _buildNewsImage(item.imageUrl),
           ),
 
           Padding(
@@ -307,6 +286,49 @@ class _NewsFeedCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // ── Image helpers ────────────────────────────────────────────────────────
+
+
+  /// Uses [CachedNetworkImage] for valid URLs, falls back to a branded
+  /// placeholder when [imageUrl] is null, empty, or fails to load.
+  Widget _buildNewsImage(String? imageUrl) {
+    final bool isValid = imageUrl != null && imageUrl.trim().isNotEmpty;
+
+    if (!isValid) return _buildFallbackBanner();
+
+    return CachedNetworkImage(
+      imageUrl: imageUrl,
+      fit: BoxFit.cover,
+      width: double.infinity,
+      placeholder: (context, url) => Container(
+        color: Colors.grey[900],
+        child: const Center(
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: Color(0xFFC9A84C),
+          ),
+        ),
+      ),
+      errorWidget: (context, url, error) {
+        debugPrint('NewsFeedCard: failed to load image: $url → $error');
+        return _buildFallbackBanner();
+      },
+    );
+  }
+
+  Widget _buildFallbackBanner() {
+    return Container(
+      color: Colors.grey[900],
+      child: const Center(
+        child: Icon(
+          Icons.newspaper,
+          color: Color(0xFFC9A84C),
+          size: 40,
+        ),
       ),
     );
   }

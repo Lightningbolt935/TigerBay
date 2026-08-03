@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:tigerbay_app/data/models/branch_model.dart';
+import 'package:tigerbay_app/data/models/menu_item_model.dart';
+import 'package:tigerbay_app/data/models/reward_item_model.dart';
 
 final supabaseClientProvider = Provider<SupabaseClient>((ref) {
   return Supabase.instance.client;
@@ -216,3 +218,58 @@ final selectedBranchProvider =
   SelectedBranchNotifier.new,
 );
 
+// ── Branch-filtered menu dishes ───────────────────────────────────────────────
+//
+// Accepts a nullable int branchId (from selectedBranch?.id).
+// When non-null: returns dishes for that branch OR global dishes (branch_id IS NULL).
+// When null: returns all available dishes unfiltered.
+
+final menuForBranchProvider =
+    FutureProvider.family<List<MenuItemModel>, int?>((ref, branchId) async {
+  final client = ref.watch(supabaseClientProvider);
+
+  final List<dynamic> response;
+  if (branchId != null) {
+    response = await client
+        .from('dishes')
+        .select('*')
+        .eq('is_available', true)
+        .or('branch_id.eq.$branchId,branch_id.is.null');
+  } else {
+    response = await client
+        .from('dishes')
+        .select('*')
+        .eq('is_available', true);
+  }
+
+  return response
+      .map((row) => MenuItemModel.fromJson(row as Map<String, dynamic>))
+      .toList();
+});
+
+// ── Branch-filtered rewards ───────────────────────────────────────────────────
+//
+// Same pattern: branch-specific OR global rewards (branch_id IS NULL).
+
+final rewardsForBranchProvider =
+    FutureProvider.family<List<RewardItem>, int?>((ref, branchId) async {
+  final client = ref.watch(supabaseClientProvider);
+
+  final List<dynamic> response;
+  if (branchId != null) {
+    response = await client
+        .from('rewards')
+        .select('*')
+        .eq('is_active', true)
+        .or('branch_id.eq.$branchId,branch_id.is.null');
+  } else {
+    response = await client
+        .from('rewards')
+        .select('*')
+        .eq('is_active', true);
+  }
+
+  return response
+      .map((row) => RewardItem.fromMap(row as Map<String, dynamic>))
+      .toList();
+});

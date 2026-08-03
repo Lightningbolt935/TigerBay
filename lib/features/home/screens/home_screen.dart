@@ -65,9 +65,9 @@ class HomeScreen extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    // Branch selector pill
+                    // Branch selector chip — luxury dark glassmorphic pill
                     branches.when(
-                      data: (list) => _BranchDropdown(
+                      data: (list) => _HomeBranchChip(
                         branches: list,
                         selected: selectedBranch ??
                             (list.isNotEmpty ? list.first : null),
@@ -75,26 +75,11 @@ class HomeScreen extends ConsumerWidget {
                             ref.read(selectedBranchProvider.notifier).changeBranch(b),
                       ),
                       loading: () => const SizedBox(
-                        width: 140,
-                        height: 36,
+                        width: 130,
+                        height: 32,
                         child: _ShimmerBox(radius: 20),
                       ),
-                      error: (err, __) => Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.red.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.red.shade200),
-                        ),
-                        child: Text(
-                          'Err: $err',
-                          style: TextStyle(fontFamily: 'Poppins', color: Colors.red.shade900,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
+                      error: (_, __) => const SizedBox.shrink(),
                     ),
                     const SizedBox(width: 4),
                     // ── Notification Bell with unread badge ─────────
@@ -413,7 +398,6 @@ class _NewsfeedCard extends StatelessWidget {
   String get _category => item.previewText.toUpperCase();
   String get _title => item.title;
   String get _timeAgo => item.timeAgoLabel;
-  String? get _imageUrl => item.imageUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -438,20 +422,7 @@ class _NewsfeedCard extends StatelessWidget {
               topLeft: Radius.circular(14),
               bottomLeft: Radius.circular(14),
             ),
-            child: _imageUrl != null
-                ? CachedNetworkImage(
-                    imageUrl: _imageUrl!,
-                    width: 88,
-                    height: 88,
-                    fit: BoxFit.cover,
-                  )
-                : Container(
-                    width: 88,
-                    height: 88,
-                    color: const Color(0xFF1C1C1E),
-                    child: const Icon(Icons.image_outlined,
-                        color: Colors.white24, size: 28),
-                  ),
+            child: _buildNewsImage(item.imageUrl),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -501,49 +472,115 @@ class _NewsfeedCard extends StatelessWidget {
       ),
     );
   }
+
+  // ── Image helpers ──────────────────────────────────────────────────────────
+
+  Widget _buildNewsImage(String? imageUrl) {
+    final bool isValid = imageUrl != null && imageUrl.trim().isNotEmpty;
+
+    if (!isValid) return _buildFallbackBanner();
+
+    return CachedNetworkImage(
+      imageUrl: imageUrl,
+      width: 88,
+      height: 88,
+      fit: BoxFit.cover,
+      placeholder: (context, url) => Container(
+        width: 88,
+        height: 88,
+        color: const Color(0xFF2C2C2E),
+        child: const Center(
+          child: SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Color(0xFFC9A84C),
+            ),
+          ),
+        ),
+      ),
+      errorWidget: (context, url, error) {
+        debugPrint('NewsfeedCard: failed to load image: $url -> $error');
+        return _buildFallbackBanner();
+      },
+    );
+  }
+
+  Widget _buildFallbackBanner() {
+    return Container(
+      width: 88,
+      height: 88,
+      color: const Color(0xFF2C2C2E),
+      child: const Icon(
+        Icons.newspaper,
+        color: Color(0xFFC9A84C),
+        size: 28,
+      ),
+    );
+  }
 }
 
-// ── Branch Dropdown ───────────────────────────────────────────────────────────
 
-class _BranchDropdown extends StatelessWidget {
+// ── Branch chip + luxury picker (Home screen) ────────────────────────────────
+
+class _HomeBranchChip extends StatelessWidget {
   final List<Branch> branches;
   final Branch? selected;
   final ValueChanged<Branch> onChanged;
 
-  const _BranchDropdown({
+  const _HomeBranchChip({
     required this.branches,
     required this.selected,
     required this.onChanged,
   });
 
+  static const Color _gold = Color(0xFFD4AF37);
+
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => _showPicker(context),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 180),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _showPicker(context),
+        borderRadius: BorderRadius.circular(20),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: const Color(0xFF1C1C1E),
+            color: Colors.white.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white12),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.12),
+              width: 1,
+            ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Flexible(
+              const Icon(
+                Icons.location_on_rounded,
+                color: _gold,
+                size: 14,
+              ),
+              const SizedBox(width: 5),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 110),
                 child: Text(
                   selected?.title ?? 'Select Branch',
-                  style: const TextStyle(fontFamily: 'Poppins', fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.white,),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const SizedBox(width: 4),
-              const Icon(Icons.keyboard_arrow_down,
-                  size: 16, color: Colors.white54),
+              const SizedBox(width: 3),
+              Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: Colors.white.withValues(alpha: 0.6),
+                size: 16,
+              ),
             ],
           ),
         ),
@@ -554,41 +591,141 @@ class _BranchDropdown extends StatelessWidget {
   void _showPicker(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF0A0A0A),
+      backgroundColor: const Color(0xFF121212),
+      barrierColor: Colors.black.withValues(alpha: 0.7),
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (_) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(height: 12),
-          Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                  color: Colors.white24,
-                  borderRadius: BorderRadius.circular(2))),
-          const SizedBox(height: 16),
-          const Text('Select Venue',
-              style: TextStyle(fontFamily: 'Poppins', fontSize: 16,
-                fontWeight: FontWeight.w600,)),
-          const SizedBox(height: 8),
-          ...branches.map((b) => ListTile(
-                title:
-                    Text(b.title, style: const TextStyle(fontFamily: 'Poppins', fontSize: 15)),
-                subtitle: Text(b.city ?? '',
-                    style:
-                        const TextStyle(fontFamily: 'Poppins', fontSize: 12, color: Colors.white54)),
-                trailing: selected?.id == b.id
-                    ? const Icon(Icons.check_rounded, color: AppColors.gold)
-                    : null,
-                onTap: () {
-                  onChanged(b);
-                  Navigator.pop(context);
+      builder: (_) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Drag handle
+            Center(
+              child: Container(
+                width: 38,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Header
+            const Row(
+              children: [
+                Icon(Icons.location_on_rounded, color: _gold, size: 20),
+                SizedBox(width: 8),
+                Text(
+                  'Select Branch',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Branch cards
+            Flexible(
+              child: ListView.separated(
+                shrinkWrap: true,
+                physics: const BouncingScrollPhysics(),
+                itemCount: branches.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (ctx, index) {
+                  final b = branches[index];
+                  final bool isSelected = selected?.id == b.id;
+
+                  return Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () {
+                        onChanged(b);
+                        Navigator.pop(ctx);
+                      },
+                      borderRadius: BorderRadius.circular(14),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? _gold.withValues(alpha: 0.12)
+                              : const Color(0xFF1C1C1E),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: isSelected
+                                ? _gold
+                                : Colors.white.withValues(alpha: 0.08),
+                            width: isSelected ? 1.5 : 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    b.title,
+                                    style: TextStyle(
+                                      color: isSelected
+                                          ? Colors.white
+                                          : const Color(0xFFE4E4E7),
+                                      fontWeight: isSelected
+                                          ? FontWeight.w700
+                                          : FontWeight.w500,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                  if (b.city != null &&
+                                      b.city!.isNotEmpty) ...[
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      b.city!,
+                                      style: TextStyle(
+                                        color: isSelected
+                                            ? _gold
+                                            : const Color(0xFFA1A1AA),
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            if (isSelected)
+                              Container(
+                                width: 22,
+                                height: 22,
+                                decoration: const BoxDecoration(
+                                  color: _gold,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.check_rounded,
+                                  color: Colors.black,
+                                  size: 14,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
                 },
-              )),
-          const SizedBox(height: 16),
-        ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

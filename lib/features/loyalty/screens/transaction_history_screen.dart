@@ -37,13 +37,13 @@ class TransactionHistoryScreen extends ConsumerWidget {
             : ListView.separated(
                 padding: const EdgeInsets.all(16),
                 itemCount: txList.length,
-                separatorBuilder: (_, __) =>
-                    Divider(color: Colors.white.withValues(alpha: 0.1), height: 1),
+                separatorBuilder: (_, __) => Divider(
+                    color: Colors.white.withValues(alpha: 0.1), height: 1),
                 itemBuilder: (_, i) => _TransactionTile(tx: txList[i]),
               ),
         loading: () => const Center(
-          child: CircularProgressIndicator(
-              color: AppColors.gold, strokeWidth: 2),
+          child:
+              CircularProgressIndicator(color: AppColors.gold, strokeWidth: 2),
         ),
         error: (e, _) => Center(
           child: Text('Error: $e',
@@ -82,68 +82,91 @@ class _TransactionTile extends StatelessWidget {
   final StripsLedgerEntry tx;
   const _TransactionTile({required this.tx});
 
+  // Soft neon accents for OLED dark mode
+  static const Color _creditColor = Color(0xFF4ADE80); // Emerald neon
+  static const Color _debitColor  = Color(0xFFF87171); // Soft red
+
+  // Deep tinted badge backgrounds
+  static const Color _creditBg = Color(0xFF064E3B);
+  static const Color _debitBg  = Color(0xFF7F1D1D);
+
   @override
   Widget build(BuildContext context) {
-    final isEarned = tx.isEarned;
+    final bool isCredit = tx.isEarned;
+    final Color statusColor = isCredit ? _creditColor : _debitColor;
+    final Color statusBg    = isCredit ? _creditBg    : _debitBg;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 14),
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 0),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF18181B), // Dark OLED surface
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.08),
+          width: 1,
+        ),
+      ),
       child: Row(
         children: [
+          // Subtle Circular Icon Badge
           Container(
-            width: 42,
-            height: 42,
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
-              color: isEarned
-                  ? AppColors.gold.withValues(alpha: 0.1)
-                  : AppColors.brandRed.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(12),
+              color: statusBg.withValues(alpha: 0.4),
+              shape: BoxShape.circle,
             ),
             child: Icon(
-              isEarned ? Icons.add_rounded : Icons.remove_rounded,
-              size: 22,
-              color: isEarned ? AppColors.gold : AppColors.brandRed,
+              isCredit ? Icons.add_rounded : Icons.remove_rounded,
+              color: statusColor,
+              size: 18,
             ),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 12),
+
+          // Title and Timestamp
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  tx.description,
+                  tx.description.isNotEmpty
+                      ? tx.description
+                      : tx.transactionType.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
+                    color: Color(0xFFFAFAFA),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13.5,
                     fontFamily: 'Poppins',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.white,
                   ),
                 ),
                 const SizedBox(height: 3),
                 Text(
                   tx.formattedDate,
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
+                  style: const TextStyle(
+                    color: Color(0xFFA1A1AA),
                     fontSize: 11,
-                    color: Colors.white.withValues(alpha: 0.5),
+                    fontFamily: 'Poppins',
                   ),
                 ),
               ],
             ),
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                tx.displayAmount,
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: isEarned ? AppColors.gold : AppColors.brandRed,
-                ),
-              ),
-            ],
+
+          // Amount Display (+X Strips / -X Strips)
+          Text(
+            tx.displayAmount,
+            style: TextStyle(
+              color: statusColor,
+              fontWeight: FontWeight.w700,
+              fontSize: 13.5,
+              letterSpacing: -0.2,
+              fontFamily: 'Poppins',
+            ),
           ),
         ],
       ),

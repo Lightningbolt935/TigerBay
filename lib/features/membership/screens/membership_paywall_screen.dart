@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tigerbay_app/core/constants/app_colors.dart';
-import 'package:tigerbay_app/core/services/paypal_service.dart';
 import 'package:tigerbay_app/data/models/membership_tier_model.dart';
 import 'package:tigerbay_app/features/profile/providers/membership_provider.dart';
 
@@ -37,54 +36,6 @@ class _MembershipPaywallScreenState
         ref.read(membershipActivationNotifierProvider.notifier);
     final paymentMethod = ref.read(selectedPaymentMethodProvider);
 
-    // ── PayPal: launch real WebView checkout ──────────────────────────────
-    if (paymentMethod == PaymentMethod.paypal) {
-      final paid = await PayPalService.pay(
-        context: context,
-        amount: tier.price.toStringAsFixed(2),
-        currency: 'GBP',
-        description: '${tier.name} Membership — TigerBay International',
-      );
-
-      if (!mounted) return;
-
-      if (!paid) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'PayPal payment was cancelled or failed. Please try again.',
-              style: GoogleFonts.poppins(fontSize: 14, color: Colors.white),
-            ),
-            backgroundColor: AppColors.error,
-            behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-        return;
-      }
-      // Payment approved — fall through to activate membership below
-    }
-
-    // ── Stripe: coming soon ───────────────────────────────────────────────
-    if (paymentMethod == PaymentMethod.stripe) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Card (Stripe) payments coming soon. Please use PayPal or pay at the venue.',
-            style: GoogleFonts.poppins(fontSize: 13, color: Colors.white),
-          ),
-          backgroundColor: AppColors.surface,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
-      return;
-    }
-
-    // ── Offline methods (Cash / POS / Bank) + post-PayPal activation ──────
     final success = await activator.activateMembership(tier);
 
     if (!mounted) return;
@@ -107,6 +58,8 @@ class _MembershipPaywallScreenState
           ),
         ),
       );
+
+      // ⚠️ REMOVED: context.go(AppRoutes.home);
       // GoRouter auto-redirects via Gate 4 as soon as profileState updates!
     } else {
       final error = ref.read(membershipActivationNotifierProvider).error;
@@ -288,108 +241,68 @@ class _MembershipPaywallScreenState
                       ),
                       const SizedBox(height: 8),
                       ...PaymentMethod.values.map((method) {
-                        final isMethodSelected = selectedPayment == method;
-                        final isComingSoon = method == PaymentMethod.stripe;
+                        final isMethodSelected =
+                            selectedPayment == method;
                         return GestureDetector(
-                          onTap: isComingSoon
-                              ? null
-                              : () => ref
-                                  .read(selectedPaymentMethodProvider.notifier)
-                                  .state = method,
-                          child: Opacity(
-                            opacity: isComingSoon ? 0.45 : 1.0,
-                            child: Container(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 12,
+                          onTap: () => ref
+                              .read(selectedPaymentMethodProvider.notifier)
+                              .state = method,
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.surface,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isMethodSelected
+                                    ? AppColors.gold
+                                    : AppColors.border,
+                                width: isMethodSelected ? 1.5 : 1,
                               ),
-                              decoration: BoxDecoration(
-                                color: AppColors.surface,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: isMethodSelected
-                                      ? AppColors.gold
-                                      : AppColors.border,
-                                  width: isMethodSelected ? 1.5 : 1,
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  // ── Radio dot ─────────────────────────
-                                  Container(
-                                    width: 20,
-                                    height: 20,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: isMethodSelected
-                                            ? AppColors.gold
-                                            : AppColors.border,
-                                        width: 2,
-                                      ),
-                                    ),
-                                    child: isMethodSelected
-                                        ? Center(
-                                            child: Container(
-                                              width: 10,
-                                              height: 10,
-                                              decoration: const BoxDecoration(
-                                                shape: BoxShape.circle,
-                                                color: AppColors.gold,
-                                              ),
-                                            ),
-                                          )
-                                        : null,
-                                  ),
-                                  const SizedBox(width: 12),
-
-                                  // Icon for PayPal / Stripe
-                                  if (method == PaymentMethod.paypal)
-                                    const _PayPalLogo()
-                                  else if (method == PaymentMethod.stripe)
-                                    const Icon(Icons.credit_card_rounded,
-                                        size: 18,
-                                        color: AppColors.textSecondary),
-
-                                  if (method == PaymentMethod.paypal ||
-                                      method == PaymentMethod.stripe)
-                                    const SizedBox(width: 8),
-
-                                  // Label
-                                  Text(
-                                    method.displayName,
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 20,
+                                  height: 20,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
                                       color: isMethodSelected
-                                          ? AppColors.textPrimary
-                                          : AppColors.textSecondary,
+                                          ? AppColors.gold
+                                          : AppColors.border,
+                                      width: 2,
                                     ),
                                   ),
-
-                                  // "Soon" badge
-                                  if (isComingSoon) ...[
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 7, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.border,
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Text(
-                                        'Soon',
-                                        style: GoogleFonts.poppins(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w600,
-                                          color: AppColors.textHint,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
+                                  child: isMethodSelected
+                                      ? Center(
+                                          child: Container(
+                                            width: 10,
+                                            height: 10,
+                                            decoration:
+                                                const BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              color: AppColors.gold,
+                                            ),
+                                          ),
+                                        )
+                                      : null,
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  method.displayName,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                    color: isMethodSelected
+                                        ? AppColors.textPrimary
+                                        : AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         );
@@ -632,60 +545,6 @@ class _TierCard extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-// ── PayPal Logo Widget ────────────────────────────────────────────────────────
-/// Minimal PayPal "P" logo using Flutter built-in widgets — no SVG package needed.
-class _PayPalLogo extends StatelessWidget {
-  const _PayPalLogo();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 18,
-          height: 18,
-          decoration: const BoxDecoration(
-            color: Color(0xFF003087),
-            shape: BoxShape.circle,
-          ),
-          child: const Center(
-            child: Text(
-              'P',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w900,
-                color: Colors.white,
-                height: 1,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 2),
-        Container(
-          width: 16,
-          height: 16,
-          decoration: const BoxDecoration(
-            color: Color(0xFF009CDE),
-            shape: BoxShape.circle,
-          ),
-          child: const Center(
-            child: Text(
-              'P',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w900,
-                color: Colors.white,
-                height: 1,
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

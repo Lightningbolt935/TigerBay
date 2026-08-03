@@ -92,6 +92,42 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
     }
   }
 
+  /// Persists [gender] and [dob] to the `profiles` table.
+  /// [dob] is stored as an ISO-8601 date string (YYYY-MM-DD).
+  Future<bool> updateGenderDob({
+    String? gender,
+    DateTime? dob,
+  }) async {
+    state = state.copyWith(
+        isSaving: true, clearError: true, savedSuccessfully: false);
+    try {
+      final updateMap = <String, dynamic>{
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+      if (gender != null) updateMap['gender'] = gender;
+      if (dob != null) {
+        updateMap['dob'] = dob.toIso8601String().split('T').first;
+      }
+
+      final data = await _supabase
+          .from('profiles')
+          .update(updateMap)
+          .eq('id', _userId)
+          .select()
+          .single();
+
+      state = state.copyWith(
+        profile: UserProfile.fromMap(data),
+        isSaving: false,
+        savedSuccessfully: true,
+      );
+      return true;
+    } catch (e) {
+      state = state.copyWith(isSaving: false, error: e.toString());
+      return false;
+    }
+  }
+
   Future<bool> uploadAvatar(String filePath, fileBytes) async {
     try {
       final ext = filePath.split('.').last;

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_routes.dart';
+import '../../../shared/widgets/safe_network_image.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../home/providers/home_provider.dart';
 import '../providers/profile_provider.dart';
@@ -231,35 +232,83 @@ class ProfileScreen extends ConsumerWidget {
   }
 
   void _showBranchPicker(BuildContext context, WidgetRef ref, List branches) {
+    final selectedBranch = ref.read(selectedBranchProvider);
+
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.surface,
+      backgroundColor: const Color(0xFF121212), // Premium dark surface
+      barrierColor: Colors.black.withValues(alpha: 0.7),
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(height: 12),
-          Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(2))),
-          const SizedBox(height: 16),
-          const Text('Select Venue',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          ...branches.map((b) => ListTile(
-                title:
-                    Text(b.title, style: const TextStyle(fontSize: 15)),
-                onTap: () {
-                  ref.read(selectedBranchProvider.notifier).changeBranch(b);
-                  Navigator.pop(context);
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Drag handle
+            Center(
+              child: Container(
+                width: 38,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Header
+            const Row(
+              children: [
+                Icon(
+                  Icons.location_on_rounded,
+                  color: Color(0xFFD4AF37), // TigerBay Gold
+                  size: 20,
+                ),
+                SizedBox(width: 8),
+                Text(
+                  'Select Branch',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Branch list
+            Flexible(
+              child: ListView.separated(
+                shrinkWrap: true,
+                physics: const BouncingScrollPhysics(),
+                itemCount: branches.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (ctx, index) {
+                  final b = branches[index];
+                  final bool isSelected = selectedBranch?.id == b.id;
+                  return _BranchTile(
+                    name: b.title as String,
+                    city: (b.city ?? '') as String,
+                    isSelected: isSelected,
+                    onTap: () {
+                      ref
+                          .read(selectedBranchProvider.notifier)
+                          .changeBranch(b);
+                      Navigator.pop(ctx);
+                    },
+                  );
                 },
-              )),
-          const SizedBox(height: 16),
-        ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -321,22 +370,25 @@ class _AvatarInitials extends StatelessWidget {
         border: Border.all(color: AppColors.gold, width: 2),
       ),
       child: ClipOval(
-        child: avatarUrl != null && avatarUrl!.isNotEmpty
-            ? Image.network(avatarUrl!, fit: BoxFit.cover)
-            : Container(
-                color: AppColors.surface,
-                child: Center(
-                  child: Text(
-                    initials,
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
-                      fontFamily: 'Poppins',
-                    ),
-                  ),
-                ),
+        child: SafeNetworkImage(
+          imageUrl: avatarUrl,
+          width: 80,
+          height: 80,
+          fit: BoxFit.cover,
+          fallback: Container(
+            color: AppColors.surface,
+            alignment: Alignment.center,
+            child: Text(
+              initials,
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+                fontFamily: 'Poppins',
               ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -422,7 +474,7 @@ class _LegalTile extends StatelessWidget {
   }
 }
 
-// ── Branch pill ───────────────────────────────────────────────────────────────
+// ── Branch location chip ──────────────────────────────────────────────────────
 
 class _BranchPill extends StatelessWidget {
   final String label;
@@ -431,30 +483,144 @@ class _BranchPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.grey.shade200),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: Colors.black87,
-              ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.07), // Glassmorphic tint
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.12),
+              width: 1,
             ),
-            const SizedBox(width: 4),
-            Icon(Icons.keyboard_arrow_down,
-                size: 16, color: Colors.grey.shade500),
-          ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.location_on_rounded,
+                color: Color(0xFFD4AF37), // TigerBay Gold
+                size: 14,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12.5,
+                  letterSpacing: 0.2,
+                ),
+              ),
+              const SizedBox(width: 3),
+              Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: Colors.white.withValues(alpha: 0.6),
+                size: 16,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Dark-luxury branch tile ───────────────────────────────────────────────────
+
+class _BranchTile extends StatelessWidget {
+  final String name;
+  final String city;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _BranchTile({
+    required this.name,
+    required this.city,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  static const Color _gold = Color(0xFFD4AF37);
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            // Selected: gold tint. Unselected: elevated dark surface
+            color: isSelected
+                ? _gold.withValues(alpha: 0.12)
+                : const Color(0xFF1C1C1E),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isSelected ? _gold : Colors.white.withValues(alpha: 0.08),
+              width: isSelected ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // High-visibility branch name
+                    Text(
+                      name,
+                      style: TextStyle(
+                        color: isSelected
+                            ? Colors.white
+                            : const Color(0xFFE4E4E7),
+                        fontWeight: isSelected
+                            ? FontWeight.w700
+                            : FontWeight.w500,
+                        fontSize: 15,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                    if (city.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        city,
+                        style: TextStyle(
+                          color: isSelected
+                              ? _gold
+                              : const Color(0xFFA1A1AA),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+
+              // Gold checkmark badge for active selection
+              if (isSelected)
+                Container(
+                  width: 22,
+                  height: 22,
+                  decoration: const BoxDecoration(
+                    color: _gold,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.check_rounded,
+                    color: Colors.black,
+                    size: 14,
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

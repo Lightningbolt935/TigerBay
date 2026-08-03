@@ -6,7 +6,9 @@ import 'branch_provider.dart';
 class NewsFeedItem {
   final String id;
   final int? branchId;
-  final String imageUrl;
+  /// Sanitized image URL. Null when the DB value is empty or absent.
+  /// Relative paths are expanded to full Supabase Storage public URLs.
+  final String? imageUrl;
   final String title;
   final String previewText;
   final DateTime createdAt;
@@ -14,17 +16,33 @@ class NewsFeedItem {
   const NewsFeedItem({
     required this.id,
     required this.branchId,
-    required this.imageUrl,
+    this.imageUrl,
     required this.title,
     required this.previewText,
     required this.createdAt,
   });
 
   factory NewsFeedItem.fromJson(Map<String, dynamic> json) {
+    // Resolves a raw DB value into a usable URL:
+    //  • null / empty  → null
+    //  • already full URL → returned as-is
+    //  • relative path → expanded to Supabase Storage public URL
+    String? formatImageUrl(dynamic raw) {
+      if (raw == null) return null;
+      final clean = raw.toString().trim();
+      if (clean.isEmpty) return null;
+      if (clean.startsWith('http://') || clean.startsWith('https://')) {
+        return clean;
+      }
+      const supabaseUrl = 'https://xxnqlktcbwqhoyezlokv.supabase.co';
+      const bucket = 'news';
+      return '$supabaseUrl/storage/v1/object/public/$bucket/$clean';
+    }
+
     return NewsFeedItem(
       id: json['id'].toString(),
       branchId: json['branch_id'] as int?,
-      imageUrl: json['image_url'] as String? ?? '',
+      imageUrl: formatImageUrl(json['image_url'] ?? json['banner_url']),
       title: json['title'] as String? ?? '',
       previewText: json['preview_text'] as String? ?? '',
       createdAt: DateTime.tryParse(json['created_at'] as String? ?? '') ??

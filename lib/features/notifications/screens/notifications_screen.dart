@@ -1,17 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tigerbay_app/core/constants/app_colors.dart';
+import 'package:tigerbay_app/data/models/notification_item.dart';
 import 'package:tigerbay_app/features/notifications/providers/user_notifications_provider.dart';
 import 'package:tigerbay_app/shared/widgets/tigerbay_brand_header.dart';
 
 /// ═══════════════════════════════════════════════════════════════════════════
 /// TigerBay International — Notifications Screen
 /// ═══════════════════════════════════════════════════════════════════════════
-/// Real-time list of the logged-in user's notifications. Tapping a
-/// notification marks it as read and shows its full body in a bottom sheet.
+/// Real-time list of the logged-in user's notifications, scoped via RLS.
+/// New rows from INSERT/UPDATE events on `user_notifications` appear
+/// instantly via the Supabase Realtime stream — no pull-to-refresh needed.
+///
+/// Icon, badge color and card accent adapt per notification [type]:
+///   • birthday  → 🎂  pink
+///   • broadcast → 📣  blue
+///   • system    → 🔧  orange
+///   • promo     → 🏷️  gold
+///   • (others)  → 🔔  textSecondary
 
-// ── Date Formatting Helper ─────────────────────────────────────────────────
+// ── Date Formatting Helpers ─────────────────────────────────────────────────
+
 const _months = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
@@ -22,27 +33,63 @@ String _formatDate(DateTime dt) {
   final month = _months[dt.month - 1];
   return '$day $month ${dt.year}';
 }
+
+String _formatTimestamp(DateTime dt) {
+  final now = DateTime.now();
+  final diff = now.difference(dt);
+
+  if (diff.inMinutes < 1) return 'Just now';
+  if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+  if (diff.inHours < 24) return '${diff.inHours}h ago';
+  if (diff.inDays < 7) return '${diff.inDays}d ago';
+
+  return _formatDate(dt);
+}
+
+// ── Type → Icon / Color resolution ─────────────────────────────────────────
+
+/// Returns the icon and accent color for a given notification type.
+/// Matches the spec: birthday=pink, system=orange, broadcast=blue, promo=gold.
+({IconData icon, Color color}) _resolveTypeStyle(String type) {
+  switch (type) {
+    case 'birthday':
+      return (icon: Icons.cake_outlined, color: const Color(0xFFEC407A));
+    case 'system':
+      return (icon: Icons.build_circle_outlined, color: const Color(0xFFFF9500));
+    case 'promo':
+      return (icon: Icons.local_offer_rounded, color: AppColors.gold);
+    case 'loyalty':
+      return (icon: Icons.stars_rounded, color: AppColors.gold);
+    case 'booking':
+      return (icon: Icons.calendar_today_rounded, color: const Color(0xFF5C6BC0));
+    case 'broadcast':
+    default:
+      return (icon: Icons.campaign_outlined, color: const Color(0xFF42A5F5));
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+
 class NotificationsScreen extends ConsumerWidget {
   const NotificationsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final notificationsAsync = ref.watch(userNotificationsStreamProvider);
+    final notificationsAsync = ref.watch(notificationsProvider);
     final unreadCount = ref.watch(unreadNotificationCountProvider);
 
     return Scaffold(
       backgroundColor: AppColors.brandBlack,
       body: Column(
         children: [
-          // ── Brand Header with mark-all-read action ────────────────────
+          // ── Brand Header with "Mark all read" action ──────────────────
           TigerBayBrandHeader(
             showBackButton: true,
             actions: [
               if (unreadCount > 0)
                 GestureDetector(
-                  onTap: () async {
-                    await markAllNotificationsAsRead();
-                  },
+                  onTap: () =>
+                      ref.read(notificationsProvider.notifier).markAllAsRead(),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,
@@ -67,9 +114,10 @@ class NotificationsScreen extends ConsumerWidget {
             ],
           ),
 
-          // ── Section Title ────────────────────────────────────────────
+          // ── Section title + unread badge ──────────────────────────────
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
               children: [
                 Text(
@@ -101,14 +149,17 @@ class NotificationsScreen extends ConsumerWidget {
                       ),
                     ),
                   ),
+                const Spacer(),
+                // Realtime indicator dot
+                _RealtimeIndicator(),
               ],
             ),
           ),
 
-          // ── Notification List ────────────────────────────────────────
+          // ── Notification List ─────────────────────────────────────────
           Expanded(
             child: notificationsAsync.when(
-              // ── Loading: Shimmer skeleton tiles ─────────────────────
+              // ── Loading: Shimmer skeleton tiles ──────────────────────
               loading: () => ListView.separated(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 physics: const NeverScrollableScrollPhysics(),
@@ -117,7 +168,7 @@ class NotificationsScreen extends ConsumerWidget {
                 itemBuilder: (_, __) => const _ShimmerNotificationTile(),
               ),
 
-              // ── Error: Message + Retry button ──────────────────────
+              // ── Error: Message + Retry ────────────────────────────────
               error: (err, __) => Center(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -157,8 +208,9 @@ class NotificationsScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 20),
                       OutlinedButton.icon(
-                        onPressed: () =>
-                            ref.invalidate(userNotificationsStreamProvider),
+                        onPressed: () => ref
+                            .read(notificationsProvider.notifier)
+                            .refresh(),
                         icon: const Icon(Icons.refresh_rounded, size: 18),
                         label: Text(
                           'Retry',
@@ -184,9 +236,9 @@ class NotificationsScreen extends ConsumerWidget {
                 ),
               ),
 
-              // ── Data ───────────────────────────────────────────────
+              // ── Data ─────────────────────────────────────────────────
               data: (notifications) {
-                // ── Empty: Friendly "all caught up" state ────────────
+                // ── Empty: "All caught up" state ──────────────────────
                 if (notifications.isEmpty) {
                   return Center(
                     child: Column(
@@ -240,12 +292,14 @@ class NotificationsScreen extends ConsumerWidget {
                     final notification = notifications[index];
                     return _NotificationTile(
                       notification: notification,
-                      onTap: () async {
-                        // Mark as read on tap
+                      onTap: () {
+                        // Optimistic mark-as-read (instant UI feedback)
                         if (!notification.isRead) {
-                          await markNotificationAsRead(notification.id);
+                          ref
+                              .read(notificationsProvider.notifier)
+                              .markAsRead(notification.id);
                         }
-                        // Show full notification in bottom sheet
+                        // Show full notification detail in bottom sheet
                         if (context.mounted) {
                           _showNotificationDetail(context, notification);
                         }
@@ -261,10 +315,14 @@ class NotificationsScreen extends ConsumerWidget {
     );
   }
 
+  // ── Detail Bottom Sheet ─────────────────────────────────────────────────
+
   void _showNotificationDetail(
     BuildContext context,
-    UserNotification notification,
+    NotificationItem notification,
   ) {
+    final style = _resolveTypeStyle(notification.type);
+
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.surface,
@@ -272,7 +330,7 @@ class NotificationsScreen extends ConsumerWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (_) => Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -290,6 +348,44 @@ class NotificationsScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 20),
 
+            // Type chip + icon
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: style.color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(style.icon, color: style.color, size: 22),
+                ),
+                const SizedBox(width: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: style.color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: style.color.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Text(
+                    notification.type.toUpperCase(),
+                    style: GoogleFonts.poppins(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: style.color,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
             // Title
             Text(
               notification.title,
@@ -299,7 +395,7 @@ class NotificationsScreen extends ConsumerWidget {
                 color: AppColors.textPrimary,
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
 
             // Timestamp
             Text(
@@ -317,33 +413,83 @@ class NotificationsScreen extends ConsumerWidget {
               style: GoogleFonts.poppins(
                 fontSize: 14,
                 color: AppColors.textSecondary,
-                height: 1.5,
+                height: 1.6,
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 8),
           ],
         ),
       ),
     );
   }
+}
 
-  String _formatTimestamp(DateTime dt) {
-    final now = DateTime.now();
-    final diff = now.difference(dt);
+// ── Realtime Indicator ──────────────────────────────────────────────────────
 
-    if (diff.inMinutes < 1) return 'Just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    if (diff.inDays < 7) return '${diff.inDays}d ago';
+/// Animated green dot shown at the top of the list to indicate the
+/// realtime subscription is active.
+class _RealtimeIndicator extends StatefulWidget {
+  @override
+  State<_RealtimeIndicator> createState() => _RealtimeIndicatorState();
+}
 
-    return _formatDate(dt);
+class _RealtimeIndicatorState extends State<_RealtimeIndicator>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
+    _pulse = Tween<double>(begin: 0.4, end: 1.0)
+        .animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _pulse,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: const BoxDecoration(
+              color: Color(0xFF34C759),
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            'LIVE',
+            style: GoogleFonts.poppins(
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF34C759),
+              letterSpacing: 1.2,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
-// ── Notification Tile ──────────────────────────────────────────────────────
+// ── Notification Tile ───────────────────────────────────────────────────────
 
 class _NotificationTile extends StatelessWidget {
-  final UserNotification notification;
+  final NotificationItem notification;
   final VoidCallback onTap;
 
   const _NotificationTile({
@@ -353,48 +499,41 @@ class _NotificationTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final style = _resolveTypeStyle(notification.type);
+    final accentColor = notification.isRead ? AppColors.textSecondary : style.color;
+    final iconBg = notification.isRead
+        ? AppColors.surfaceLight
+        : style.color.withValues(alpha: 0.12);
+
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 250),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: notification.isRead
-              ? AppColors.surface
-              : AppColors.surface,
+          color: AppColors.surface,
           borderRadius: BorderRadius.circular(12),
           border: notification.isRead
               ? null
               : Border.all(
-                  color: AppColors.gold.withValues(alpha: 0.25),
+                  color: style.color.withValues(alpha: 0.30),
                   width: 1,
                 ),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Icon ──────────────────────────────────────────────────
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: notification.isRead
-                    ? AppColors.surfaceLight
-                    : AppColors.gold.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                _resolveIcon(notification.type),
-                color: notification.isRead
-                    ? AppColors.textSecondary
-                    : AppColors.gold,
-                size: 20,
-              ),
+            // ── Type icon / Avatar image ────────────────────────────────
+            _buildNotificationIcon(
+              notification.imageUrl,
+              notification.type,
+              accentColor,
+              iconBg,
             ),
 
             const SizedBox(width: 12),
 
-            // ── Title, Body Preview & Timestamp ────────────────────────
+            // ── Title, Body Preview & Timestamp ───────────────────────
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -422,25 +561,51 @@ class _NotificationTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 6),
-                  Text(
-                    _formatTimestamp(notification.createdAt),
-                    style: GoogleFonts.poppins(
-                      fontSize: 11,
-                      color: AppColors.textHint,
-                    ),
+                  Row(
+                    children: [
+                      Text(
+                        _formatTimestamp(notification.createdAt),
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: AppColors.textHint,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Type label pill (only on unread)
+                      if (!notification.isRead)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: style.color.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            notification.type,
+                            style: GoogleFonts.poppins(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              color: style.color,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ],
               ),
             ),
 
-            // ── Unread indicator dot ──────────────────────────────────
+            // ── Unread indicator dot ───────────────────────────────────
             if (!notification.isRead)
               Container(
                 width: 8,
                 height: 8,
                 margin: const EdgeInsets.only(top: 6, left: 8),
-                decoration: const BoxDecoration(
-                  color: AppColors.gold,
+                decoration: BoxDecoration(
+                  color: style.color,
                   shape: BoxShape.circle,
                 ),
               ),
@@ -450,37 +615,73 @@ class _NotificationTile extends StatelessWidget {
     );
   }
 
-  IconData _resolveIcon(String? type) {
-    switch (type) {
-      case 'booking':
-        return Icons.calendar_today_rounded;
-      case 'reward':
-        return Icons.card_giftcard_rounded;
-      case 'loyalty':
-        return Icons.stars_rounded;
-      case 'promo':
-        return Icons.local_offer_rounded;
-      case 'system':
-        return Icons.info_outline_rounded;
-      default:
-        return Icons.notifications_outlined;
+  // ── Icon helpers ────────────────────────────────────────────────────────
+
+  /// Shows a [CachedNetworkImage] when [imageUrl] is a valid, non-empty URL;
+  /// otherwise falls back to the type-appropriate icon inside a styled box.
+  Widget _buildNotificationIcon(
+    String? imageUrl,
+    String type,
+    Color accentColor,
+    Color iconBg,
+  ) {
+    final bool hasValidUrl = imageUrl != null && imageUrl.trim().isNotEmpty;
+
+    if (!hasValidUrl) {
+      return _buildTypeFallbackIcon(type, accentColor, iconBg);
     }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: CachedNetworkImage(
+        imageUrl: imageUrl,
+        width: 42,
+        height: 42,
+        fit: BoxFit.cover,
+        placeholder: (context, url) => Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: iconBg,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Center(
+            child: SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ),
+        ),
+        errorWidget: (context, url, error) =>
+            _buildTypeFallbackIcon(type, accentColor, iconBg),
+      ),
+    );
   }
 
-  String _formatTimestamp(DateTime dt) {
-    final now = DateTime.now();
-    final diff = now.difference(dt);
-
-    if (diff.inMinutes < 1) return 'Just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    if (diff.inDays < 7) return '${diff.inDays}d ago';
-
-    return _formatDate(dt);
+  Widget _buildTypeFallbackIcon(
+    String type,
+    Color accentColor,
+    Color iconBg,
+  ) {
+    final style = _resolveTypeStyle(type);
+    return Container(
+      width: 42,
+      height: 42,
+      decoration: BoxDecoration(
+        color: iconBg,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Icon(
+        style.icon,
+        color: accentColor,
+        size: 20,
+      ),
+    );
   }
 }
 
-// ── Shimmer Skeleton Tile ─────────────────────────────────────────────────
+// ── Shimmer Skeleton Tile ──────────────────────────────────────────────────
 
 class _ShimmerNotificationTile extends StatefulWidget {
   const _ShimmerNotificationTile();
@@ -530,8 +731,8 @@ class _ShimmerNotificationTileState extends State<_ShimmerNotificationTile>
             children: [
               // Icon placeholder
               Container(
-                width: 40,
-                height: 40,
+                width: 42,
+                height: 42,
                 decoration: BoxDecoration(
                   color: shimmerColor,
                   borderRadius: BorderRadius.circular(10),
@@ -542,7 +743,7 @@ class _ShimmerNotificationTileState extends State<_ShimmerNotificationTile>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Title placeholder
+                    // Title
                     Container(
                       height: 14,
                       width: double.infinity,
@@ -552,7 +753,7 @@ class _ShimmerNotificationTileState extends State<_ShimmerNotificationTile>
                       ),
                     ),
                     const SizedBox(height: 8),
-                    // Body placeholder
+                    // Body
                     Container(
                       height: 11,
                       width: 180,
@@ -562,7 +763,7 @@ class _ShimmerNotificationTileState extends State<_ShimmerNotificationTile>
                       ),
                     ),
                     const SizedBox(height: 8),
-                    // Timestamp placeholder
+                    // Timestamp
                     Container(
                       height: 10,
                       width: 60,

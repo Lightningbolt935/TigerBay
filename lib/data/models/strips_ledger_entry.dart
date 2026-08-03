@@ -20,12 +20,15 @@ class StripsLedgerEntry {
     required this.createdAt,
   });
 
-  /// Whether this entry represents an earn/bonus (positive balance change).
+  /// Whether this entry represents a credit/earn/bonus (positive balance change).
   bool get isEarned =>
-      transactionType == 'earn' || transactionType == 'bonus';
+      transactionType == 'credit' ||
+      transactionType == 'earn' ||
+      transactionType == 'bonus';
 
-  /// Whether this entry represents a redemption (negative balance change).
-  bool get isRedeemed => transactionType == 'redeem';
+  /// Whether this entry represents a deduction (redeem / debit).
+  bool get isRedeemed =>
+      transactionType == 'redeem' || transactionType == 'debit';
 
   /// Display string: "+X Strips" for earned, "-X Strips" for redeemed.
   String get displayAmount {

@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:tigerbay_app/core/constants/app_colors.dart';
 import 'package:tigerbay_app/data/models/menu_item_model.dart';
+import 'package:tigerbay_app/features/home/providers/home_provider.dart';
 import 'package:tigerbay_app/features/menu/providers/menu_provider.dart';
 import 'package:tigerbay_app/features/menu/widgets/beautiful_menu_card.dart';
 import 'package:tigerbay_app/shared/widgets/tigerbay_brand_header.dart';
@@ -18,7 +19,10 @@ class MenuScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final dishesAsync = ref.watch(dishesStreamProvider);
+    // Branch-filtered dishes — re-fetches automatically on branch switch
+    final selectedBranch = ref.watch(selectedBranchProvider);
+    final int? branchId = selectedBranch?.id;
+    final dishesAsync = ref.watch(menuForBranchProvider(branchId));
     final selectedCategory = ref.watch(selectedMenuCategoryProvider);
     final searchQuery = ref.watch(menuSearchQueryProvider);
 
@@ -129,7 +133,7 @@ class MenuScreen extends ConsumerWidget {
                     const SizedBox(height: 12),
                     OutlinedButton(
                       onPressed: () =>
-                          ref.invalidate(dishesStreamProvider),
+                          ref.invalidate(menuForBranchProvider(branchId)),
                       child: Text(
                         'Retry',
                         style: GoogleFonts.poppins(

@@ -38,9 +38,7 @@ final selectedPaymentMethodProvider =
 enum PaymentMethod {
   cashAtVenue('Cash at Venue'),
   posCard('Card POS Machine'),
-  bankTransfer('Bank Transfer'),
-  paypal('PayPal'),
-  stripe('Card (Stripe)'); // 🔜 Activated when Stripe Edge Function is deployed
+  bankTransfer('Bank Transfer');
 
   final String displayName;
   const PaymentMethod(this.displayName);

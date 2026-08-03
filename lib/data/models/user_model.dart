@@ -53,11 +53,26 @@ class UserProfile {
   /// Safe deserialization from Supabase JSON response. Every field is guarded
   /// against null and type-mismatch errors to prevent runtime crashes.
   factory UserProfile.fromMap(Map<String, dynamic> map) {
+    // Safely validate avatar URL — rejects empty strings and bare paths that
+    // would cause 'No host specified in URI' crashes in Image.network.
+    String? rawAvatar =
+        (map['avatar_url'] ?? map['photo_url'])?.toString().trim();
+    String? validAvatar;
+    if (rawAvatar != null && rawAvatar.isNotEmpty) {
+      final uri = Uri.tryParse(rawAvatar);
+      if (uri != null &&
+          uri.hasScheme &&
+          (uri.scheme == 'http' || uri.scheme == 'https') &&
+          uri.host.isNotEmpty) {
+        validAvatar = rawAvatar;
+      }
+    }
+
     return UserProfile(
       id: map['id'] as String? ?? '',
       email: map['email'] as String?,
       fullName: map['full_name'] as String?,
-      avatarUrl: map['avatar_url'] as String?,
+      avatarUrl: validAvatar,
       phone: map['phone'] as String?,
       deviceId: map['device_id'] as String?,
       dob: map['dob'] as String?,

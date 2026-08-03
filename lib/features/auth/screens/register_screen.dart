@@ -22,7 +22,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _confirmPasswordController = TextEditingController();
   final _dobController = TextEditingController();
 
-  DateTime? _selectedDob;
   String? _selectedGender;
   String? _selectedHomeBranch;
 
@@ -80,7 +79,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
     if (picked != null) {
       setState(() {
-        _selectedDob = picked;
         _dobController.text = DateFormat('yyyy-MM-dd').format(picked);
       });
     }

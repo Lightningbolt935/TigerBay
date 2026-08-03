@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../shared/widgets/safe_network_image.dart';
 import '../providers/profile_provider.dart';
+import 'gender_dob_form.dart';
 
 class EditProfileScreen extends ConsumerStatefulWidget {
   const EditProfileScreen({super.key});
@@ -64,6 +66,25 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     }
   }
 
+  // ── Avatar fallback — initials inside a filled circle ─────────────────────
+  Widget _initialsWidget(String initials) {
+    return Container(
+      width: 90,
+      height: 90,
+      color: AppColors.surface,
+      alignment: Alignment.center,
+      child: Text(
+        initials,
+        style: const TextStyle(
+          fontSize: 26,
+          fontWeight: FontWeight.w700,
+          color: AppColors.textPrimary,
+          fontFamily: 'Poppins',
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final profileState = ref.watch(profileProvider);
@@ -110,25 +131,17 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                           color: AppColors.gold, width: 2),
                     ),
                     child: ClipOval(
-                      child: profileState.profile?.avatarUrl != null &&
-                              profileState.profile!.avatarUrl!.isNotEmpty
-                          ? Image.network(
-                              profileState.profile!.avatarUrl!,
-                              fit: BoxFit.cover)
-                          : Container(
-                              color: AppColors.surface,
-                              child: Center(
-                                child: Text(
-                                  profileState.profile?.initials ?? '?',
-                                  style: const TextStyle(
-                                    fontSize: 26,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.textPrimary,
-                                    fontFamily: 'Poppins',
-                                  ),
-                                ),
-                              ),
-                            ),
+                      child: profileState.profile?.avatarUrl != null
+                          ? SafeNetworkImage(
+                              imageUrl: profileState.profile!.avatarUrl,
+                              width: 90,
+                              height: 90,
+                              fit: BoxFit.cover,
+                              fallback: _initialsWidget(
+                                  profileState.profile?.initials ?? '?'),
+                            )
+                          : _initialsWidget(
+                              profileState.profile?.initials ?? '?'),
                     ),
                   ),
                   Positioned(
@@ -195,9 +208,21 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               inputType: TextInputType.phone,
             ),
 
+            const SizedBox(height: 28),
+
+            // ── Gender & Date of Birth ──────────────────────────────────
+            const _EditFieldLabel('PERSONAL DETAILS'),
+            const SizedBox(height: 16),
+            GenderDobForm(
+              initialGender: profileState.profile?.gender,
+              initialDob: profileState.profile?.dob != null
+                  ? DateTime.tryParse(profileState.profile!.dob!)
+                  : null,
+            ),
+
             const SizedBox(height: 32),
 
-            // ── Save Button ─────────────────────────────────────────────
+            // ── Save Button (name / email / phone) ──────────────────────
             SizedBox(
               width: double.infinity,
               height: 54,

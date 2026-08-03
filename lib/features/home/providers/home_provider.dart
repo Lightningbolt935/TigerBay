@@ -5,9 +5,10 @@ import 'package:tigerbay_app/data/models/branch_model.dart';
 import 'package:tigerbay_app/data/repositories/menu_repository.dart';
 import 'package:tigerbay_app/features/home/screens/news_feed_component.dart';
 
-// Re-export selectedBranchProvider so existing consumer imports keep working.
+// Re-export selectedBranchProvider and new branch-filtered providers so
+// existing consumer imports keep working.
 export 'package:tigerbay_app/features/home/providers/branch_provider.dart'
-    show selectedBranchProvider;
+    show selectedBranchProvider, menuForBranchProvider, rewardsForBranchProvider;
 
 final menuRepositoryProvider = Provider<MenuRepository>((ref) => MenuRepository());
 
