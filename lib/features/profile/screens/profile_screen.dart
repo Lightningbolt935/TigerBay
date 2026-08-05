@@ -5,6 +5,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_routes.dart';
+import '../../../data/models/branch_model.dart';
+import '../../../data/models/user_model.dart';
 import '../../../shared/widgets/safe_network_image.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../home/providers/home_provider.dart';
@@ -313,9 +315,9 @@ class ProfileScreen extends ConsumerWidget {
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _ProfileHero extends StatelessWidget {
-  final dynamic profile;
-  final dynamic branches;
-  final dynamic selectedBranch;
+  final UserProfile? profile;
+  final AsyncValue<List<Branch>> branches;
+  final Branch? selectedBranch;
   final VoidCallback onBranchTap;
   final VoidCallback onEditTap;
 
