@@ -146,11 +146,16 @@ class _MembershipPaywallScreenState
   Widget build(BuildContext context) {
     final tiersAsync = ref.watch(membershipTiersProvider);
     final activationState = ref.watch(membershipActivationNotifierProvider);
+    final profile = ref.watch(profileStateProvider).profile;
+    final isActive = profile?.membershipStatus == 'active';
 
     return Scaffold(
       backgroundColor: AppColors.brandBlack,
       body: SafeArea(
-        child: tiersAsync.when(
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: tiersAsync.when(
           loading: () => const Center(
             child: CircularProgressIndicator(
               color: AppColors.gold,
@@ -216,6 +221,24 @@ class _MembershipPaywallScreenState
             final safeIndex = _currentPage.clamp(0, tiers.length - 1);
             final selectedTier = tiers[safeIndex];
 
+            MembershipTier? currentTier;
+            if (isActive) {
+              for (final t in tiers) {
+                if (t.id == profile?.membershipTierId) {
+                  currentTier = t;
+                  break;
+                }
+              }
+            }
+
+            final bool isCurrentSelected =
+                selectedTier.id == currentTier?.id;
+            final String ctaLabel = isCurrentSelected
+                ? 'RENEW ${selectedTier.name.toUpperCase()}'
+                : isActive
+                    ? 'SWITCH TO ${selectedTier.name.toUpperCase()}'
+                    : 'ACTIVATE ${selectedTier.name.toUpperCase()}';
+
             return Column(
               children: [
                 const SizedBox(height: 16),
@@ -223,11 +246,16 @@ class _MembershipPaywallScreenState
                 // ── Brand Header ─────────────────────────────────────────
                 _buildBrandHeader(),
 
+                if (isActive && currentTier != null) ...[
+                  const SizedBox(height: 16),
+                  _buildCurrentPlanBanner(currentTier, profile),
+                ],
+
                 const SizedBox(height: 24),
 
                 // ── Title ────────────────────────────────────────────────
                 Text(
-                  'CHOOSE YOUR MEMBERSHIP',
+                  isActive ? 'MANAGE YOUR MEMBERSHIP' : 'CHOOSE YOUR MEMBERSHIP',
                   style: GoogleFonts.poppins(
                     fontSize: 22,
                     fontWeight: FontWeight.w700,
@@ -237,7 +265,9 @@ class _MembershipPaywallScreenState
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Unlock exclusive rewards across every TigerBay venue',
+                  isActive
+                      ? 'Renew your plan or switch tiers any time'
+                      : 'Unlock exclusive rewards across every TigerBay venue',
                   style: GoogleFonts.poppins(
                     fontSize: 13,
                     color: AppColors.textSecondary,
@@ -257,6 +287,7 @@ class _MembershipPaywallScreenState
                       return _TierCard(
                         tier: tiers[index],
                         isSelected: isSelected,
+                        isCurrentTier: tiers[index].id == currentTier?.id,
                       );
                     },
                   ),
@@ -358,7 +389,7 @@ class _MembershipPaywallScreenState
                               ),
                             )
                           : Text(
-                              'ACTIVATE ${selectedTier.name.toUpperCase()}',
+                              ctaLabel,
                               style: GoogleFonts.poppins(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w600,
@@ -374,6 +405,25 @@ class _MembershipPaywallScreenState
               ],
             );
           },
+            ),
+          ),
+          if (isActive)
+            Positioned(
+              top: 8,
+              left: 8,
+              child: Material(
+                color: AppColors.surface.withValues(alpha: 0.9),
+                shape: const CircleBorder(),
+                elevation: 2,
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back_rounded,
+                      color: Colors.white, size: 22),
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  tooltip: 'Back',
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -436,6 +486,65 @@ class _MembershipPaywallScreenState
       ),
     );
   }
+
+  Widget _buildCurrentPlanBanner(MembershipTier tier, dynamic profile) {
+    final expiresAt = profile?.membershipExpiresAt;
+    final expiryText = expiresAt != null
+        ? 'Renews ${DateTime.parse(expiresAt.toString()).toLocal().day} '
+            '${_monthName(DateTime.parse(expiresAt.toString()).toLocal().month)}'
+            ' ${DateTime.parse(expiresAt.toString()).toLocal().year}'
+        : null;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          gradient: AppColors.goldGradient,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.workspace_premium, color: Colors.black, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'CURRENT PLAN — ${tier.name.toUpperCase()}',
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.black,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                  if (expiryText != null)
+                    Text(
+                      expiryText,
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        color: Colors.black.withValues(alpha: 0.7),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _monthName(int month) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return months[month - 1];
+  }
 }
 
 // ── Tier Card Widget ──────────────────────────────────────────────────────
@@ -443,8 +552,13 @@ class _MembershipPaywallScreenState
 class _TierCard extends StatelessWidget {
   final MembershipTier tier;
   final bool isSelected;
+  final bool isCurrentTier;
 
-  const _TierCard({required this.tier, required this.isSelected});
+  const _TierCard({
+    required this.tier,
+    required this.isSelected,
+    this.isCurrentTier = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -470,13 +584,40 @@ class _TierCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ── Tier Name ────────────────────────────────────────────────
-          Text(
-            tier.name,
-            style: GoogleFonts.poppins(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              color: AppColors.gold,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  tier.name,
+                  style: GoogleFonts.poppins(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.gold,
+                  ),
+                ),
+              ),
+              if (isCurrentTier)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppColors.gold, width: 1),
+                  ),
+                  child: Text(
+                    'CURRENT PLAN',
+                    style: GoogleFonts.poppins(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.gold,
+                      letterSpacing: 0.6,
+                    ),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 8),
 

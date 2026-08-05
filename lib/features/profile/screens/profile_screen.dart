@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_routes.dart';
@@ -8,6 +9,15 @@ import '../../../shared/widgets/safe_network_image.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../home/providers/home_provider.dart';
 import '../providers/profile_provider.dart';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TigerBay International — Redesigned Profile Screen
+// ═══════════════════════════════════════════════════════════════════════════
+// Full dark-luxury profile page with:
+//  • Hero avatar + name + membership badge
+//  • Strips balance card with gold shimmer
+//  • Settings tiles for account, legal, sign-out
+// NOT an edit form — editing happens via the separate EditProfileScreen.
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -18,225 +28,179 @@ class ProfileScreen extends ConsumerWidget {
     final branches = ref.watch(branchesProvider);
     final selectedBranch = ref.watch(selectedBranchProvider);
 
+    if (profileState.isLoading) {
+      return const Scaffold(
+        backgroundColor: AppColors.brandBlack,
+        body: Center(
+          child: CircularProgressIndicator(color: AppColors.gold, strokeWidth: 2),
+        ),
+      );
+    }
+
+    final profile = profileState.profile;
+
     return Scaffold(
       backgroundColor: AppColors.brandBlack,
-      body: SafeArea(
-        child: profileState.isLoading
-            ? const Center(
-                child: CircularProgressIndicator(
-                    color: AppColors.gold, strokeWidth: 2),
-              )
-            : SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 20),
+      body: CustomScrollView(
+        physics: const BouncingScrollPhysics(),
+        slivers: [
+          // ── Collapsible Header ──────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: _ProfileHero(
+              profile: profile,
+              branches: branches,
+              selectedBranch: selectedBranch,
+              onBranchTap: () => _showBranchPicker(context, ref,
+                  branches.asData?.value ?? []),
+              onEditTap: () => context.push(AppRoutes.editProfile),
+            ),
+          ),
 
-                    // ── Header row ──────────────────────────────────────
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        const Text(
-                          'Settings',
-                          style: TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.black87,
-                          ),
-                        ),
-                        const Spacer(),
-                        // Branch selector
-                        branches.when(
-                          data: (list) => _BranchPill(
-                            label: selectedBranch?.title ??
-                                'Loading...', // ◄ Displays the dynamic home site title automatically
-                            onTap: () => _showBranchPicker(context, ref, list),
-                          ),
-                          loading: () => const _BranchPill(label: 'Loading...'),
-                          error: (_, __) =>
-                              const _BranchPill(label: 'Error Loading Site'),
-                        ),
-                      ],
-                    ),
+          // ── Strips Balance Card ─────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+              child: _StripsCard(stripsBalance: profile?.stripsBalance ?? 0),
+            ),
+          ),
 
-                    const SizedBox(height: 24),
+          // ── ACCOUNT section ────────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: _SectionLabel('ACCOUNT'),
+          ),
+          SliverToBoxAdapter(
+            child: _SettingsCard(
+              tiles: [
+                _SettingsTile(
+                  icon: Icons.person_outline_rounded,
+                  label: 'Edit Profile',
+                  subtitle: profile?.fullName ?? 'Update your details',
+                  onTap: () => context.push(AppRoutes.editProfile),
+                ),
+                _SettingsTile(
+                  icon: Icons.notifications_outlined,
+                  label: 'Notifications',
+                  subtitle: 'Manage alerts & preferences',
+                  onTap: () => context.push(AppRoutes.notificationPrefs),
+                ),
+              ],
+            ),
+          ),
 
-                    // ── PROFILE label ───────────────────────────────────
-                    const Text(
-                      'PROFILE',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 1.3,
-                        color: Colors.black45,
+          const SliverToBoxAdapter(child: SizedBox(height: 20)),
+
+          // ── MEMBERSHIP section ─────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: _SectionLabel('MEMBERSHIP'),
+          ),
+          SliverToBoxAdapter(
+            child: _SettingsCard(
+              tiles: [
+                _SettingsTile(
+                  icon: Icons.workspace_premium_outlined,
+                  label: 'Membership',
+                  subtitle: _membershipLabel(profile),
+                  subtitleColor: _membershipColor(profile),
+                  onTap: () => context.push(AppRoutes.membershipPaywall),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _MembershipBadge(profile: profile),
+                      const SizedBox(width: 4),
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        color: AppColors.textHint,
+                        size: 20,
                       ),
-                    ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
 
-                    const SizedBox(height: 16),
+          const SliverToBoxAdapter(child: SizedBox(height: 20)),
 
-                    // ── Avatar + Edit Photo ─────────────────────────────
-                    Row(
-                      children: [
-                        _AvatarInitials(
-                          initials: profileState.profile?.initials ?? '??',
-                          avatarUrl: profileState.profile?.avatarUrl,
-                        ),
-                        const SizedBox(width: 20),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            GestureDetector(
-                              onTap: () => context.push(AppRoutes.editProfile),
-                              child: const Text(
-                                'Edit Photo',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.gold,
-                                  fontFamily: 'Poppins',
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            const Text(
-                              'JPG or PNG. Max 5MB',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.textSecondary,
-                                fontFamily: 'Poppins',
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+          // ── INFORMATION & LEGAL section ────────────────────────────────
+          SliverToBoxAdapter(
+            child: _SectionLabel('INFORMATION & LEGAL'),
+          ),
+          SliverToBoxAdapter(
+            child: _SettingsCard(
+              tiles: [
+                _SettingsTile(
+                  icon: Icons.shield_outlined,
+                  label: 'Privacy Policy',
+                  labelColor: AppColors.gold,
+                  onTap: () => _launch('https://tigerbayinternational.com/privacy'),
+                ),
+                _SettingsTile(
+                  icon: Icons.description_outlined,
+                  label: 'Terms of Service',
+                  labelColor: AppColors.gold,
+                  onTap: () => _launch('https://tigerbayinternational.com/terms'),
+                ),
+                _SettingsTile(
+                  icon: Icons.gavel_outlined,
+                  label: 'GDPR Compliance',
+                  labelColor: AppColors.gold,
+                  onTap: () => _launch('https://tigerbayinternational.com/gdpr'),
+                ),
+              ],
+            ),
+          ),
 
-                    const SizedBox(height: 28),
+          const SliverToBoxAdapter(child: SizedBox(height: 20)),
 
-                    // ── Full Name ───────────────────────────────────────
-                    const _FieldLabel('FULL NAME'),
-                    const SizedBox(height: 8),
-                    _ReadOnlyField(
-                      value: profileState.profile?.fullName ?? '',
-                      hint: 'Your full name',
-                      onTap: () => context.push(AppRoutes.editProfile),
-                    ),
+          // ── Sign Out ───────────────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: _SignOutButton(onTap: () => _confirmSignOut(context, ref)),
+            ),
+          ),
 
-                    const SizedBox(height: 18),
-
-                    // ── Email Address ───────────────────────────────────
-                    const _FieldLabel('EMAIL ADDRESS'),
-                    const SizedBox(height: 8),
-                    _ReadOnlyField(
-                      value: profileState.profile?.email ?? '',
-                      hint: 'your@email.com',
-                      onTap: () => context.push(AppRoutes.editProfile),
-                    ),
-
-                    const SizedBox(height: 18),
-
-                    // ── Mobile Number ───────────────────────────────────
-                    const _FieldLabel('MOBILE NUMBER'),
-                    const SizedBox(height: 8),
-                    _ReadOnlyField(
-                      value: profileState.profile?.phone ?? '',
-                      hint: '+44 7700 900000',
-                      onTap: () => context.push(AppRoutes.editProfile),
-                    ),
-
-                    const SizedBox(height: 28),
-
-                    // ── Save Changes button ─────────────────────────────
-                    SizedBox(
-                      width: double.infinity,
-                      height: 54,
-                      child: OutlinedButton(
-                        onPressed: () => context.push(AppRoutes.editProfile),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(
-                              color: AppColors.gold, width: 1.2),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14)),
-                        ),
-                        child: const Text(
-                          'Save Changes',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.gold,
-                            fontFamily: 'Poppins',
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 32),
-
-                    // ── Information & Legal ─────────────────────────────
-                    const Text(
-                      'INFORMATION & LEGAL',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 1.3,
-                        color: Colors.black45,
-                      ),
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    _LegalTile(
-                      label: 'Privacy Policy',
-                      onTap: () =>
-                          _launch('https://tigerbayinternational.com/privacy'),
-                    ),
-                    Divider(color: Colors.grey.shade100, height: 0),
-                    _LegalTile(
-                      label: 'Terms of Service',
-                      onTap: () =>
-                          _launch('https://tigerbayinternational.com/terms'),
-                    ),
-                    Divider(color: Colors.grey.shade100, height: 0),
-                    _LegalTile(
-                      label: 'GDPR Compliance',
-                      onTap: () =>
-                          _launch('https://tigerbayinternational.com/gdpr'),
-                    ),
-                    Divider(color: Colors.grey.shade100, height: 0),
-
-                    const SizedBox(height: 28),
-
-                    // ── Sign Out ────────────────────────────────────────
-                    Center(
-                      child: TextButton(
-                        onPressed: () => _confirmSignOut(context, ref),
-                        child: const Text(
-                          'Sign Out',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.brandRed,
-                            fontFamily: 'Poppins',
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 24),
-                  ],
+          // App version
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 20, bottom: 48),
+              child: Center(
+                child: Text(
+                  'TigerBay International v1.0',
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    color: AppColors.textHint,
+                  ),
                 ),
               ),
+            ),
+          ),
+        ],
       ),
     );
   }
 
+  // ── Helpers ──────────────────────────────────────────────────────────────
+
+  String _membershipLabel(profile) {
+    if (profile == null) return 'No membership';
+    final status = profile.membershipStatus;
+    if (status == 'active') return 'Active member';
+    if (status == 'expired') return 'Membership expired';
+    return 'No active membership';
+  }
+
+  Color _membershipColor(profile) {
+    if (profile?.membershipStatus == 'active') return AppColors.success;
+    if (profile?.membershipStatus == 'expired') return AppColors.warning;
+    return AppColors.textSecondary;
+  }
+
   void _showBranchPicker(BuildContext context, WidgetRef ref, List branches) {
     final selectedBranch = ref.read(selectedBranchProvider);
-
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF121212), // Premium dark surface
+      backgroundColor: const Color(0xFF121212),
       barrierColor: Colors.black.withValues(alpha: 0.7),
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
@@ -248,7 +212,6 @@ class ProfileScreen extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Drag handle
             Center(
               child: Container(
                 width: 38,
@@ -260,30 +223,22 @@ class ProfileScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 20),
-
-            // Header
-            const Row(
+            Row(
               children: [
-                Icon(
-                  Icons.location_on_rounded,
-                  color: Color(0xFFD4AF37), // TigerBay Gold
-                  size: 20,
-                ),
-                SizedBox(width: 8),
+                const Icon(Icons.location_on_rounded,
+                    color: AppColors.gold, size: 20),
+                const SizedBox(width: 8),
                 Text(
                   'Select Branch',
-                  style: TextStyle(
+                  style: GoogleFonts.poppins(
                     color: Colors.white,
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    letterSpacing: 0.3,
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 16),
-
-            // Branch list
             Flexible(
               child: ListView.separated(
                 shrinkWrap: true,
@@ -298,9 +253,7 @@ class ProfileScreen extends ConsumerWidget {
                     city: (b.city ?? '') as String,
                     isSelected: isSelected,
                     onTap: () {
-                      ref
-                          .read(selectedBranchProvider.notifier)
-                          .changeBranch(b);
+                      ref.read(selectedBranchProvider.notifier).changeBranch(b);
                       Navigator.pop(ctx);
                     },
                   );
@@ -322,29 +275,31 @@ class ProfileScreen extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: const Text('Sign Out?',
-            style: TextStyle(fontWeight: FontWeight.w700)),
-        content: const Text('You will be returned to the login screen.',
-            style: TextStyle(fontSize: 13)),
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Sign Out?',
+            style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+        content: Text(
+          'You will be returned to the login screen.',
+          style: GoogleFonts.poppins(
+              fontSize: 13, color: AppColors.textSecondary),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child:
-                const Text('Cancel', style: TextStyle(color: Colors.black54)),
+            child: Text('Cancel',
+                style: GoogleFonts.poppins(color: AppColors.textSecondary)),
           ),
           TextButton(
             onPressed: () {
-              // 1. Instantly close the alert dialog box overlay cleanly
               Navigator.of(context, rootNavigator: true).pop();
-
-              // 2. Defer the state mutation cleanly to prevent lifecycle crashes
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 ref.read(authProvider.notifier).signOut();
               });
             },
-            child: const Text('Sign Out',
-                style: TextStyle(
+            child: Text('Sign Out',
+                style: GoogleFonts.poppins(
                     color: AppColors.brandRed, fontWeight: FontWeight.w600)),
           ),
         ],
@@ -353,95 +308,435 @@ class ProfileScreen extends ConsumerWidget {
   }
 }
 
-// ── Avatar with gold ring + initials ─────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+// Hero Section
+// ═══════════════════════════════════════════════════════════════════════════
 
-class _AvatarInitials extends StatelessWidget {
-  final String initials;
-  final String? avatarUrl;
-  const _AvatarInitials({required this.initials, this.avatarUrl});
+class _ProfileHero extends StatelessWidget {
+  final dynamic profile;
+  final dynamic branches;
+  final dynamic selectedBranch;
+  final VoidCallback onBranchTap;
+  final VoidCallback onEditTap;
+
+  const _ProfileHero({
+    required this.profile,
+    required this.branches,
+    required this.selectedBranch,
+    required this.onBranchTap,
+    required this.onEditTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 80,
-      height: 80,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: AppColors.gold, width: 2),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF1A1A1A), AppColors.brandBlack],
+        ),
       ),
-      child: ClipOval(
-        child: SafeNetworkImage(
-          imageUrl: avatarUrl,
-          width: 80,
-          height: 80,
-          fit: BoxFit.cover,
-          fallback: Container(
-            color: AppColors.surface,
-            alignment: Alignment.center,
-            child: Text(
-              initials,
-              style: const TextStyle(
+      child: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            // Top bar: title + branch pill
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              child: Row(
+                children: [
+                  Text(
+                    'Profile',
+                    style: GoogleFonts.poppins(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const Spacer(),
+                  branches.when(
+                    data: (list) => _BranchPill(
+                      label: selectedBranch?.title ?? 'Select Branch',
+                      onTap: onBranchTap,
+                    ),
+                    loading: () =>
+                        const _BranchPill(label: 'Loading...'),
+                    error: (_, __) =>
+                        const _BranchPill(label: 'Select Branch'),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 32),
+
+            // Avatar
+            Stack(
+              alignment: Alignment.bottomRight,
+              children: [
+                Container(
+                  width: 96,
+                  height: 96,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.gold, width: 2.5),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.gold.withValues(alpha: 0.3),
+                        blurRadius: 20,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                  child: ClipOval(
+                    child: SafeNetworkImage(
+                      imageUrl: profile?.avatarUrl,
+                      width: 96,
+                      height: 96,
+                      fit: BoxFit.cover,
+                      fallback: Container(
+                        color: AppColors.surface,
+                        alignment: Alignment.center,
+                        child: Text(
+                          profile?.initials ?? '?',
+                          style: GoogleFonts.poppins(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                // Edit avatar button
+                GestureDetector(
+                  onTap: onEditTap,
+                  child: Container(
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      color: AppColors.gold,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                          color: AppColors.brandBlack, width: 2),
+                    ),
+                    child: const Icon(Icons.edit_rounded,
+                        size: 14, color: Colors.black),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 16),
+
+            // Name
+            Text(
+              profile?.fullName ?? 'TigerBay Member',
+              style: GoogleFonts.poppins(
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textPrimary,
-                fontFamily: 'Poppins',
               ),
             ),
-          ),
+
+            const SizedBox(height: 4),
+
+            // Email
+            if (profile?.email != null)
+              Text(
+                profile!.email!,
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+
+            const SizedBox(height: 12),
+
+            // Membership tier chip
+            _TierChip(profile: profile),
+
+            const SizedBox(height: 28),
+          ],
         ),
       ),
     );
   }
 }
 
-// ── Field label ───────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+// Tier chip under the name
+// ═══════════════════════════════════════════════════════════════════════════
 
-class _FieldLabel extends StatelessWidget {
-  final String text;
-  const _FieldLabel(this.text);
+class _TierChip extends StatelessWidget {
+  final dynamic profile;
+  const _TierChip({required this.profile});
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: const TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 1.2,
-        color: AppColors.textSecondary,
-        fontFamily: 'Poppins',
+    final isActive = profile?.membershipStatus == 'active';
+    final tierLabel = isActive
+        ? 'Tier ${profile?.membershipTierId ?? ''} Member'
+        : 'No Active Membership';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      decoration: BoxDecoration(
+        gradient: isActive ? AppColors.goldGradient : null,
+        color: isActive ? null : AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: isActive ? null : Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isActive ? Icons.workspace_premium : Icons.lock_outline_rounded,
+            size: 14,
+            color: isActive ? Colors.black : AppColors.textSecondary,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            tierLabel,
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: isActive ? Colors.black : AppColors.textSecondary,
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-// ── Read-only tappable field ──────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+// Strips Balance Card
+// ═══════════════════════════════════════════════════════════════════════════
 
-class _ReadOnlyField extends StatelessWidget {
-  final String value;
-  final String hint;
-  final VoidCallback onTap;
-  const _ReadOnlyField(
-      {required this.value, required this.hint, required this.onTap});
+class _StripsCard extends StatelessWidget {
+  final int stripsBalance;
+  const _StripsCard({required this.stripsBalance});
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF1F1B0E), Color(0xFF1C1C1E)],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: AppColors.gold.withValues(alpha: 0.35),
+          width: 1,
+        ),
+      ),
+          child: Row(
+            children: [
+              // Icon
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  gradient: AppColors.goldGradient,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(
+                  Icons.toll_rounded,
+                  color: Colors.black,
+                  size: 26,
+                ),
+              ),
+              const SizedBox(width: 16),
+              // Balance info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'STRIPS BALANCE',
+                      style: GoogleFonts.poppins(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.4,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$stripsBalance Strips',
+                      style: GoogleFonts.poppins(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.gold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Redeem arrow
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 16,
+                color: AppColors.gold.withValues(alpha: 0.6),
+              ),
+            ],
+          ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Section Label
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _SectionLabel extends StatelessWidget {
+  final String text;
+  const _SectionLabel(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+      child: Text(
+        text,
+        style: GoogleFonts.poppins(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 1.4,
+          color: AppColors.textSecondary,
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Settings Card (grouped tiles with dividers)
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _SettingsCard extends StatelessWidget {
+  final List<_SettingsTile> tiles;
+  const _SettingsCard({required this.tiles});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         decoration: BoxDecoration(
           color: AppColors.surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.border),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.border.withValues(alpha: 0.6)),
         ),
-        child: Text(
-          value.isEmpty ? hint : value,
-          style: TextStyle(
-            fontSize: 14,
-            color: value.isEmpty ? AppColors.textHint : AppColors.textPrimary,
-            fontFamily: 'Poppins',
+        child: Column(
+          children: [
+            for (int i = 0; i < tiles.length; i++) ...[
+              tiles[i],
+              if (i < tiles.length - 1)
+                Divider(
+                  height: 1,
+                  color: AppColors.border.withValues(alpha: 0.5),
+                  indent: 56,
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Individual Settings Tile
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _SettingsTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String? subtitle;
+  final Color? subtitleColor;
+  final Color? labelColor;
+  final VoidCallback? onTap;
+  final Widget? trailing;
+
+  const _SettingsTile({
+    required this.icon,
+    required this.label,
+    this.subtitle,
+    this.subtitleColor,
+    this.labelColor,
+    this.onTap,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        splashColor: AppColors.gold.withValues(alpha: 0.05),
+        highlightColor: AppColors.gold.withValues(alpha: 0.03),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              // Icon container
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceLight,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: AppColors.gold, size: 18),
+              ),
+              const SizedBox(width: 14),
+              // Label + subtitle
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: labelColor ?? AppColors.textPrimary,
+                      ),
+                    ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 1),
+                      Text(
+                        subtitle!,
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: subtitleColor ?? AppColors.textSecondary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              // Trailing widget or default chevron
+              trailing ??
+                  (onTap != null
+                      ? Icon(
+                          Icons.chevron_right_rounded,
+                          color: AppColors.textHint,
+                          size: 20,
+                        )
+                      : const SizedBox.shrink()),
+            ],
           ),
         ),
       ),
@@ -449,32 +744,87 @@ class _ReadOnlyField extends StatelessWidget {
   }
 }
 
-// ── Legal tile ────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+// Membership Badge (trailing widget on the membership tile)
+// ═══════════════════════════════════════════════════════════════════════════
 
-class _LegalTile extends StatelessWidget {
-  final String label;
-  final VoidCallback onTap;
-  const _LegalTile({required this.label, required this.onTap});
+class _MembershipBadge extends StatelessWidget {
+  final dynamic profile;
+  const _MembershipBadge({required this.profile});
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      title: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 14,
-          color: Colors.black87,
+    final isActive = profile?.membershipStatus == 'active';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        gradient: isActive ? AppColors.goldGradient : null,
+        color: isActive ? null : AppColors.surfaceLight,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        isActive ? 'ACTIVE' : 'INACTIVE',
+        style: GoogleFonts.poppins(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: isActive ? Colors.black : AppColors.textSecondary,
+          letterSpacing: 0.8,
         ),
       ),
-      trailing:
-          Icon(Icons.chevron_right, color: Colors.grey.shade400, size: 20),
-      onTap: onTap,
     );
   }
 }
 
-// ── Branch location chip ──────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+// Sign Out Button
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _SignOutButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _SignOutButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        splashColor: AppColors.brandRed.withValues(alpha: 0.08),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+                color: AppColors.brandRed.withValues(alpha: 0.3), width: 1),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.logout_rounded,
+                  color: AppColors.brandRed, size: 18),
+              const SizedBox(width: 10),
+              Text(
+                'Sign Out',
+                style: GoogleFonts.poppins(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.brandRed,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Branch Pill (top-right location selector)
+// ═══════════════════════════════════════════════════════════════════════════
 
 class _BranchPill extends StatelessWidget {
   final String label;
@@ -491,37 +841,29 @@ class _BranchPill extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.07), // Glassmorphic tint
+            color: Colors.white.withValues(alpha: 0.07),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: Colors.white.withValues(alpha: 0.12),
-              width: 1,
             ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.location_on_rounded,
-                color: Color(0xFFD4AF37), // TigerBay Gold
-                size: 14,
-              ),
+              const Icon(Icons.location_on_rounded,
+                  color: AppColors.gold, size: 14),
               const SizedBox(width: 5),
               Text(
                 label,
-                style: const TextStyle(
+                style: GoogleFonts.poppins(
                   color: Colors.white,
                   fontWeight: FontWeight.w600,
                   fontSize: 12.5,
-                  letterSpacing: 0.2,
                 ),
               ),
               const SizedBox(width: 3),
-              Icon(
-                Icons.keyboard_arrow_down_rounded,
-                color: Colors.white.withValues(alpha: 0.6),
-                size: 16,
-              ),
+              Icon(Icons.keyboard_arrow_down_rounded,
+                  color: Colors.white.withValues(alpha: 0.6), size: 16),
             ],
           ),
         ),
@@ -530,11 +872,12 @@ class _BranchPill extends StatelessWidget {
   }
 }
 
-// ── Dark-luxury branch tile ───────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+// Branch Tile (bottom sheet list item)
+// ═══════════════════════════════════════════════════════════════════════════
 
 class _BranchTile extends StatelessWidget {
-  final String name;
-  final String city;
+  final String name, city;
   final bool isSelected;
   final VoidCallback onTap;
 
@@ -544,8 +887,6 @@ class _BranchTile extends StatelessWidget {
     required this.isSelected,
     required this.onTap,
   });
-
-  static const Color _gold = Color(0xFFD4AF37);
 
   @override
   Widget build(BuildContext context) {
@@ -557,13 +898,14 @@ class _BranchTile extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
-            // Selected: gold tint. Unselected: elevated dark surface
             color: isSelected
-                ? _gold.withValues(alpha: 0.12)
+                ? AppColors.gold.withValues(alpha: 0.12)
                 : const Color(0xFF1C1C1E),
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: isSelected ? _gold : Colors.white.withValues(alpha: 0.08),
+              color: isSelected
+                  ? AppColors.gold
+                  : Colors.white.withValues(alpha: 0.08),
               width: isSelected ? 1.5 : 1,
             ),
           ),
@@ -573,51 +915,42 @@ class _BranchTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // High-visibility branch name
                     Text(
                       name,
-                      style: TextStyle(
+                      style: GoogleFonts.poppins(
                         color: isSelected
                             ? Colors.white
                             : const Color(0xFFE4E4E7),
-                        fontWeight: isSelected
-                            ? FontWeight.w700
-                            : FontWeight.w500,
+                        fontWeight:
+                            isSelected ? FontWeight.w700 : FontWeight.w500,
                         fontSize: 15,
-                        letterSpacing: 0.2,
                       ),
                     ),
                     if (city.isNotEmpty) ...[
                       const SizedBox(height: 2),
                       Text(
                         city,
-                        style: TextStyle(
+                        style: GoogleFonts.poppins(
                           color: isSelected
-                              ? _gold
+                              ? AppColors.gold
                               : const Color(0xFFA1A1AA),
                           fontSize: 12,
-                          fontWeight: FontWeight.w400,
                         ),
                       ),
                     ],
                   ],
                 ),
               ),
-
-              // Gold checkmark badge for active selection
               if (isSelected)
                 Container(
                   width: 22,
                   height: 22,
                   decoration: const BoxDecoration(
-                    color: _gold,
+                    color: AppColors.gold,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(
-                    Icons.check_rounded,
-                    color: Colors.black,
-                    size: 14,
-                  ),
+                  child: const Icon(Icons.check_rounded,
+                      color: Colors.black, size: 14),
                 ),
             ],
           ),

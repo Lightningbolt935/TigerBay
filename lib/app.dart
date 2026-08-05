@@ -178,12 +178,14 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // ── Gate 5: Active Member Route Cleanup ────────────────────────────
       // If active member is sitting on auth or onboarding screens, send them Home.
+      // NOTE: /membership-paywall is intentionally NOT in this list — active
+      // members can open it from the Profile page to view / renew / switch
+      // their membership. Gate 4 still forces INACTIVE users onto the paywall.
       final isOnOnboardingOrAuthRoute = loc == AppRoutes.login ||
           loc == AppRoutes.register ||
           loc == AppRoutes.splash ||
           loc == AppRoutes.pendingVerification ||
-          loc == AppRoutes.otp ||
-          loc == AppRoutes.membershipPaywall;
+          loc == AppRoutes.otp;
 
       if (isOnOnboardingOrAuthRoute) {
         debugPrint(
@@ -328,6 +330,39 @@ final routerProvider = Provider<GoRouter>((ref) {
 /// ═══════════════════════════════════════════════════════════════════════════
 /// TigerBay International — Root Application Widget (Light Theme)
 /// ═══════════════════════════════════════════════════════════════════════════
+
+/// Smooth cross-page transition: gentle fade combined with a subtle upward
+/// slide. Replaces the default platform slide-from-right / zoom so navigation
+/// feels calm and premium across the whole app.
+class _SmoothPageTransitionsBuilder extends PageTransitionsBuilder {
+  const _SmoothPageTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    final curved = CurvedAnimation(
+      parent: animation,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
+    );
+    return FadeTransition(
+      opacity: curved,
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 0.04),
+          end: Offset.zero,
+        ).animate(curved),
+        child: child,
+      ),
+    );
+  }
+}
+
 class TigerBayApp extends ConsumerWidget {
   const TigerBayApp({super.key});
 
@@ -345,6 +380,15 @@ class TigerBayApp extends ConsumerWidget {
           backgroundColor: Colors.white,
           foregroundColor: Colors.black,
           elevation: 0,
+        ),
+        pageTransitionsTheme: const PageTransitionsTheme(
+          builders: {
+            TargetPlatform.android: _SmoothPageTransitionsBuilder(),
+            TargetPlatform.iOS: _SmoothPageTransitionsBuilder(),
+            TargetPlatform.windows: _SmoothPageTransitionsBuilder(),
+            TargetPlatform.macOS: _SmoothPageTransitionsBuilder(),
+            TargetPlatform.linux: _SmoothPageTransitionsBuilder(),
+          },
         ),
       ),
       themeMode: ThemeMode.light,
