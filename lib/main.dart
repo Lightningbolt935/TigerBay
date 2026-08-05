@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'app.dart';
@@ -36,16 +35,17 @@ Future<void> main() async {
     publishableKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
 
-  // ── Init Stripe (mobile-native only) ───────────────────────────────────────
-  // flutter_stripe uses platform channels that crash on web.
-  // Web Stripe is loaded via the <script> tag in web/index.html.
-  if (!kIsWeb) {
-    Stripe.publishableKey = dotenv.env['STRIPE_PUBLISHABLE_KEY']!;
-    await Stripe.instance.applySettings();
-  } else {
-    debugPrint('[TigerBay] Web runtime detected — '
-        'bypassing mobile-native Stripe configuration.');
-  }
+  // ── TODO: Init Stripe when API key is ready ────────────────────────────────
+  // Uncomment the block below and add flutter_stripe back to pubspec.yaml
+  // once a real Stripe publishable key (pk_test_... / pk_live_...) is in .env:
+  //
+  // if (!kIsWeb) {
+  //   final stripeKey = dotenv.env['STRIPE_PUBLISHABLE_KEY'] ?? '';
+  //   if (stripeKey.startsWith('pk_')) {
+  //     Stripe.publishableKey = stripeKey;
+  //     await Stripe.instance.applySettings();
+  //   }
+  // }
 
   runApp(
     const ProviderScope(

@@ -3,13 +3,8 @@ allprojects {
         google()
         mavenCentral()
     }
-    configurations.all {
-        resolutionStrategy {
-            force("com.google.android.gms:play-services-wallet:19.2.0")
-            force("com.google.android.gms:play-services-tapandpay:17.2.0")
-        }
-    }
 }
+
 
 val newBuildDir: Directory =
     rootProject.layout.buildDirectory

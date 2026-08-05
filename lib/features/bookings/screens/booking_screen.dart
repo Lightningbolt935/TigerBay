@@ -65,6 +65,19 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
         bookingState.partySize <= 0 ? 2 : bookingState.partySize;
     final notifier = ref.read(bookingNotifierProvider.notifier);
 
+    // ── Auto-sync selectedBranch → bookingNotifier ──────────────────────────
+    // When the booking screen opens the bookingNotifier starts with branchId=null.
+    // If selectedBranchProvider already holds a branch (set from the home screen
+    // or previous navigation), sync it immediately so canProceed works without
+    // requiring the user to touch the dropdown again.
+    if (selectedBranch != null &&
+        bookingState.branchId != selectedBranch.id.toString()) {
+      // Schedule as a post-frame callback to avoid calling setState during build.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        notifier.setBranch(selectedBranch.id.toString());
+      });
+    }
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(

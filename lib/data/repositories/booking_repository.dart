@@ -84,6 +84,26 @@ class BookingRepository {
     return BookingModel.fromJson(data);
   }
 
+  /// Confirms booking after a successful PayPal payment.
+  /// Updates status to 'upcoming' and records the PayPal order reference.
+  Future<BookingModel> confirmBookingPaymentPayPal({
+    required String bookingId,
+    required String paypalOrderId,
+  }) async {
+    final data = await _supabase
+        .from('bookings')
+        .update({
+          'paypal_order_id': paypalOrderId,
+          'status': 'upcoming',
+          'updated_at': DateTime.now().toIso8601String(),
+        })
+        .eq('id', bookingId)
+        .select()
+        .single();
+
+    return BookingModel.fromJson(data);
+  }
+
   Future<BookingModel> modifyBooking({
     required String bookingId,
     required DateTime newDate,

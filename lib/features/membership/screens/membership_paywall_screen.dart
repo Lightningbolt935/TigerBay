@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tigerbay_app/core/constants/app_colors.dart';
+import 'package:tigerbay_app/core/services/paypal_service.dart';
 import 'package:tigerbay_app/data/models/membership_tier_model.dart';
+import 'package:tigerbay_app/features/auth/providers/profile_state_provider.dart';
 import 'package:tigerbay_app/features/profile/providers/membership_provider.dart';
 
 /// ═══════════════════════════════════════════════════════════════════════════
@@ -32,19 +34,82 @@ class _MembershipPaywallScreenState
   }
 
   Future<void> _activateMembership(MembershipTier tier) async {
-    final activator =
-        ref.read(membershipActivationNotifierProvider.notifier);
-    final paymentMethod = ref.read(selectedPaymentMethodProvider);
+    final activator = ref.read(membershipActivationNotifierProvider.notifier);
 
+    // ── Step 1: Collect payment via PayPal ────────────────────────────────
+    // The membership is NOT activated until PayPal confirms payment.
+    // presentMembershipPayment() opens a WebView; returns after
+    // the user completes, cancels, or encounters an error.
+    final paymentResult = await PayPalService.presentMembershipPayment(
+      context: context,
+      tierName: tier.name,
+      amountGbp: tier.price,
+    );
+
+    if (!mounted) return;
+
+    // User cancelled — soft message, no activation.
+    if (paymentResult.cancelled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Payment cancelled. No charge was made.',
+            style: GoogleFonts.poppins(fontSize: 14, color: Colors.white),
+          ),
+          backgroundColor: AppColors.textSecondary,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+      return;
+    }
+
+    // Payment failed — surface the error and allow retry.
+    if (!paymentResult.success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            paymentResult.error ?? 'Payment failed. Please try again.',
+            style: GoogleFonts.poppins(fontSize: 14, color: Colors.white),
+          ),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+      return;
+    }
+
+    // ── Step 2: Payment confirmed — activate membership in Supabase ────────
     final success = await activator.activateMembership(tier);
 
     if (!mounted) return;
 
     if (success) {
+      // ── Step 3: Record PayPal order ID for audit trail ──────────────────
+      // Best-effort write — failure here does NOT roll back the activation.
+      if (paymentResult.orderId != null && paymentResult.orderId!.isNotEmpty) {
+        try {
+          final supabase = ref.read(supabaseClientProvider);
+          final userId = supabase.auth.currentUser?.id;
+          if (userId != null) {
+            await supabase.from('profiles').update({
+              'paypal_order_id': paymentResult.orderId,
+              'updated_at': DateTime.now().toIso8601String(),
+            }).eq('id', userId);
+          }
+        } catch (e) {
+          debugPrint('[MembershipPaywall] orderId record failed: $e');
+        }
+      }
+
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '${tier.name} membership activated via ${paymentMethod.displayName}!',
+            '${tier.name} membership activated!',
             style: GoogleFonts.poppins(
               fontSize: 14,
               fontWeight: FontWeight.w500,
@@ -58,8 +123,6 @@ class _MembershipPaywallScreenState
           ),
         ),
       );
-
-      // ⚠️ REMOVED: context.go(AppRoutes.home);
       // GoRouter auto-redirects via Gate 4 as soon as profileState updates!
     } else {
       final error = ref.read(membershipActivationNotifierProvider).error;
@@ -83,7 +146,6 @@ class _MembershipPaywallScreenState
   Widget build(BuildContext context) {
     final tiersAsync = ref.watch(membershipTiersProvider);
     final activationState = ref.watch(membershipActivationNotifierProvider);
-    final selectedPayment = ref.watch(selectedPaymentMethodProvider);
 
     return Scaffold(
       backgroundColor: AppColors.brandBlack,
@@ -224,90 +286,44 @@ class _MembershipPaywallScreenState
 
                 const SizedBox(height: 20),
 
-                // ── Payment Method Selector ──────────────────────────────
+                // ── PayPal Payment Badge ─────────────────────────────────
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'PAYMENT METHOD',
-                        style: GoogleFonts.poppins(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textSecondary,
-                          letterSpacing: 1.2,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      ...PaymentMethod.values.map((method) {
-                        final isMethodSelected =
-                            selectedPayment == method;
-                        return GestureDetector(
-                          onTap: () => ref
-                              .read(selectedPaymentMethodProvider.notifier)
-                              .state = method,
-                          child: Container(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.surface,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: isMethodSelected
-                                    ? AppColors.gold
-                                    : AppColors.border,
-                                width: isMethodSelected ? 1.5 : 1,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.gold, width: 1.5),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.payment_rounded,
+                            color: AppColors.gold, size: 20),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Pay securely with PayPal',
+                              style: GoogleFonts.poppins(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
                               ),
                             ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 20,
-                                  height: 20,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: isMethodSelected
-                                          ? AppColors.gold
-                                          : AppColors.border,
-                                      width: 2,
-                                    ),
-                                  ),
-                                  child: isMethodSelected
-                                      ? Center(
-                                          child: Container(
-                                            width: 10,
-                                            height: 10,
-                                            decoration:
-                                                const BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              color: AppColors.gold,
-                                            ),
-                                          ),
-                                        )
-                                      : null,
-                                ),
-                                const SizedBox(width: 12),
-                                Text(
-                                  method.displayName,
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                    color: isMethodSelected
-                                        ? AppColors.textPrimary
-                                        : AppColors.textSecondary,
-                                  ),
-                                ),
-                              ],
+                            Text(
+                              'Sandbox mode — no real charge',
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                color: AppColors.textSecondary,
+                              ),
                             ),
-                          ),
-                        );
-                      }),
-                    ],
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
 

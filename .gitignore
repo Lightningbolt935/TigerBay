@@ -43,3 +43,17 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Environment variables — never commit secrets
+.env
+.env.*
+!.env.example
+
+# Dev scratch scripts
+scratch_*.py
+analyze_output.txt
+build_log.txt
+
+# Supabase local binaries
+supabase-go.exe
+supabase.exe

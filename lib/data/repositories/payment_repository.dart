@@ -1,56 +1,37 @@
+// TigerBay International — Payment Repository (Stripe Stub)
+// ──────────────────────────────────────────────────────────
+// flutter_stripe has been temporarily removed from pubspec.yaml until
+// a real Stripe API key is available. This file is a stub that preserves
+// the class shape so nothing else in the codebase breaks.
+//
+// TO ACTIVATE STRIPE: see lib/core/services/stripe_service.dart for full instructions.
+
 import 'package:flutter/material.dart';
-import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class PaymentRepository {
   final SupabaseClient _supabase = Supabase.instance.client;
 
-  /// Initialise Stripe with publishable key (call once in main.dart)
+  /// Stub: no-op until Stripe is configured.
   static Future<void> init(String publishableKey) async {
-    Stripe.publishableKey = publishableKey;
-    await Stripe.instance.applySettings();
+    debugPrint('[PaymentRepository] Stripe not configured — init skipped.');
   }
 
-  /// Present Stripe payment sheet for a deposit.
-  /// [clientSecret] comes from the Edge Function that creates the booking.
+  /// Stub: always returns cancelled until Stripe is configured.
   Future<PaymentResult> presentDepositSheet({
     required String clientSecret,
     required double amount,
     required String currency,
     required String merchantName,
   }) async {
-    try {
-      await Stripe.instance.initPaymentSheet(
-        paymentSheetParameters: SetupPaymentSheetParameters(
-          paymentIntentClientSecret: clientSecret,
-          merchantDisplayName: merchantName,
-          style: ThemeMode.light,
-          appearance: const PaymentSheetAppearance(
-            colors: PaymentSheetAppearanceColors(
-              primary: Color(0xFFC9A84C),
-            ),
-            shapes: PaymentSheetShape(
-              borderRadius: 14,
-            ),
-          ),
-        ),
-      );
-      await Stripe.instance.presentPaymentSheet();
-      return const PaymentResult(success: true);
-    } on StripeException catch (e) {
-      if (e.error.code == FailureCode.Canceled) {
-        return const PaymentResult(success: false, cancelled: true);
-      }
-      return PaymentResult(
-        success: false,
-        error: e.error.localizedMessage ?? 'Payment failed',
-      );
-    } catch (e) {
-      return PaymentResult(success: false, error: e.toString());
-    }
+    return const PaymentResult(
+      success: false,
+      cancelled: true,
+      error: 'Stripe not configured yet.',
+    );
   }
 
-  /// Trigger a refund for a cancelled booking via Edge Function
+  /// Trigger a refund for a cancelled booking via Edge Function.
   Future<bool> refundDeposit({
     required String bookingId,
     required String stripePaymentIntentId,
@@ -68,7 +49,7 @@ class PaymentRepository {
       debugPrint('❌ Refund Function Error: $e');
       return false;
     }
-  } // ◄ Make sure this bracket is here to close the function!
+  }
 
   Future<String?> getStripeCustomerId(String userId) async {
     final data = await _supabase

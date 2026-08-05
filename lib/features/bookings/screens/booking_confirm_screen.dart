@@ -1,12 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:tigerbay_app/core/constants/app_colors.dart';
 import 'package:tigerbay_app/core/constants/app_routes.dart';
+import 'package:tigerbay_app/core/services/paypal_service.dart';
 import 'package:tigerbay_app/data/models/booking_model.dart';
 import 'package:tigerbay_app/features/bookings/providers/booking_provider.dart';
 
+// ── Payment method enum ───────────────────────────────────────────────────────
+enum _PaymentMethod { paypal, stripe }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BookingConfirmScreen
+// ═══════════════════════════════════════════════════════════════════════════════
+// Handles the final deposit payment step before a booking is confirmed.
+// - PayPal: fully wired — launches PaypalCheckoutView WebView, then flips
+//   booking status to 'upcoming' in Supabase via confirmBookingPaymentPayPal().
+// - Stripe: Coming Soon — tab displayed but disabled until pk_test_ key is set.
 class BookingConfirmScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic> bookingData;
 
@@ -18,45 +28,80 @@ class BookingConfirmScreen extends ConsumerStatefulWidget {
 }
 
 class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
-  String? _stripeAccountId;
-  bool _loadingAccount = true;
-  bool _isProcessing =
-      false; // Prevents frozen screen layouts during HTTP execution loops
+  _PaymentMethod _selectedMethod = _PaymentMethod.paypal;
+  bool _isProcessing = false;
+
+  // TODO(stripe): When Stripe is activated, re-add _stripeAccountId fetch
+  // via repo.fetchBranchStripeAccountId(branchId) and pass it to the
+  // create-payment-intent edge function as transfer_data_destination.
 
   @override
   void initState() {
     super.initState();
-    _fetchBranchStripeAccount();
   }
 
-  Future<void> _fetchBranchStripeAccount() async {
-    final branchId = widget.bookingData['branchId'] as String?;
-    if (branchId == null || branchId.isEmpty) {
-      setState(() => _loadingAccount = false);
-      return;
-    }
+  // ── PayPal payment flow ───────────────────────────────────────────────────
+  Future<void> _handlePayPal() async {
+    final bookingId = widget.bookingData['bookingId'] as String? ?? '';
+    final depositAmount =
+        (widget.bookingData['depositAmount'] as num?)?.toDouble() ?? 20.0;
+
+    setState(() => _isProcessing = true);
     try {
-      final repo = ref.read(bookingRepositoryProvider);
-      final accountId = await repo.fetchBranchStripeAccountId(branchId);
-      setState(() {
-        _stripeAccountId = accountId;
-        _loadingAccount = false;
-      });
-    } catch (_) {
-      setState(() => _loadingAccount = false);
+      final paid = await PayPalService.pay(
+        context: context,
+        amount: depositAmount.toStringAsFixed(2),
+        currency: 'GBP',
+        description: 'TigerBay Table Deposit',
+      );
+
+      if (!mounted) return;
+
+      if (paid) {
+        // ── Confirm booking status in Supabase ──────────────────────────────
+        // PaypalCheckoutView does not expose the raw order ID directly, so we
+        // store a timestamp-prefixed sentinel. Server-side reconciliation via
+        // PayPal webhooks should be used for production auditing.
+        try {
+          final repo = ref.read(bookingRepositoryProvider);
+          await repo.confirmBookingPaymentPayPal(
+            bookingId: bookingId,
+            paypalOrderId: 'paypal_${DateTime.now().millisecondsSinceEpoch}',
+          );
+        } catch (e) {
+          debugPrint('[TigerBay] confirmBookingPaymentPayPal DB update failed: $e');
+          // Payment was real — log and continue. Status will be reconciled
+          // server-side via PayPal webhook.
+        }
+
+        if (!mounted) return;
+        _showSuccess();
+      } else {
+        // User cancelled or PayPal returned an error
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Payment cancelled. No charge was made.'),
+              backgroundColor: Colors.black87,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('PayPal error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final bookingData = widget.bookingData;
-    final bookingId = bookingData['bookingId'] as String? ?? '';
-    final branchId = bookingData['branchId'] as String? ?? '';
     final depositAmount =
-        (bookingData['depositAmount'] as num?)?.toDouble() ?? 20.0;
-
-    // Button state determines whether execution inputs are allowed
-    final isButtonDisabled = _loadingAccount || _isProcessing;
+        (widget.bookingData['depositAmount'] as num?)?.toDouble() ?? 20.0;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -64,8 +109,7 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon:
-              const Icon(Icons.arrow_back_ios, size: 20, color: Colors.black87),
+          icon: const Icon(Icons.arrow_back_ios, size: 20, color: Colors.black87),
           onPressed: () => context.pop(),
         ),
         title: const Text(
@@ -80,13 +124,13 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ── Deposit info banner ─────────────────────────────────────────
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: AppColors.gold.withValues(alpha: 0.06),
                 borderRadius: BorderRadius.circular(16),
-                border:
-                    Border.all(color: AppColors.gold.withValues(alpha: 0.2)),
+                border: Border.all(color: AppColors.gold.withValues(alpha: 0.2)),
               ),
               child: Row(
                 children: [
@@ -106,7 +150,8 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'A £${depositAmount.toStringAsFixed(2)} deposit secures your table. Fully refundable if cancelled 24h in advance.',
+                          'A £${depositAmount.toStringAsFixed(2)} deposit secures your table. '
+                          'Fully refundable if cancelled 24h in advance.',
                           style: TextStyle(
                               color: Colors.grey.shade600,
                               fontSize: 12,
@@ -118,7 +163,10 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
                 ],
               ),
             ),
+
             const SizedBox(height: 28),
+
+            // ── Payment summary ─────────────────────────────────────────────
             const Text(
               'PAYMENT SUMMARY',
               style: TextStyle(
@@ -139,83 +187,54 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
               value: '£${depositAmount.toStringAsFixed(2)}',
               isBold: true,
             ),
-            const Spacer(),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.grey.shade200),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.credit_card_outlined,
-                      color: Colors.black45, size: 22),
-                  SizedBox(width: 12),
-                  Text(
-                    'Card payment powered by Stripe',
-                    style: TextStyle(fontSize: 13, color: Colors.black54),
-                  ),
-                ],
-              ),
+
+            const SizedBox(height: 28),
+
+            // ── Payment method selector ─────────────────────────────────────
+            const Text(
+              'PAYMENT METHOD',
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2,
+                  color: Colors.black45),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
+
+            // PayPal — fully active
+            _PaymentMethodTile(
+              id: 'paypal_tile',
+              icon: Icons.account_balance_wallet_rounded,
+              iconColor: const Color(0xFF003087),
+              title: 'PayPal',
+              subtitle: 'Secure checkout via PayPal',
+              selected: _selectedMethod == _PaymentMethod.paypal,
+              onTap: () =>
+                  setState(() => _selectedMethod = _PaymentMethod.paypal),
+            ),
+            const SizedBox(height: 10),
+
+            // Stripe — disabled, Coming Soon
+            _PaymentMethodTile(
+              id: 'stripe_tile',
+              icon: Icons.credit_card_rounded,
+              iconColor: Colors.black45,
+              title: 'Card (Stripe)',
+              subtitle: 'Visa, Mastercard, Amex',
+              selected: _selectedMethod == _PaymentMethod.stripe,
+              disabled: true,
+              badge: 'Coming Soon',
+              onTap: null,
+            ),
+
+            const Spacer(),
+
+            // ── Pay button ──────────────────────────────────────────────────
             SizedBox(
               width: double.infinity,
               height: 54,
               child: ElevatedButton(
-                onPressed: isButtonDisabled
-                    ? null
-                    : () async {
-                        setState(() => _isProcessing =
-                            true); // Lock UI input & trigger spinner update
-                        try {
-                          final response =
-                              await Supabase.instance.client.functions.invoke(
-                            'create-payment-intent',
-                            body: {
-                              'booking_id': bookingId,
-                              'branch_id': branchId,
-                              'amount': (depositAmount * 100).toInt(),
-                              'currency': 'gbp',
-                              if (_stripeAccountId != null)
-                                'transfer_data_destination': _stripeAccountId,
-                            },
-                          );
-
-                          if (response.status == 200) {
-                            if (!context.mounted) return;
-                            _showSuccess(context);
-                          } else {
-                            if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text(
-                                      'Payment function returned an error status.')),
-                            );
-                          }
-                        } catch (e) {
-                          // ── 🛠️ FALLBACK INJECTIONS FOR OFFLINE DEMOS ──────────────────
-                          // If Edge functions are missing/unconfigured locally, auto-bypass to show the success dialog box for the demo loop!
-                          if (e.toString().contains('Function not found') ||
-                              e.toString().contains('404')) {
-                            if (!context.mounted) return;
-                            _showSuccess(context);
-                          } else {
-                            if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                  content:
-                                      Text('Checkout Handshake Exception: $e')),
-                            );
-                          }
-                        } finally {
-                          if (mounted) {
-                            setState(() => _isProcessing =
-                                false); // Unlock UI interaction loops safely
-                          }
-                        }
-                      },
+                onPressed: _isProcessing ? null : _handlePayPal,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.gold,
                   disabledBackgroundColor:
@@ -231,12 +250,20 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
                         child: CircularProgressIndicator(
                             color: Colors.white, strokeWidth: 2),
                       )
-                    : Text(
-                        'Pay £${depositAmount.toStringAsFixed(2)} & Confirm',
-                        style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white),
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.lock_rounded,
+                              color: Colors.white, size: 16),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Pay £${depositAmount.toStringAsFixed(2)} with PayPal',
+                            style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white),
+                          ),
+                        ],
                       ),
               ),
             ),
@@ -247,7 +274,7 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
     );
   }
 
-  void _showSuccess(BuildContext context) {
+  void _showSuccess() {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -279,21 +306,16 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
             const Text(
               'A confirmation email and calendar invite have been sent to you.',
               textAlign: TextAlign.center,
-              style:
-                  TextStyle(fontSize: 13, color: Colors.black45, height: 1.4),
+              style: TextStyle(fontSize: 13, color: Colors.black45, height: 1.4),
             ),
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () {
-                  // 💡 Force dynamic provider stream cache purge to fetch brand-new DB records instantly
+                  // Refresh bookings provider to show the newly confirmed booking
                   ref.invalidate(userBookingsStreamProvider);
-
-                  // 💡 Closes the alert box overlay safely using the localized dialog builder context
                   Navigator.pop(dialogContext);
-
-                  // 💡 Transitions parent screen frame back to the central reservation dashboard
                   if (context.mounted) {
                     context.go(AppRoutes.myBookings);
                   }
@@ -320,35 +342,137 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
   }
 }
 
-class _SummaryRow extends StatelessWidget {
-  final String label, value;
-  final bool isBold;
-  const _SummaryRow(
-      {required this.label, required this.value, this.isBold = false});
+// ── Payment method tile ───────────────────────────────────────────────────────
+
+class _PaymentMethodTile extends StatelessWidget {
+  final String id;
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final bool disabled;
+  final String? badge;
+  final VoidCallback? onTap;
+
+  const _PaymentMethodTile({
+    required this.id,
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    this.disabled = false,
+    this.badge,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Text(label,
-            style: TextStyle(
-              fontSize: isBold ? 15 : 13,
-              fontWeight: isBold ? FontWeight.w600 : FontWeight.w400,
-              color: isBold ? Colors.black87 : Colors.grey.shade500,
-            )),
-        const Spacer(),
-        Text(value,
-            style: TextStyle(
-              fontSize: isBold ? 15 : 13,
-              fontWeight: isBold ? FontWeight.w700 : FontWeight.w500,
-              color: Colors.black87,
-            )),
-      ],
+    return Opacity(
+      opacity: disabled ? 0.5 : 1.0,
+      child: GestureDetector(
+        onTap: disabled ? null : onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: selected
+                ? AppColors.gold.withValues(alpha: 0.05)
+                : Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected ? AppColors.gold : Colors.grey.shade200,
+              width: selected ? 1.5 : 1.0,
+            ),
+          ),
+          child: Row(
+            children: [
+              // Icon container
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: iconColor, size: 20),
+              ),
+              const SizedBox(width: 14),
+
+              // Title + subtitle
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          title,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: disabled ? Colors.black54 : Colors.black87,
+                          ),
+                        ),
+                        if (badge != null) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade300,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              badge!,
+                              style: const TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.black54,
+                                  letterSpacing: 0.4),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(subtitle,
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.grey.shade500)),
+                  ],
+                ),
+              ),
+
+              // Radio indicator (only for enabled tiles)
+              if (!disabled)
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 20,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color:
+                          selected ? AppColors.gold : Colors.grey.shade300,
+                      width: 2,
+                    ),
+                    color: selected ? AppColors.gold : Colors.transparent,
+                  ),
+                  child: selected
+                      ? const Icon(Icons.check_rounded,
+                          size: 12, color: Colors.white)
+                      : null,
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
 
-// ── Booking Detail Screen Re-Export Declaration ──────────────────────────────
+// ── Booking Detail Screen ─────────────────────────────────────────────────────
 
 class BookingDetailScreen extends ConsumerWidget {
   final String bookingId;
@@ -376,7 +500,8 @@ class BookingDetailScreen extends ConsumerWidget {
 
     return bookingsAsync.when(
       data: (bookings) {
-        final booking = bookings.where((b) => b.id.toString() == bookingId).firstOrNull;
+        final booking =
+            bookings.where((b) => b.id.toString() == bookingId).firstOrNull;
         if (booking == null) {
           return const Scaffold(
             body: Center(child: Text('Booking not found')),
@@ -468,7 +593,8 @@ class BookingDetailScreen extends ConsumerWidget {
                 width: double.infinity,
                 height: 52,
                 child: OutlinedButton(
-                  onPressed: () => context.push('${AppRoutes.myBookings}/new'),
+                  onPressed: () =>
+                      context.push('${AppRoutes.myBookings}/new'),
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: Colors.black87),
                     shape: RoundedRectangleBorder(
@@ -540,6 +666,36 @@ class BookingDetailScreen extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ── Shared sub-widgets ────────────────────────────────────────────────────────
+
+class _SummaryRow extends StatelessWidget {
+  final String label, value;
+  final bool isBold;
+  const _SummaryRow(
+      {required this.label, required this.value, this.isBold = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(label,
+            style: TextStyle(
+              fontSize: isBold ? 15 : 13,
+              fontWeight: isBold ? FontWeight.w600 : FontWeight.w400,
+              color: isBold ? Colors.black87 : Colors.grey.shade500,
+            )),
+        const Spacer(),
+        Text(value,
+            style: TextStyle(
+              fontSize: isBold ? 15 : 13,
+              fontWeight: isBold ? FontWeight.w700 : FontWeight.w500,
+              color: Colors.black87,
+            )),
+      ],
     );
   }
 }

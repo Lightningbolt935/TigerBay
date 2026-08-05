@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tigerbay_app/core/constants/app_colors.dart';
+import 'package:tigerbay_app/core/services/paypal_service.dart';
 import 'package:tigerbay_app/data/models/membership_tier_model.dart';
 import 'package:tigerbay_app/features/auth/providers/profile_state_provider.dart';
 import 'package:tigerbay_app/features/profile/providers/membership_provider.dart';
@@ -35,37 +36,48 @@ class _MembershipSelectionPageState
     setState(() => _isProcessing = true);
 
     try {
-      // ──────────────────────────────────────────────────────────────────
-      // STRIPE PAYMENT INTENT — implementation point
-      // ──────────────────────────────────────────────────────────────────
-      // 1. Call your Supabase Edge Function (e.g. "create-membership-intent")
-      //    passing the selected tier id and name:
-      //
-      //    final response = await Supabase.instance.client.functions.invoke(
-      //      'create-membership-intent',
-      //      body: {
-      //        'tier_name': tier.name,
-      //        'tier_id': tier.id,
-      //      },
-      //    );
-      //    final clientSecret = response.data['clientSecret'] as String;
-      //
-      // 2. Present the Stripe Payment Sheet using flutter_stripe:
-      //
-      //    await Stripe.instance.initPaymentSheet(
-      //      paymentSheetParameters: SetupPaymentSheetParameters(
-      //        paymentIntentClientSecret: clientSecret,
-      //        merchantDisplayName: 'TigerBay International',
-      //      ),
-      //    );
-      //    await Stripe.instance.presentPaymentSheet();
-      //
-      // 3. Only proceed to the profile update below AFTER
-      //    presentPaymentSheet() completes without throwing a
-      //    StripeException — a thrown exception means the user cancelled
-      //    or the payment failed, and the membership must NOT be activated.
-      // ──────────────────────────────────────────────────────────────────
+      // ── Step 1: Collect payment via PayPal ──────────────────────────────
+      // The membership is NOT activated until PayPal confirms the payment.
+      // presentMembershipPayment() opens a WebView and returns only after
+      // the user completes, cancels, or encounters an error.
+      final paymentResult = await PayPalService.presentMembershipPayment(
+        context: context,
+        tierName: tier.name,
+        amountGbp: tier.price,
+      );
 
+      if (!mounted) return;
+
+      // User cancelled — soft message, no activation.
+      if (paymentResult.cancelled) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Payment cancelled. No charge was made.'),
+            backgroundColor: AppColors.textSecondary,
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+        return;
+      }
+
+      // Payment failed — surface the error and allow retry.
+      if (!paymentResult.success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                paymentResult.error ?? 'Payment failed. Please try again.'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+        return;
+      }
+
+      // ── Step 2: Payment confirmed — activate membership in Supabase ──────
       // Activate via the provider layer so profileStateProvider is
       // refreshed and GoRouter's ref.listen fires automatically,
       // redirecting the user to /home without any manual navigation call.
@@ -76,6 +88,26 @@ class _MembershipSelectionPageState
       if (!mounted) return;
 
       if (success) {
+        // ── Step 3: Record PayPal order ID for audit trail ────────────────
+        // Best-effort write — a failure here does NOT roll back the
+        // membership activation (payment already confirmed by PayPal).
+        if (paymentResult.orderId != null &&
+            paymentResult.orderId!.isNotEmpty) {
+          try {
+            final supabase = ref.read(supabaseClientProvider);
+            final userId = supabase.auth.currentUser?.id;
+            if (userId != null) {
+              await supabase.from('profiles').update({
+                'paypal_order_id': paymentResult.orderId,
+                'updated_at': DateTime.now().toIso8601String(),
+              }).eq('id', userId);
+            }
+          } catch (e) {
+            debugPrint('[MembershipSelection] orderId record failed: $e');
+          }
+        }
+
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('${tier.name} membership activated!'),
@@ -116,6 +148,7 @@ class _MembershipSelectionPageState
       if (mounted) setState(() => _isProcessing = false);
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
