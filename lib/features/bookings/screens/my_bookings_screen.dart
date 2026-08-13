@@ -195,38 +195,12 @@ class _MyBookingsScreenState extends ConsumerState<MyBookingsScreen>
   }
 
   Widget _fallbackList() {
-    final mockBookings = [
-      BookingModel(
-        id: 1,
-        userId: '',
-        branchId: 1,
-        branchName: 'TigerBay',
-        bookingDate: DateTime(2023, 10, 24),
-        bookingTime: '19:30',
-        guestCount: 4,
-        status: BookingStatus.upcoming,
-        createdAt: DateTime.now(),
-      ),
-      BookingModel(
-        id: 2,
-        userId: '',
-        branchId: 2,
-        branchName: 'TIGER BAY',
-        bookingDate: DateTime(2023, 11, 12),
-        bookingTime: '21:00',
-        guestCount: 2,
-        status: BookingStatus.upcoming,
-        createdAt: DateTime.now(),
-      ),
-    ];
-
     return TabBarView(
       controller: _tabController,
-      children: [
-        _BookingList(
-            bookings: mockBookings, label: 'UPCOMING', showNewButton: true),
-        const _BookingList(bookings: [], label: 'RECENT HISTORY'),
-        const _BookingList(bookings: [], label: 'CANCELLED'),
+      children: const [
+        _BookingList(bookings: [], label: 'UPCOMING', showNewButton: true),
+        _BookingList(bookings: [], label: 'RECENT HISTORY'),
+        _BookingList(bookings: [], label: 'CANCELLED'),
       ],
     );
   }

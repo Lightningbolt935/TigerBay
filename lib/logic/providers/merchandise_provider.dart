@@ -3,15 +3,11 @@ import 'package:tigerbay_app/data/models/merchandise_item.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TigerBay International — Merchandise Provider
-// ═══════════════════════════════════════════════════════════════════════════
-// Immutable catalogue of TigerBay branded merchandise items. Each entry
+// ──────────────────────────────────────────────────────────
+// Official catalogue of TigerBay branded merchandise items. Each entry
 // has both a cash [price] and a [requiredStrips] token equivalent so
 // members can choose their preferred payment method in the UI.
-//
-// Data source: curated in-app mock catalogue. When a live Supabase
-// `merchandise` table is ready, replace this Provider with a FutureProvider
-// that calls `supabaseClient.from('merchandise').select()`.
-// ═══════════════════════════════════════════════════════════════════════════
+// ──────────────────────────────────────────────────────────
 
 /// Immutable catalogue of all available merchandise items.
 /// Returns a fixed list of 4 production-grade premium TigerBay products.
