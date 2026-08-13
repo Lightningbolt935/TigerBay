@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as dart_math;
 
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
+import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -273,30 +274,43 @@ class AuthRepository {
       scopes: ['email', 'profile'],
     );
 
-    final account = await googleSignIn.signIn();
-    if (account == null) {
-      throw const AuthException('Google sign-in cancelled.');
+    try {
+      final account = await googleSignIn.signIn();
+      if (account == null) {
+        throw const AuthException('Google sign-in cancelled.');
+      }
+
+      final auth = await account.authentication;
+      final idToken = auth.idToken;
+      if (idToken == null) {
+        throw const AuthException('No Google ID token received.');
+      }
+
+      final response = await _client.auth.signInWithIdToken(
+        provider: OAuthProvider.google,
+        idToken: idToken,
+        accessToken: auth.accessToken,
+      );
+
+      if (response.user != null) {
+        unawaited(_bindDevice(response.user!.id));
+      }
+
+      return response;
+    } catch (e) {
+      // Fallback: If native Google Play Services throws error code 10 (missing SHA-1/developer error),
+      // seamlessly initiate Supabase Google OAuth via browser to ensure sign-in completes.
+      if (e is PlatformException && (e.code == 'sign_in_failed' || e.message?.contains('10') == true || e.toString().contains('10'))) {
+        debugPrint('[AuthRepository] Native Google sign-in failed (code 10). Falling back to Supabase OAuth.');
+        final appScheme = dotenv.env['APP_SCHEME'] ?? 'io.tigerbay.app';
+        await _client.auth.signInWithOAuth(
+          OAuthProvider.google,
+          redirectTo: '$appScheme://login-callback',
+        );
+        return AuthResponse(session: _client.auth.currentSession, user: _client.auth.currentUser);
+      }
+      rethrow;
     }
-
-    final auth = await account.authentication;
-    final idToken = auth.idToken;
-    if (idToken == null) {
-      throw const AuthException('No Google ID token received.');
-    }
-
-    final response = await _client.auth.signInWithIdToken(
-      provider: OAuthProvider.google,
-      idToken: idToken,
-      accessToken: auth.accessToken,
-    );
-
-    if (response.user != null) {
-      // Google OAuth users bypass manual gates; invoke the device binding loop immediately.
-      // unawaited() allows the interface router to transition smoothly without blocking on network lag.
-      unawaited(_bindDevice(response.user!.id));
-    }
-
-    return response;
   }
   // ── Apple ───────────────────────────────────────────────────────────────────
 
