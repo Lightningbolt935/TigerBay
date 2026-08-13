@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:tigerbay_app/core/constants/app_colors.dart';
 import 'package:tigerbay_app/core/constants/dmn_config.dart';
@@ -23,16 +24,12 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
     if (_lastLoadedVenueId == venueId && _webViewController != null) return;
     _lastLoadedVenueId = venueId;
 
-    final bookingUrl = DmnConfig.getBookingUrl(venueId);
-    debugPrint('[Booking] Loading URL: $bookingUrl');
+    final widgetHtml = DmnConfig.getWidgetHtml(venueId);
+    debugPrint('[Booking] Loading responsive partner widget HTML for venue: $venueId');
 
     final controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(Colors.white)
-      ..setUserAgent(
-        'Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 '
-        '(KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
-      )
+      ..setBackgroundColor(const Color(0xFF0D0804))
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (_) {
@@ -51,7 +48,10 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
         ),
       );
 
-    controller.loadRequest(Uri.parse(bookingUrl));
+    controller.loadHtmlString(
+      widgetHtml,
+      baseUrl: 'https://www.tigerbayshisha.co.uk',
+    );
 
     setState(() {
       _webViewController = controller;
@@ -74,6 +74,16 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
     }
   }
 
+  Future<void> _openInBrowser(String branchTitle, String venueId) async {
+    final directUrl = DmnConfig.getDirectBookingUrl(branchTitle, venueId);
+    final uri = Uri.parse(directUrl);
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      debugPrint('[Booking] Could not launch URL: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final branches = ref.watch(branchesProvider);
@@ -92,7 +102,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
     }
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFF0D0804),
       body: SafeArea(
         child: Column(
           children: [
@@ -106,9 +116,9 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                     child: Container(
                       width: 44,
                       height: 44,
-                      color: Colors.grey.shade200,
-                      child: Icon(Icons.store_outlined,
-                          color: Colors.grey.shade400),
+                      color: const Color(0xFF1E140C),
+                      child: const Icon(Icons.store_outlined,
+                          color: AppColors.gold),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -116,15 +126,16 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                     child: branches.when(
                       data: (list) => DropdownButtonHideUnderline(
                         child: DropdownButton<int>(
+                          dropdownColor: const Color(0xFF1E140C),
                           value: selectedBranch?.id ??
                               (list.isNotEmpty ? list.first.id : null),
                           isExpanded: true,
-                          icon: Icon(Icons.keyboard_arrow_down,
-                              color: Colors.grey.shade500),
+                          icon: const Icon(Icons.keyboard_arrow_down,
+                              color: AppColors.gold),
                           style: const TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w500,
-                            color: Colors.black87,
+                            color: Colors.white,
                           ),
                           onChanged: (id) {
                             if (id == null) return;
@@ -134,15 +145,18 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                           items: list
                               .map((b) => DropdownMenuItem(
                                     value: b.id,
-                                    child: Text(b.title),
+                                    child: Text(
+                                      b.title,
+                                      style: const TextStyle(color: Colors.white),
+                                    ),
                                   ))
                               .toList(),
                         ),
                       ),
                       loading: () => const Text('Loading branches…',
-                          style: TextStyle(fontSize: 14)),
+                          style: TextStyle(fontSize: 14, color: Colors.white70)),
                       error: (_, __) => const Text('Select a venue',
-                          style: TextStyle(fontSize: 15)),
+                          style: TextStyle(fontSize: 15, color: Colors.white70)),
                     ),
                   ),
                 ],
@@ -151,7 +165,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
 
             const SizedBox(height: 12),
 
-            // ── Section Title + Refresh ───────────────────────────────────
+            // ── Section Title + Actions (Refresh & Open in Browser) ─────────
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
@@ -162,11 +176,28 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                       style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.w700,
-                        color: Colors.black87,
+                        color: Colors.white,
                       ),
                     ),
                   ),
-                  if (venueId != null && _webViewController != null)
+                  if (venueId != null) ...[
+                    GestureDetector(
+                      onTap: () => _openInBrowser(
+                        selectedBranch?.title ?? 'Kingsbury',
+                        venueId,
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E140C),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppColors.gold.withValues(alpha: 0.3)),
+                        ),
+                        child: const Icon(Icons.open_in_browser,
+                            size: 20, color: AppColors.gold),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     GestureDetector(
                       onTap: () {
                         _lastLoadedVenueId = null; // Force reload
@@ -175,13 +206,15 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                       child: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
+                          color: const Color(0xFF1E140C),
                           borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppColors.gold.withValues(alpha: 0.3)),
                         ),
-                        child: Icon(Icons.refresh,
-                            size: 20, color: Colors.grey.shade600),
+                        child: const Icon(Icons.refresh,
+                            size: 20, color: AppColors.gold),
                       ),
                     ),
+                  ],
                 ],
               ),
             ),
@@ -227,7 +260,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
-                  color: Colors.black87,
+                  color: Colors.white,
                 ),
               ),
               const SizedBox(height: 8),
@@ -238,7 +271,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14,
-                  color: Colors.grey.shade500,
+                  color: Colors.grey.shade400,
                   height: 1.5,
                 ),
               ),
@@ -261,7 +294,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
             SizedBox(height: 14),
             Text(
               'Loading booking form…',
-              style: TextStyle(fontSize: 13, color: Colors.black45),
+              style: TextStyle(fontSize: 13, color: Colors.white70),
             ),
           ],
         ),
@@ -284,7 +317,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                 SizedBox(height: 14),
                 Text(
                   'Loading booking form…',
-                  style: TextStyle(fontSize: 13, color: Colors.black45),
+                  style: TextStyle(fontSize: 13, color: Colors.white70),
                 ),
               ],
             ),
