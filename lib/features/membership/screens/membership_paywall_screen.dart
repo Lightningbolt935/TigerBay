@@ -345,7 +345,7 @@ class _MembershipPaywallScreenState
                               ),
                             ),
                             Text(
-                              'Sandbox mode — no real charge',
+                              'Instant activation • Secure checkout',
                               style: GoogleFonts.poppins(
                                 fontSize: 11,
                                 color: AppColors.textSecondary,

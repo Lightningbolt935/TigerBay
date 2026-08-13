@@ -1,4 +1,4 @@
-name: Build App (Android & iOS)
+name: Build App (Android, iOS & Web)
 
 on:
   push:
@@ -20,17 +20,61 @@ jobs:
           cache: true
       - name: Install Dependencies
         run: flutter pub get
-      - name: Build APK
-        run: flutter build apk --debug
-      - name: Upload APK Artifact
+      - name: Build APK (Release & Debug)
+        run: |
+          flutter build apk --debug
+          flutter build apk --release --no-shrink
+      - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug-apk
+          name: tigerbay-android-debug-apk
           path: build/app/outputs/flutter-apk/app-debug.apk
+      - name: Upload Release APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tigerbay-android-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
 
   build-ios:
-    name: Build iOS App
-    runs-on: macos-latest
+    name: Build iOS IPA & App
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build iOS (No codesign for testing)
+        run: flutter build ios --release --no-codesign
+
+      - name: Package .ipa File
+        run: |
+          mkdir -p build/ios/ipa_out/Payload
+          cp -r build/ios/iphoneos/Runner.app build/ios/ipa_out/Payload/
+          cd build/ios/ipa_out
+          zip -qr TigerBay.ipa Payload
+          cd ../../..
+
+      - name: Upload iOS IPA Artifact (.ipa)
+        uses: actions/upload-artifact@v4
+        with:
+          name: tigerbay-ios-ipa
+          path: build/ios/ipa_out/TigerBay.ipa
+
+      - name: Upload iOS Runner.app Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tigerbay-ios-runner-app
+          path: build/ios/iphoneos/Runner.app
+
+  build-web:
+    name: Build Web App (Safari / Chrome preview)
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -40,10 +84,10 @@ jobs:
           cache: true
       - name: Install Dependencies
         run: flutter pub get
-      - name: Build iOS (No codesign for testing)
-        run: flutter build ios --debug --no-codesign
-      - name: Upload iOS Runner Artifact
+      - name: Build Web
+        run: flutter build web --release
+      - name: Upload Web Build Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ios-runner-app
-          path: build/ios/iphoneos/Runner.app
+          name: tigerbay-web-build
+          path: build/web
