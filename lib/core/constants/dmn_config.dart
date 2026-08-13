@@ -1,7 +1,7 @@
 /// DesignMyNight (DMN) booking widget configuration.
 ///
 /// Maps Tiger Bay branch names to their official DMN venue IDs and provides
-/// direct HTTPS booking URLs for live table reservations.
+/// modern v2 HTTPS booking URLs for table reservations.
 class DmnConfig {
   DmnConfig._();
 
@@ -30,10 +30,9 @@ class DmnConfig {
     return null;
   }
 
-  /// Returns the full hosted HTTPS booking URL for the given [venueId].
-  /// This loads directly from DesignMyNight with full cookies, SSL, and API support.
+  /// Returns the modern v2 hosted HTTPS booking URL with partner theme.
   static String getBookingUrl(String venueId) {
-    return 'https://bookings.designmynight.com/book?venue_id=$venueId';
+    return 'https://bookings.designmynight.com/book?widget_version=2&venue_id=$venueId&source=partner';
   }
 
   /// Returns a direct web reservation URL if available for opening in browser.
@@ -42,6 +41,6 @@ class DmnConfig {
     for (final entry in _directUrls.entries) {
       if (lower.contains(entry.key)) return entry.value;
     }
-    return 'https://bookings.designmynight.com/book?venue_id=$venueId';
+    return 'https://bookings.designmynight.com/book?widget_version=2&venue_id=$venueId&source=partner';
   }
 }

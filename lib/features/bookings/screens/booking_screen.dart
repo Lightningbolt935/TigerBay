@@ -36,104 +36,14 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
           onPageStarted: (_) {
             if (mounted) setState(() => _isLoading = true);
           },
-          onPageFinished: (_) async {
+          onPageFinished: (_) {
             if (mounted) setState(() => _isLoading = false);
-            // Inject responsive CSS to clean navigation headers and fix mobile popovers
-            try {
-              await controller.runJavaScript('''
-                (function() {
-                  var style = document.getElementById('tb-mobile-fix');
-                  if (!style) {
-                    style = document.createElement('style');
-                    style.id = 'tb-mobile-fix';
-                    style.innerHTML = `
-                      header, .header-utilities, .header-row, .secondary-nav, .logo, .strapline, footer {
-                        display: none !important;
-                      }
-                      body {
-                        background: #ffffff !important;
-                        padding: 6px 12px 30px !important;
-                        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
-                      }
-                      .super-heading h1 {
-                        font-size: 20px !important;
-                        margin-top: 6px !important;
-                        color: #1a1a1a !important;
-                      }
-                      .container.book {
-                        padding: 0 !important;
-                        width: 100% !important;
-                      }
-                      /* Center mobile popover dropdown dialogs */
-                      .popover {
-                        position: fixed !important;
-                        top: 50% !important;
-                        left: 50% !important;
-                        transform: translate(-50%, -50%) !important;
-                        width: 88% !important;
-                        max-width: 360px !important;
-                        max-height: 75vh !important;
-                        overflow-y: auto !important;
-                        z-index: 999999 !important;
-                        background: #ffffff !important;
-                        border-radius: 16px !important;
-                        border: 1px solid rgba(0,0,0,0.15) !important;
-                        box-shadow: 0 16px 48px rgba(0,0,0,0.3) !important;
-                        padding: 16px !important;
-                      }
-                      .popover .arrow {
-                        display: none !important;
-                      }
-                      .popover .radio, .popover label {
-                        font-size: 15px !important;
-                        color: #222222 !important;
-                        padding: 10px 8px !important;
-                        display: block !important;
-                        cursor: pointer !important;
-                        line-height: 1.4 !important;
-                      }
-                      .popover .radio input[type="radio"] {
-                        margin-right: 10px !important;
-                        transform: scale(1.2) !important;
-                      }
-                      /* Fix datepicker calendar */
-                      .ui-datepicker {
-                        width: 90% !important;
-                        max-width: 320px !important;
-                        margin: 0 auto !important;
-                        font-size: 14px !important;
-                        border-radius: 12px !important;
-                        box-shadow: 0 10px 30px rgba(0,0,0,0.15) !important;
-                      }
-                      /* Inputs & Primary Buttons */
-                      .form-control, input, select {
-                        border-radius: 10px !important;
-                        height: 48px !important;
-                        font-size: 15px !important;
-                      }
-                      .btn-primary, button[type="submit"] {
-                        background: #C4A35A !important;
-                        border-color: #C4A35A !important;
-                        color: #ffffff !important;
-                        font-weight: 700 !important;
-                        border-radius: 25px !important;
-                        height: 50px !important;
-                        font-size: 16px !important;
-                      }
-                    `;
-                    document.head.appendChild(style);
-                  }
-                })();
-              ''');
-            } catch (e) {
-              debugPrint('[Booking] Style injection note: \$e');
-            }
           },
           onHttpError: (error) {
-            debugPrint('WebView HTTP \${error.response?.statusCode}: \${error.request?.uri}');
+            debugPrint('WebView HTTP ${error.response?.statusCode}: ${error.request?.uri}');
           },
           onWebResourceError: (error) {
-            debugPrint('WebView error [\${error.errorCode}]: \${error.description}');
+            debugPrint('WebView error [${error.errorCode}]: ${error.description}');
             if (mounted) setState(() => _isLoading = false);
           },
         ),
@@ -150,7 +60,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
   void _onBranchChanged(Branch branch, List<Branch> list) {
     ref.read(selectedBranchProvider.notifier).changeBranch(branch);
     final newVenueId = DmnConfig.getDmnVenueId(branch.title);
-    debugPrint('[Booking] Branch: "\${branch.title}" → venueId: \$newVenueId');
+    debugPrint('[Booking] Branch: "${branch.title}" → venueId: $newVenueId');
     if (newVenueId != null) {
       _initWebView(newVenueId);
     } else {
@@ -168,7 +78,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
     try {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } catch (e) {
-      debugPrint('[Booking] Could not launch URL: \$e');
+      debugPrint('[Booking] Could not launch URL: $e');
     }
   }
 
@@ -348,7 +258,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
               const SizedBox(height: 8),
               Text(
                 selectedBranch != null
-                    ? 'Online booking is not yet available for \${selectedBranch.title}. Please call the restaurant to make a reservation.'
+                    ? 'Online booking is not yet available for ${selectedBranch.title}. Please call the restaurant to make a reservation.'
                     : 'Please select a venue to book a table.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
