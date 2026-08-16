@@ -5,6 +5,7 @@ import 'package:tigerbay_app/data/models/branch_model.dart';
 import 'package:tigerbay_app/core/constants/app_colors.dart';
 import 'package:tigerbay_app/features/auth/providers/auth_provider.dart';
 import 'package:tigerbay_app/features/auth/widgets/branch_selector_widget.dart';
+import 'package:tigerbay_app/shared/widgets/apple_touch_feedback.dart';
 
 /// Combined Login + Registration screen for TigerBay International.
 ///
@@ -252,32 +253,40 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     );
   }
 
-  // ── Tab bar ──────────────────────────────────────────────────────────────────
+  // ── Tab bar (Apple Segmented Capsule) ────────────────────────────────────────
 
   Widget _buildTabBar() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Container(
-        height: 44,
+        height: 48,
         decoration: BoxDecoration(
-          color: const Color(0xFF1C1C1E),
-          borderRadius: BorderRadius.circular(12),
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: AppColors.glassBorder,
+            width: 0.8,
+          ),
         ),
+        padding: const EdgeInsets.all(4),
         child: TabBar(
           controller: _tabController,
           indicator: BoxDecoration(
-            color: const Color(0xFF1C1C1E),
-            borderRadius: BorderRadius.circular(10),
+            color: AppColors.surfaceLight,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: AppColors.glassBorder,
+              width: 0.8,
+            ),
             boxShadow: [
               BoxShadow(
-                color: Colors.white.withValues(alpha: 0.06),
-                blurRadius: 4,
-                offset: const Offset(0, 1),
+                color: Colors.black.withValues(alpha: 0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
               ),
             ],
           ),
           indicatorSize: TabBarIndicatorSize.tab,
-          indicatorPadding: const EdgeInsets.all(3),
           labelColor: AppColors.textPrimary,
           unselectedLabelColor: AppColors.textSecondary,
           labelStyle: const TextStyle(
@@ -646,37 +655,43 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     required bool isLoading,
     required VoidCallback onTap,
   }) {
-    return SizedBox(
-      width: double.infinity,
-      height: 54,
-      child: ElevatedButton(
-        onPressed: isLoading ? null : onTap,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.gold,
-          disabledBackgroundColor: AppColors.gold.withValues(alpha: 0.5),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(30),
-          ),
-          elevation: 0,
+    return AppleTouchFeedback(
+      onTap: isLoading ? null : onTap,
+      child: Container(
+        width: double.infinity,
+        height: 54,
+        decoration: BoxDecoration(
+          gradient: AppColors.goldGradient,
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.gold.withValues(alpha: 0.35),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
-        child: isLoading
-            ? const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  color: Color(0xFF1C1C1E),
-                  strokeWidth: 2,
+        child: Center(
+          child: isLoading
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    color: Colors.black,
+                    strokeWidth: 2,
+                  ),
+                )
+              : Text(
+                  label,
+                  style: const TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black,
+                    letterSpacing: 0.3,
+                  ),
                 ),
-              )
-            : Text(
-                label,
-                style: const TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF1C1C1E),
-                ),
-              ),
+        ),
       ),
     );
   }
@@ -684,7 +699,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   Widget _buildSocialDivider() {
     return const Row(
       children: [
-        Expanded(child: Divider(color: Colors.white12)),
+        Expanded(child: Divider(color: AppColors.glassBorder)),
         Padding(
           padding: EdgeInsets.symmetric(horizontal: 14),
           child: Text(
@@ -696,7 +711,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             ),
           ),
         ),
-        Expanded(child: Divider(color: Colors.white12)),
+        Expanded(child: Divider(color: AppColors.glassBorder)),
       ],
     );
   }
@@ -758,7 +773,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                   fontFamily: 'Poppins',
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF1C1C1E),
+                  color: Colors.white,
                 ),
               ),
             ),
@@ -826,17 +841,24 @@ class _SocialButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return AppleTouchFeedback(
       onTap: onTap,
       child: Container(
         width: double.infinity,
         height: 54,
         decoration: BoxDecoration(
-          color: const Color(0xFF1C1C1E),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.border),
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.glassBorder, width: 0.8),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.15),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 18),
         child: Row(
           children: [
             SizedBox(width: 28, child: iconWidget),
@@ -846,13 +868,14 @@ class _SocialButton extends StatelessWidget {
                 label,
                 style: const TextStyle(
                   fontFamily: 'Poppins',
-                  fontSize: 15,
+                  fontSize: 14.5,
                   fontWeight: FontWeight.w500,
                   color: AppColors.textPrimary,
                 ),
               ),
             ),
-            const Icon(Icons.chevron_right, size: 20, color: Colors.white38),
+            const Icon(Icons.chevron_right_rounded,
+                size: 20, color: AppColors.textHint),
           ],
         ),
       ),

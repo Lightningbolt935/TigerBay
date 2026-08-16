@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_routes.dart';
 import '../../../data/models/branch_model.dart';
 import '../../../data/models/user_model.dart';
+import '../../../shared/widgets/apple_touch_feedback.dart';
 import '../../../shared/widgets/safe_network_image.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../home/providers/home_provider.dart';
@@ -67,7 +69,7 @@ class ProfileScreen extends ConsumerWidget {
           ),
 
           // ── ACCOUNT section ────────────────────────────────────────────
-          SliverToBoxAdapter(
+          const SliverToBoxAdapter(
             child: _SectionLabel('ACCOUNT'),
           ),
           SliverToBoxAdapter(
@@ -92,7 +94,7 @@ class ProfileScreen extends ConsumerWidget {
           const SliverToBoxAdapter(child: SizedBox(height: 20)),
 
           // ── MEMBERSHIP section ─────────────────────────────────────────
-          SliverToBoxAdapter(
+          const SliverToBoxAdapter(
             child: _SectionLabel('MEMBERSHIP'),
           ),
           SliverToBoxAdapter(
@@ -124,7 +126,7 @@ class ProfileScreen extends ConsumerWidget {
           const SliverToBoxAdapter(child: SizedBox(height: 20)),
 
           // ── INFORMATION & LEGAL section ────────────────────────────────
-          SliverToBoxAdapter(
+          const SliverToBoxAdapter(
             child: _SectionLabel('INFORMATION & LEGAL'),
           ),
           SliverToBoxAdapter(
@@ -154,7 +156,7 @@ class ProfileScreen extends ConsumerWidget {
 
           const SliverToBoxAdapter(child: SizedBox(height: 20)),
 
-          // ── Sign Out ───────────────────────────────────────────────────
+          // Sign Out
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -165,7 +167,7 @@ class ProfileScreen extends ConsumerWidget {
           // App version
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.only(top: 20, bottom: 48),
+              padding: const EdgeInsets.only(top: 20, bottom: 96),
               child: Center(
                 child: Text(
                   'TigerBay International v1.0',
@@ -331,6 +333,26 @@ class _ProfileHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final authUser = Supabase.instance.client.auth.currentUser;
+    final displayName =
+        (profile?.fullName != null && profile!.fullName!.trim().isNotEmpty)
+            ? profile!.fullName!
+            : (authUser?.userMetadata?['full_name'] as String? ??
+                authUser?.userMetadata?['name'] as String? ??
+                authUser?.userMetadata?['user_name'] as String? ??
+                'TigerBay Member');
+    final displayEmail =
+        (profile?.email != null && profile!.email!.trim().isNotEmpty)
+            ? profile!.email!
+            : (authUser?.email ?? authUser?.userMetadata?['email'] as String?);
+    final displayAvatar = profile?.avatarUrl ??
+        authUser?.userMetadata?['avatar_url'] as String? ??
+        authUser?.userMetadata?['picture'] as String?;
+    final initials = profile?.initials ??
+        (displayName != 'TigerBay Member' && displayName.isNotEmpty
+            ? displayName[0].toUpperCase()
+            : '?');
+
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -393,7 +415,7 @@ class _ProfileHero extends StatelessWidget {
                   ),
                   child: ClipOval(
                     child: SafeNetworkImage(
-                      imageUrl: profile?.avatarUrl,
+                      imageUrl: displayAvatar,
                       width: 96,
                       height: 96,
                       fit: BoxFit.cover,
@@ -401,7 +423,7 @@ class _ProfileHero extends StatelessWidget {
                         color: AppColors.surface,
                         alignment: Alignment.center,
                         child: Text(
-                          profile?.initials ?? '?',
+                          initials,
                           style: GoogleFonts.poppins(
                             fontSize: 28,
                             fontWeight: FontWeight.w700,
@@ -435,7 +457,7 @@ class _ProfileHero extends StatelessWidget {
 
             // Name
             Text(
-              profile?.fullName ?? 'TigerBay Member',
+              displayName,
               style: GoogleFonts.poppins(
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
@@ -446,9 +468,9 @@ class _ProfileHero extends StatelessWidget {
             const SizedBox(height: 4),
 
             // Email
-            if (profile?.email != null)
+            if (displayEmail != null && displayEmail.isNotEmpty)
               Text(
-                profile!.email!,
+                displayEmail,
                 style: GoogleFonts.poppins(
                   fontSize: 13,
                   color: AppColors.textSecondary,
@@ -633,17 +655,25 @@ class _SettingsCard extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           color: AppColors.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.border.withValues(alpha: 0.6)),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.glassBorder, width: 0.8),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.25),
+              blurRadius: 16,
+              spreadRadius: -4,
+              offset: const Offset(0, 6),
+            ),
+          ],
         ),
         child: Column(
           children: [
             for (int i = 0; i < tiles.length; i++) ...[
               tiles[i],
               if (i < tiles.length - 1)
-                Divider(
+                const Divider(
                   height: 1,
-                  color: AppColors.border.withValues(alpha: 0.5),
+                  color: AppColors.glassBorder,
                   indent: 56,
                 ),
             ],
@@ -679,67 +709,61 @@ class _SettingsTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        splashColor: AppColors.gold.withValues(alpha: 0.05),
-        highlightColor: AppColors.gold.withValues(alpha: 0.03),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
-            children: [
-              // Icon container
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceLight,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, color: AppColors.gold, size: 18),
+    return AppleTouchFeedback(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            // Icon container
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: AppColors.surfaceLight,
+                borderRadius: BorderRadius.circular(10),
               ),
-              const SizedBox(width: 14),
-              // Label + subtitle
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: labelColor ?? AppColors.textPrimary,
-                      ),
+              child: Icon(icon, color: AppColors.gold, size: 18),
+            ),
+            const SizedBox(width: 14),
+            // Label + subtitle
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: labelColor ?? AppColors.textPrimary,
                     ),
-                    if (subtitle != null) ...[
-                      const SizedBox(height: 1),
-                      Text(
-                        subtitle!,
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          color: subtitleColor ?? AppColors.textSecondary,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 1),
+                    Text(
+                      subtitle!,
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: subtitleColor ?? AppColors.textSecondary,
                       ),
-                    ],
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ],
-                ),
+                ],
               ),
-              // Trailing widget or default chevron
-              trailing ??
-                  (onTap != null
-                      ? Icon(
-                          Icons.chevron_right_rounded,
-                          color: AppColors.textHint,
-                          size: 20,
-                        )
-                      : const SizedBox.shrink()),
-            ],
-          ),
+            ),
+            // Trailing widget or default chevron
+            trailing ??
+                (onTap != null
+                    ? const Icon(
+                        Icons.chevron_right_rounded,
+                        color: AppColors.textHint,
+                        size: 20,
+                      )
+                    : const SizedBox.shrink()),
+          ],
         ),
       ),
     );
@@ -787,37 +811,41 @@ class _SignOutButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        splashColor: AppColors.brandRed.withValues(alpha: 0.08),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-                color: AppColors.brandRed.withValues(alpha: 0.3), width: 1),
+    return AppleTouchFeedback(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: AppColors.brandRed.withValues(alpha: 0.35),
+            width: 0.8,
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.logout_rounded,
-                  color: AppColors.brandRed, size: 18),
-              const SizedBox(width: 10),
-              Text(
-                'Sign Out',
-                style: GoogleFonts.poppins(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.brandRed,
-                ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.2),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.logout_rounded,
+                color: AppColors.brandRed, size: 18),
+            const SizedBox(width: 10),
+            Text(
+              'Sign Out',
+              style: GoogleFonts.poppins(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: AppColors.brandRed,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

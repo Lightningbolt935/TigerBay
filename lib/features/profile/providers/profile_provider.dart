@@ -52,8 +52,37 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
           .select()
           .eq('id', _userId)
           .single();
+
+      var profile = UserProfile.fromMap(data);
+      final authUser = _supabase.auth.currentUser;
+      final authEmail = authUser?.email ?? authUser?.userMetadata?['email'] as String?;
+      final authName = authUser?.userMetadata?['full_name'] as String? ??
+          authUser?.userMetadata?['name'] as String? ??
+          authUser?.userMetadata?['user_name'] as String?;
+      final authAvatar = authUser?.userMetadata?['avatar_url'] as String? ??
+          authUser?.userMetadata?['picture'] as String?;
+
+      final Map<String, dynamic> backfill = {};
+      if ((profile.email == null || profile.email!.isEmpty) && authEmail != null && authEmail.isNotEmpty) {
+        profile = profile.copyWith(email: authEmail);
+        backfill['email'] = authEmail;
+      }
+      if ((profile.fullName == null || profile.fullName!.isEmpty) && authName != null && authName.isNotEmpty) {
+        profile = profile.copyWith(fullName: authName);
+        backfill['full_name'] = authName;
+      }
+      if ((profile.avatarUrl == null || profile.avatarUrl!.isEmpty) && authAvatar != null && authAvatar.isNotEmpty) {
+        profile = profile.copyWith(avatarUrl: authAvatar);
+        backfill['avatar_url'] = authAvatar;
+      }
+
+      if (backfill.isNotEmpty) {
+        // Sync any discovered metadata back to profiles table
+        _supabase.from('profiles').update(backfill).eq('id', _userId).then((_) {}, onError: (_) {});
+      }
+
       state = state.copyWith(
-        profile: UserProfile.fromMap(data),
+        profile: profile,
         isLoading: false,
       );
     } catch (e) {
@@ -65,17 +94,25 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
     required String fullName,
     required String email,
     String? phone,
+    String? gender,
+    DateTime? dob,
   }) async {
     state = state.copyWith(isSaving: true, clearError: true, savedSuccessfully: false);
     try {
+      final updateMap = <String, dynamic>{
+        'full_name': fullName,
+        'email': email,
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+      if (phone != null) updateMap['phone'] = phone;
+      if (gender != null) updateMap['gender'] = gender;
+      if (dob != null) {
+        updateMap['dob'] = dob.toIso8601String().split('T').first;
+      }
+
       final data = await _supabase
           .from('profiles')
-          .update({
-            'full_name': fullName,
-            'email': email,
-            if (phone != null) 'phone': phone,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
+          .update(updateMap)
           .eq('id', _userId)
           .select()
           .single();

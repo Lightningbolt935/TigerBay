@@ -1,13 +1,16 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:tigerbay_app/core/constants/app_colors.dart';
 import 'package:tigerbay_app/core/constants/app_routes.dart';
 import 'package:tigerbay_app/data/models/branch_model.dart';
 import 'package:tigerbay_app/features/home/screens/news_feed_component.dart';
 import 'package:tigerbay_app/features/home/providers/home_provider.dart';
 import 'package:tigerbay_app/features/notifications/providers/user_notifications_provider.dart';
+import 'package:tigerbay_app/shared/widgets/apple_touch_feedback.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -18,107 +21,149 @@ class HomeScreen extends ConsumerWidget {
     final selectedBranch = ref.watch(selectedBranchProvider);
 
     // ── Realtime app_configs stream ─────────────────────────────────────────
-    // Re-renders the hero banner whenever banner_title / banner_subtitle is
-    // edited directly inside Supabase dashboard (id = 1 row).
     final appConfig = ref.watch(appConfigStreamProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
+      backgroundColor: AppColors.brandBlack,
       body: SafeArea(
+        bottom: false,
         child: CustomScrollView(
+          physics: const BouncingScrollPhysics(),
           slivers: [
-            // ── App Bar ───────────────────────────────────────────────────
+            // ── Apple-Grade App Bar ─────────────────────────────────────────
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                 child: Row(
                   children: [
                     Expanded(
                       child: Row(
                         children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.asset(
-                              'assets/images/tigerbay_logo.png',
-                              width: 30,
-                              height: 30,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => const Icon(
-                                Icons.pets,
-                                size: 24,
-                                color: AppColors.brandRed,
+                          Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.brandRed.withValues(alpha: 0.3),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Image.asset(
+                                'assets/images/tigerbay_logo.png',
+                                width: 34,
+                                height: 34,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => const Icon(
+                                  Icons.pets,
+                                  size: 26,
+                                  color: AppColors.brandRed,
+                                ),
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          const Flexible(
-                            child: Text(
-                              'TigerBay',
-                              style: TextStyle(fontFamily: 'Poppins', fontSize: 20,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 2,
-                                color: AppColors.brandRed,),
-                              overflow: TextOverflow.ellipsis,
+                          const SizedBox(width: 10),
+                          Flexible(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'TigerBay',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 1.5,
+                                    color: AppColors.brandRed,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  'INTERNATIONAL',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 2.5,
+                                    color: AppColors.gold,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(width: 8),
-                    // Branch selector chip — luxury dark glassmorphic pill
+
+                    // Branch selector chip — luxury frosted glassmorphic pill
                     branches.when(
                       data: (list) => _HomeBranchChip(
                         branches: list,
                         selected: selectedBranch ??
                             (list.isNotEmpty ? list.first : null),
-                        onChanged: (b) =>
-                            ref.read(selectedBranchProvider.notifier).changeBranch(b),
+                        onChanged: (b) => ref
+                            .read(selectedBranchProvider.notifier)
+                            .changeBranch(b),
                       ),
                       loading: () => const SizedBox(
                         width: 130,
-                        height: 32,
+                        height: 34,
                         child: _ShimmerBox(radius: 20),
                       ),
                       error: (_, __) => const SizedBox.shrink(),
                     ),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 8),
+
                     // ── Notification Bell with unread badge ─────────
-                    IconButton(
-                      icon: Badge(
-                        isLabelVisible:
-                            ref.watch(unreadNotificationCountProvider) > 0,
-                        label: Text(
-                          '${ref.watch(unreadNotificationCountProvider)}',
-                          style: const TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
+                    AppleTouchFeedback(
+                      onTap: () => context.push(AppRoutes.notifications),
+                      child: Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: AppColors.glassBorder,
+                            width: 0.8,
                           ),
                         ),
-                        backgroundColor: AppColors.brandRed,
-                        child: const Icon(
-                          Icons.notifications_outlined,
-                          color: Colors.white,
-                          size: 24,
+                        child: Center(
+                          child: Badge(
+                            isLabelVisible:
+                                ref.watch(unreadNotificationCountProvider) > 0,
+                            label: Text(
+                              '${ref.watch(unreadNotificationCountProvider)}',
+                              style: const TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            backgroundColor: AppColors.brandRed,
+                            child: const Icon(
+                              Icons.notifications_outlined,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
                         ),
                       ),
-                      onPressed: () =>
-                          context.push(AppRoutes.notifications),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
                     ),
                   ],
                 ),
               ),
             ),
 
-            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+            const SliverToBoxAdapter(child: SizedBox(height: 20)),
 
-            // ── Hero Banner (Realtime app_configs) ────────────────────────
-            // Rebuilds whenever banner_title or banner_subtitle changes in DB.
+            // ── Hero Banner (Apple Card Style with Depth & Glow) ─────────────
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: appConfig.when(
                   loading: () => _HeroBanner(
                     title: null,
@@ -140,44 +185,52 @@ class HomeScreen extends ConsumerWidget {
               ),
             ),
 
-            const SliverToBoxAdapter(child: SizedBox(height: 24)),
+            const SliverToBoxAdapter(child: SizedBox(height: 28)),
 
-            // ── Latest Updates header ────────────────────────────────────
+            // ── Latest Updates Header ────────────────────────────────────────
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Row(
                   children: [
-                    const Text(
+                    Text(
                       'LATEST UPDATES',
-                      style: TextStyle(fontFamily: 'Poppins', fontSize: 11,
-                        fontWeight: FontWeight.w700,
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
                         letterSpacing: 1.2,
-                        color: Colors.white54,),
+                        color: AppColors.textSecondary,
+                      ),
                     ),
                     const Spacer(),
-                    GestureDetector(
+                    AppleTouchFeedback(
                       onTap: () {
-                        // Sleek, presentation-safe fallback since the feed route doesn't exist yet
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: const Text(
                               'You are completely up to date! ✨',
-                              style: TextStyle(fontFamily: 'Poppins', fontSize: 13, fontWeight: FontWeight.w500),
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
-                            backgroundColor: AppColors.brandRed,
+                            backgroundColor: const Color(0xFF1E1E22),
                             behavior: SnackBarBehavior.floating,
                             duration: const Duration(seconds: 2),
                             shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10)),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
                         );
                       },
-                      child: const Text(
+                      child: Text(
                         'See all',
-                        style: TextStyle(fontFamily: 'Poppins', fontSize: 13,
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
                           fontWeight: FontWeight.w500,
-                          color: AppColors.gold,),
+                          color: AppColors.gold,
+                        ),
                       ),
                     )
                   ],
@@ -185,12 +238,13 @@ class HomeScreen extends ConsumerWidget {
               ),
             ),
 
-            const SliverToBoxAdapter(child: SizedBox(height: 12)),
+            const SliverToBoxAdapter(child: SizedBox(height: 14)),
 
-            // ── Newsfeed ─────────────────────────────────────────────────
+            // ── Newsfeed Cards ───────────────────────────────────────────────
             _NewsfeedList(branchId: selectedBranch?.id),
 
-            const SliverToBoxAdapter(child: SizedBox(height: 24)),
+            // Extra padding to let content scroll above floating navigation dock
+            const SliverToBoxAdapter(child: SizedBox(height: 96)),
           ],
         ),
       ),
@@ -198,7 +252,7 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
-// ── Hero Banner (driven by app_configs Realtime stream) ───────────────────────
+// ── Hero Banner (Apple App Store / Card Luxury Edition) ────────────────────────
 
 class _HeroBanner extends StatelessWidget {
   final String? title;
@@ -215,99 +269,122 @@ class _HeroBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Fallback strings when no DB config row exists yet
     final displayTitle = title ?? 'Exclusive Member\nSunset Soirée';
     final displaySubtitle = subtitle ?? 'THE TERRACE LOUNGE';
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(18),
-      child: SizedBox(
-        height: 220,
+    return Container(
+      height: 230,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.5),
+            blurRadius: 28,
+            spreadRadius: -4,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // Background image
+            // High-res Background image
             CachedNetworkImage(
               imageUrl:
                   'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800',
               fit: BoxFit.cover,
-              placeholder: (_, __) => Container(color: Colors.white12),
-              errorWidget: (_, __, ___) =>
-                  Container(color: Colors.white24),
+              placeholder: (_, __) => Container(color: AppColors.surface),
+              errorWidget: (_, __, ___) => Container(color: AppColors.surface),
             ),
-            // Gradient overlay
+
+            // Apple dark glass gradient overlay
             DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.transparent,
-                    Colors.white.withValues(alpha: 0.7),
+                    Colors.black.withValues(alpha: 0.1),
+                    Colors.black.withValues(alpha: 0.4),
+                    Colors.black.withValues(alpha: 0.88),
                   ],
+                  stops: const [0.0, 0.45, 1.0],
                 ),
               ),
             ),
-            // Content — reacts to banner_title / banner_subtitle from DB
+
+            // Content
             Positioned(
-              bottom: 16,
-              left: 16,
-              right: 16,
+              bottom: 18,
+              left: 18,
+              right: 18,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Promo badge — only shown when is_promo_active = true
                   if (isPromoActive)
                     Container(
-                      margin: const EdgeInsets.only(bottom: 6),
+                      margin: const EdgeInsets.only(bottom: 8),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
+                          horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: AppColors.gold,
-                        borderRadius: BorderRadius.circular(6),
+                        gradient: AppColors.goldGradient,
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Text(
+                      child: Text(
                         'PROMO ACTIVE',
-                        style: TextStyle(fontFamily: 'Poppins', fontSize: 9,
+                        style: GoogleFonts.poppins(
+                          fontSize: 9,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF1C1C1E),
-                          letterSpacing: 1,
+                          color: Colors.black,
+                          letterSpacing: 1.2,
                         ),
                       ),
                     ),
-                  // banner_subtitle maps to the small label above the title
                   Text(
                     displaySubtitle.toUpperCase(),
-                    style: const TextStyle(fontFamily: 'Poppins', fontSize: 10,
+                    style: GoogleFonts.poppins(
+                      fontSize: 10,
                       fontWeight: FontWeight.w600,
-                      color: Colors.white70,
-                      letterSpacing: 1.5,),
+                      color: AppColors.gold,
+                      letterSpacing: 1.8,
+                    ),
                   ),
                   const SizedBox(height: 4),
-                  // banner_title is the main heading
                   Text(
                     displayTitle,
-                    style: const TextStyle(fontFamily: 'Poppins', fontSize: 20,
+                    style: GoogleFonts.poppins(
+                      fontSize: 21,
                       fontWeight: FontWeight.w700,
-                      color: Color(0xFF1C1C1E),
+                      color: Colors.white,
                       height: 1.2,
                     ),
                   ),
                   const SizedBox(height: 12),
-                  GestureDetector(
+                  AppleTouchFeedback(
                     onTap: onReserve,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 18, vertical: 9),
+                          horizontal: 20, vertical: 10),
                       decoration: BoxDecoration(
-                        color: AppColors.gold,
-                        borderRadius: BorderRadius.circular(20),
+                        gradient: AppColors.goldGradient,
+                        borderRadius: BorderRadius.circular(22),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.gold.withValues(alpha: 0.35),
+                            blurRadius: 14,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
                       ),
-                      child: const Text(
+                      child: Text(
                         'Reserve Spot',
-                        style: TextStyle(fontFamily: 'Poppins', fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF1C1C1E),
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.black,
+                          letterSpacing: 0.2,
                         ),
                       ),
                     ),
@@ -335,7 +412,10 @@ class _NewsfeedList extends ConsumerWidget {
         child: Center(
           child: Padding(
             padding: EdgeInsets.all(16.0),
-            child: Text('Waiting for branch selection...'),
+            child: Text(
+              'Select a venue branch above',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
           ),
         ),
       );
@@ -344,13 +424,16 @@ class _NewsfeedList extends ConsumerWidget {
     final feed = ref.watch(newsfeedProvider(branchId!));
     return feed.when(
       data: (items) => items.isEmpty
-          ? const SliverToBoxAdapter(
+          ? SliverToBoxAdapter(
               child: Padding(
-                padding: EdgeInsets.all(32.0),
+                padding: const EdgeInsets.all(32.0),
                 child: Center(
                   child: Text(
-                    'STREAM ONLINE: NO NEWS FOUND FOR THIS BRANCH ID',
-                    style: TextStyle(fontFamily: 'Poppins', color: Colors.red, fontWeight: FontWeight.bold),
+                    'No updates available for this branch.',
+                    style: GoogleFonts.poppins(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -359,7 +442,7 @@ class _NewsfeedList extends ConsumerWidget {
           : SliverList(
               delegate: SliverChildBuilderDelegate(
                 (context, i) => Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
                   child: _NewsfeedCard(item: items[i]),
                 ),
                 childCount: items.length,
@@ -368,7 +451,7 @@ class _NewsfeedList extends ConsumerWidget {
       loading: () => const SliverToBoxAdapter(
         child: Center(
           child: Padding(
-            padding: EdgeInsets.all(24.0),
+            padding: EdgeInsets.all(32.0),
             child: CircularProgressIndicator(
                 color: AppColors.gold, strokeWidth: 2),
           ),
@@ -379,8 +462,11 @@ class _NewsfeedList extends ConsumerWidget {
           padding: const EdgeInsets.all(24.0),
           child: Center(
             child: Text(
-              'Feed Stream Error: $err',
-              style: const TextStyle(fontFamily: 'Poppins', color: Colors.red, fontWeight: FontWeight.bold),
+              'Could not load updates.',
+              style: GoogleFonts.poppins(
+                color: AppColors.textSecondary,
+                fontSize: 13,
+              ),
               textAlign: TextAlign.center,
             ),
           ),
@@ -392,7 +478,6 @@ class _NewsfeedList extends ConsumerWidget {
 
 class _NewsfeedCard extends StatelessWidget {
   final NewsFeedItem item;
-
   const _NewsfeedCard({required this.item});
 
   String get _category => item.previewText.toUpperCase();
@@ -401,128 +486,122 @@ class _NewsfeedCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF1C1C1E)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.white.withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          // Thumbnail
-          ClipRRect(
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(14),
-              bottomLeft: Radius.circular(14),
+    return AppleTouchFeedback(
+      onTap: () {},
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: AppColors.glassBorder, width: 0.8),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.25),
+              blurRadius: 16,
+              spreadRadius: -2,
+              offset: const Offset(0, 6),
             ),
-            child: _buildNewsImage(item.imageUrl),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Category chip
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1C1C1E),
-                      borderRadius: BorderRadius.circular(6),
+          ],
+        ),
+        child: Row(
+          children: [
+            // Thumbnail with squircle corners
+            ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(18),
+                bottomLeft: Radius.circular(18),
+              ),
+              child: _buildNewsImage(item.imageUrl),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Category chip
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceLight,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        _category.isEmpty ? 'NEWS' : _category,
+                        style: GoogleFonts.poppins(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.8,
+                          color: AppColors.gold,
+                        ),
+                      ),
                     ),
-                    child: Text(
-                      _category,
-                      style: const TextStyle(fontFamily: 'Poppins', fontSize: 9,
+                    const SizedBox(height: 6),
+                    Text(
+                      _title,
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        letterSpacing: 0.8,
-                        color: Colors.white54,),
+                        color: AppColors.textPrimary,
+                        height: 1.3,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    _title,
-                    style: const TextStyle(fontFamily: 'Poppins', fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                      height: 1.3,),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    _timeAgo,
-                    style: const TextStyle(fontFamily: 'Poppins', fontSize: 11,
-                      color: Colors.white38,),
-                  ),
-                ],
+                    const SizedBox(height: 6),
+                    Text(
+                      _timeAgo,
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        color: AppColors.textHint,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 12),
-        ],
+            const SizedBox(width: 12),
+          ],
+        ),
       ),
     );
   }
 
-  // ── Image helpers ──────────────────────────────────────────────────────────
-
   Widget _buildNewsImage(String? imageUrl) {
     final bool isValid = imageUrl != null && imageUrl.trim().isNotEmpty;
-
     if (!isValid) return _buildFallbackBanner();
 
     return CachedNetworkImage(
       imageUrl: imageUrl,
-      width: 88,
-      height: 88,
+      width: 92,
+      height: 92,
       fit: BoxFit.cover,
-      placeholder: (context, url) => Container(
-        width: 88,
-        height: 88,
-        color: const Color(0xFF2C2C2E),
-        child: const Center(
-          child: SizedBox(
-            width: 16,
-            height: 16,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: Color(0xFFC9A84C),
-            ),
-          ),
-        ),
+      placeholder: (_, __) => Container(
+        width: 92,
+        height: 92,
+        color: AppColors.surfaceLight,
       ),
-      errorWidget: (context, url, error) {
-        debugPrint('NewsfeedCard: failed to load image: $url -> $error');
-        return _buildFallbackBanner();
-      },
+      errorWidget: (_, __, ___) => _buildFallbackBanner(),
     );
   }
 
   Widget _buildFallbackBanner() {
     return Container(
-      width: 88,
-      height: 88,
-      color: const Color(0xFF2C2C2E),
+      width: 92,
+      height: 92,
+      color: AppColors.surfaceLight,
       child: const Icon(
-        Icons.newspaper,
-        color: Color(0xFFC9A84C),
+        Icons.newspaper_rounded,
+        color: AppColors.gold,
         size: 28,
       ),
     );
   }
 }
 
-
-// ── Branch chip + luxury picker (Home screen) ────────────────────────────────
+// ── Branch Chip (Frosted Glass Capsule) ────────────────────────────────────────
 
 class _HomeBranchChip extends StatelessWidget {
   final List<Branch> branches;
@@ -535,53 +614,53 @@ class _HomeBranchChip extends StatelessWidget {
     required this.onChanged,
   });
 
-  static const Color _gold = Color(0xFFD4AF37);
-
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => _showPicker(context),
+    return AppleTouchFeedback(
+      onTap: () => _showPicker(context),
+      child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.12),
-              width: 1,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            decoration: BoxDecoration(
+              color: AppColors.glassSurface,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: AppColors.glassBorder,
+                width: 0.8,
+              ),
             ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.location_on_rounded,
-                color: _gold,
-                size: 14,
-              ),
-              const SizedBox(width: 5),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 110),
-                child: Text(
-                  selected?.title ?? 'Select Branch',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 12,
-                  ),
-                  overflow: TextOverflow.ellipsis,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.location_on_rounded,
+                  color: AppColors.gold,
+                  size: 14,
                 ),
-              ),
-              const SizedBox(width: 3),
-              Icon(
-                Icons.keyboard_arrow_down_rounded,
-                color: Colors.white.withValues(alpha: 0.6),
-                size: 16,
-              ),
-            ],
+                const SizedBox(width: 6),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 110),
+                  child: Text(
+                    selected?.title ?? 'Select Branch',
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 3),
+                const Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: AppColors.textSecondary,
+                  size: 16,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -591,14 +670,14 @@ class _HomeBranchChip extends StatelessWidget {
   void _showPicker(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF121212),
-      barrierColor: Colors.black.withValues(alpha: 0.7),
+      backgroundColor: const Color(0xFF141416),
+      barrierColor: Colors.black.withValues(alpha: 0.75),
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       builder: (_) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -606,34 +685,33 @@ class _HomeBranchChip extends StatelessWidget {
             // Drag handle
             Center(
               child: Container(
-                width: 38,
+                width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
+                  color: Colors.white.withValues(alpha: 0.25),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
             ),
             const SizedBox(height: 20),
 
-            // Header
-            const Row(
+            Row(
               children: [
-                Icon(Icons.location_on_rounded, color: _gold, size: 20),
-                SizedBox(width: 8),
+                const Icon(Icons.location_on_rounded,
+                    color: AppColors.gold, size: 20),
+                const SizedBox(width: 8),
                 Text(
                   'Select Branch',
-                  style: TextStyle(
+                  style: GoogleFonts.poppins(
                     color: Colors.white,
                     fontSize: 18,
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 18),
 
-            // Branch cards
             Flexible(
               child: ListView.separated(
                 shrinkWrap: true,
@@ -644,80 +722,75 @@ class _HomeBranchChip extends StatelessWidget {
                   final b = branches[index];
                   final bool isSelected = selected?.id == b.id;
 
-                  return Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: () {
-                        onChanged(b);
-                        Navigator.pop(ctx);
-                      },
-                      borderRadius: BorderRadius.circular(14),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 14),
-                        decoration: BoxDecoration(
+                  return AppleTouchFeedback(
+                    onTap: () {
+                      onChanged(b);
+                      Navigator.pop(ctx);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? AppColors.gold.withValues(alpha: 0.12)
+                            : AppColors.surface,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
                           color: isSelected
-                              ? _gold.withValues(alpha: 0.12)
-                              : const Color(0xFF1C1C1E),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                            color: isSelected
-                                ? _gold
-                                : Colors.white.withValues(alpha: 0.08),
-                            width: isSelected ? 1.5 : 1,
-                          ),
+                              ? AppColors.gold
+                              : AppColors.glassBorder,
+                          width: isSelected ? 1.5 : 0.8,
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  b.title,
+                                  style: GoogleFonts.poppins(
+                                    color: isSelected
+                                        ? Colors.white
+                                        : AppColors.textPrimary,
+                                    fontWeight: isSelected
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                                if (b.city != null && b.city!.isNotEmpty) ...[
+                                  const SizedBox(height: 2),
                                   Text(
-                                    b.title,
-                                    style: TextStyle(
+                                    b.city!,
+                                    style: GoogleFonts.poppins(
                                       color: isSelected
-                                          ? Colors.white
-                                          : const Color(0xFFE4E4E7),
-                                      fontWeight: isSelected
-                                          ? FontWeight.w700
-                                          : FontWeight.w500,
-                                      fontSize: 15,
+                                          ? AppColors.gold
+                                          : AppColors.textSecondary,
+                                      fontSize: 12,
                                     ),
                                   ),
-                                  if (b.city != null &&
-                                      b.city!.isNotEmpty) ...[
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      b.city!,
-                                      style: TextStyle(
-                                        color: isSelected
-                                            ? _gold
-                                            : const Color(0xFFA1A1AA),
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ],
                                 ],
+                              ],
+                            ),
+                          ),
+                          if (isSelected)
+                            Container(
+                              width: 22,
+                              height: 22,
+                              decoration: const BoxDecoration(
+                                color: AppColors.gold,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.check_rounded,
+                                color: Colors.black,
+                                size: 14,
                               ),
                             ),
-                            if (isSelected)
-                              Container(
-                                width: 22,
-                                height: 22,
-                                decoration: const BoxDecoration(
-                                  color: _gold,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.check_rounded,
-                                  color: Colors.black,
-                                  size: 14,
-                                ),
-                              ),
-                          ],
-                        ),
+                        ],
                       ),
                     ),
                   );
@@ -731,8 +804,6 @@ class _HomeBranchChip extends StatelessWidget {
   }
 }
 
-// ── Shimmer placeholder ───────────────────────────────────────────────────────
-
 class _ShimmerBox extends StatelessWidget {
   final double radius;
   const _ShimmerBox({required this.radius});
@@ -741,7 +812,7 @@ class _ShimmerBox extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white12,
+        color: AppColors.surfaceLight,
         borderRadius: BorderRadius.circular(radius),
       ),
     );

@@ -62,22 +62,50 @@ class AppColors {
   static const Color appleBlack = Color(0xFF000000);
   static const Color facebookBlue = Color(0xFF1877F2);
 
+  // ── Apple Dark Luxury & Glassmorphism Tokens ─────────────────────────────
+  /// Translucent frosted acrylic background for floating navigation bars & modals.
+  static const Color glassBackground = Color(0xDF141416);
+
+  /// Frosted glass surface for floating cards and badges.
+  static const Color glassSurface = Color(0x80242428);
+
+  /// Ultra-subtle light reflection hairline border on frosted containers.
+  static const Color glassBorder = Color(0x1AFFFFFF);
+
+  /// Highlight border for focused/active glass elements.
+  static const Color glassBorderActive = Color(0x40D4AF37);
+
+  /// Premium Champagne Gold accent.
+  static const Color champagneGold = Color(0xFFE5C07B);
+
   // ── Gradients ─────────────────────────────────────────────────────────────
   static const LinearGradient goldGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFFD4B96A), gold, Color(0xFFB8942F)],
+    colors: [Color(0xFFE8D395), Color(0xFFD4AF37), Color(0xFFB8942F)],
+  );
+
+  static const LinearGradient champagneGoldGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFFF3E5AB), Color(0xFFD4AF37), Color(0xFFA67C1E)],
   );
 
   static const LinearGradient darkBackgroundGradient = LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
-    colors: [surface, brandBlack],
+    colors: [Color(0xFF161618), brandBlack],
+  );
+
+  static const LinearGradient appleCardGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF222226), Color(0xFF161618)],
   );
 
   static const LinearGradient brandRedGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [brandRed, Color(0xFFB01710)],
+    colors: [brandRed, Color(0xFF9E100A)],
   );
 }

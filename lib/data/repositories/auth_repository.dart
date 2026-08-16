@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math' as dart_math;
 
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
-import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -264,15 +263,23 @@ class AuthRepository {
   // ── Google ──────────────────────────────────────────────────────────────────
 
   Future<AuthResponse> signInWithGoogle() async {
-    // Hardcoded production-aligned Google Cloud Web Client ID
-    const String webClientId =
-        '887005202939-17lt5hs4rae4i8rrslc86i70velaqich.apps.googleusercontent.com';
+    final envClientId = dotenv.env['GOOGLE_WEB_CLIENT_ID'];
+    final webClientId = (envClientId != null && envClientId.contains('.apps.googleusercontent.com'))
+        ? envClientId
+        : '887005202939-17lt5hs4rae4i8rrslc86i70velaqich.apps.googleusercontent.com';
 
     final googleSignIn = GoogleSignIn(
       clientId: kIsWeb ? webClientId : null,
       serverClientId: webClientId,
       scopes: ['email', 'profile'],
     );
+
+    // Force account chooser dialog so the user can switch Google accounts/IDs
+    try {
+      await googleSignIn.signOut();
+    } catch (_) {
+      // Ignore errors if no previous active session
+    }
 
     final account = await googleSignIn.signIn();
     if (account == null) {
@@ -338,6 +345,9 @@ class AuthRepository {
   // ── Sign Out ─────────────────────────────────────────────────────────────────
 
   Future<void> signOut() async {
+    try {
+      await GoogleSignIn().signOut();
+    } catch (_) {}
     await _client.auth.signOut();
   }
 

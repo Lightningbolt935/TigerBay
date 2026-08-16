@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/widgets/safe_network_image.dart';
 import '../providers/profile_provider.dart';
-import 'gender_dob_form.dart';
 
 class EditProfileScreen extends ConsumerStatefulWidget {
   const EditProfileScreen({super.key});
@@ -16,7 +17,16 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
+  String? _selectedGender;
+  DateTime? _selectedDob;
   bool _initialized = false;
+
+  static const List<String> _genderOptions = [
+    'Male',
+    'Female',
+    'Other',
+    'Prefer not to say',
+  ];
 
   @override
   void dispose() {
@@ -27,11 +37,60 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   }
 
   void _initFields(ProfileState state) {
-    if (_initialized || state.profile == null) return;
-    _initialized = true;
-    _nameController.text = state.profile?.fullName ?? '';
-    _emailController.text = state.profile?.email ?? '';
-    _phoneController.text = state.profile?.phone ?? '';
+    if (_initialized) return;
+
+    final profile = state.profile;
+    final authUser = Supabase.instance.client.auth.currentUser;
+    final fallbackEmail =
+        authUser?.email ?? authUser?.userMetadata?['email'] as String? ?? '';
+    final fallbackName = authUser?.userMetadata?['full_name'] as String? ??
+        authUser?.userMetadata?['name'] as String? ??
+        authUser?.userMetadata?['user_name'] as String? ??
+        '';
+
+    final resolvedName =
+        (profile?.fullName != null && profile!.fullName!.trim().isNotEmpty)
+            ? profile.fullName!
+            : fallbackName;
+    final resolvedEmail =
+        (profile?.email != null && profile!.email!.trim().isNotEmpty)
+            ? profile.email!
+            : fallbackEmail;
+
+    if (profile != null || authUser != null) {
+      _initialized = true;
+      _nameController.text = resolvedName;
+      _emailController.text = resolvedEmail;
+      _phoneController.text = profile?.phone ?? '';
+      _selectedGender = profile?.gender;
+      _selectedDob =
+          profile?.dob != null ? DateTime.tryParse(profile!.dob!) : null;
+    }
+  }
+
+  Future<void> _pickDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDob ?? DateTime(2000, 1, 1),
+      firstDate: DateTime(1930),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: AppColors.gold,
+              onPrimary: Colors.black,
+              surface: Color(0xFF1E1E1E),
+              onSurface: Colors.white,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null && picked != _selectedDob && mounted) {
+      setState(() => _selectedDob = picked);
+    }
   }
 
   Future<void> _save() async {
@@ -39,6 +98,8 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
           fullName: _nameController.text.trim(),
           email: _emailController.text.trim(),
           phone: _phoneController.text.trim(),
+          gender: _selectedGender,
+          dob: _selectedDob,
         );
 
     if (success && mounted) {
@@ -196,6 +257,13 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               controller: _emailController,
               hint: 'your@email.com',
               inputType: TextInputType.emailAddress,
+              readOnly: true,
+              suffixIcon: const Icon(
+                Icons.lock_outline_rounded,
+                size: 18,
+                color: AppColors.textHint,
+              ),
+              helperText: 'Account email cannot be modified',
             ),
 
             const SizedBox(height: 18),
@@ -213,16 +281,91 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
             // ── Gender & Date of Birth ──────────────────────────────────
             const _EditFieldLabel('PERSONAL DETAILS'),
             const SizedBox(height: 16),
-            GenderDobForm(
-              initialGender: profileState.profile?.gender,
-              initialDob: profileState.profile?.dob != null
-                  ? DateTime.tryParse(profileState.profile!.dob!)
-                  : null,
+
+            const _EditFieldLabel('DATE OF BIRTH'),
+            const SizedBox(height: 8),
+            InkWell(
+              onTap: _pickDate,
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      _selectedDob == null
+                          ? 'Select Date of Birth'
+                          : DateFormat('dd MMM yyyy').format(_selectedDob!),
+                      style: TextStyle(
+                        color: _selectedDob == null
+                            ? AppColors.textHint
+                            : AppColors.textPrimary,
+                        fontSize: 14,
+                        fontFamily: 'Poppins',
+                      ),
+                    ),
+                    const Icon(Icons.calendar_today_rounded,
+                        color: AppColors.gold, size: 18),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 18),
+
+            const _EditFieldLabel('GENDER'),
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _selectedGender,
+                  hint: const Text(
+                    'Select Gender',
+                    style: TextStyle(
+                      color: AppColors.textHint,
+                      fontSize: 14,
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
+                  dropdownColor: AppColors.surface,
+                  isExpanded: true,
+                  icon: const Icon(Icons.arrow_drop_down,
+                      color: AppColors.gold),
+                  items: _genderOptions.map((String option) {
+                    return DropdownMenuItem<String>(
+                      value: option,
+                      child: Text(
+                        option,
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 14,
+                          fontFamily: 'Poppins',
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (val) => setState(() => _selectedGender = val),
+                ),
+              ),
             ),
 
             const SizedBox(height: 32),
 
-            // ── Save Button (name / email / phone) ──────────────────────
+            // ── Single Save Changes Button ──────────────────────────────
             SizedBox(
               width: double.infinity,
               height: 54,
@@ -284,32 +427,41 @@ class _EditField extends StatelessWidget {
   final TextEditingController controller;
   final String hint;
   final TextInputType inputType;
+  final bool readOnly;
+  final Widget? suffixIcon;
+  final String? helperText;
 
   const _EditField({
     required this.controller,
     required this.hint,
     required this.inputType,
+    this.readOnly = false,
+    this.suffixIcon,
+    this.helperText,
   });
 
   @override
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
+      readOnly: readOnly,
       keyboardType: inputType,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 14,
-        color: AppColors.textPrimary,
+        color: readOnly ? AppColors.textSecondary : AppColors.textPrimary,
         fontFamily: 'Poppins',
       ),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: const TextStyle(
-          fontSize: 14,
+        helperText: helperText,
+        helperStyle: const TextStyle(
+          fontSize: 11,
           color: AppColors.textHint,
           fontFamily: 'Poppins',
         ),
+        suffixIcon: suffixIcon,
         filled: true,
-        fillColor: AppColors.surface,
+        fillColor: readOnly ? const Color(0xFF141414) : AppColors.surface,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         border: OutlineInputBorder(
@@ -318,12 +470,18 @@ class _EditField extends StatelessWidget {
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.border),
+          borderSide: BorderSide(
+            color: readOnly
+                ? AppColors.border.withValues(alpha: 0.5)
+                : AppColors.border,
+          ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide:
-              const BorderSide(color: AppColors.gold, width: 1.5),
+          borderSide: BorderSide(
+            color: readOnly ? AppColors.border : AppColors.gold,
+            width: readOnly ? 1.0 : 1.5,
+          ),
         ),
       ),
     );

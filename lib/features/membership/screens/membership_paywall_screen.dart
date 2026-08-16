@@ -315,50 +315,7 @@ class _MembershipPaywallScreenState
                   }),
                 ),
 
-                const SizedBox(height: 20),
-
-                // ── PayPal Payment Badge ─────────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.gold, width: 1.5),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.payment_rounded,
-                            color: AppColors.gold, size: 20),
-                        const SizedBox(width: 12),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Pay securely with PayPal',
-                              style: GoogleFonts.poppins(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                            Text(
-                              'Instant activation • Secure checkout',
-                              style: GoogleFonts.poppins(
-                                fontSize: 11,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
+                const SizedBox(height: 24),
 
                 // ── CTA Button ───────────────────────────────────────────
                 Padding(
