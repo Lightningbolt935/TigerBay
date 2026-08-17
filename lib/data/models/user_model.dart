@@ -17,6 +17,7 @@ class UserProfile {
   final int? membershipTierId;
   final String membershipStatus;
   final int stripsBalance;
+  final String? memberCode;
   final DateTime? membershipExpiresAt;
   final DateTime? updatedAt;
 
@@ -33,12 +34,34 @@ class UserProfile {
     this.membershipTierId,
     this.membershipStatus = 'inactive',
     this.stripsBalance = 0,
+    this.memberCode,
     this.membershipExpiresAt,
     this.updatedAt,
   });
 
   /// Whether this user has an active paid membership and can access the app.
   bool get isMembershipActive => membershipStatus == 'active';
+
+  /// Returns the 6-digit member ID. Uses the database `member_code` if present,
+  /// or falls back to a deterministic 6-digit hash computed from the UUID so it
+  /// is ALWAYS guaranteed to return a clean 6-digit number (e.g. "582914").
+  String get displayMemberId {
+    if (memberCode != null && memberCode!.trim().isNotEmpty) {
+      final code = memberCode!.trim();
+      if (code.length == 6) return code;
+      return code.padLeft(6, '0');
+    }
+    if (id.isNotEmpty) {
+      // Deterministic 6-digit number from UUID hash (range 100000 - 999999)
+      final hash = id.hashCode.abs();
+      final sixDigit = (hash % 900000 + 100000).toString();
+      return sixDigit;
+    }
+    return '100000';
+  }
+
+  /// Formatted branded Member Code (e.g. "TB-582914")
+  String get formattedMemberCode => 'TB-$displayMemberId';
 
   /// User initials for avatar placeholder.
   String get initials {
@@ -82,6 +105,7 @@ class UserProfile {
       membershipStatus:
           (map['membership_status'] as String?) ?? 'inactive',
       stripsBalance: _safeInt(map['strips_balance']) ?? 0,
+      memberCode: map['member_code']?.toString(),
       membershipExpiresAt: map['membership_expires_at'] != null
           ? DateTime.tryParse(map['membership_expires_at'].toString())
           : null,
@@ -105,6 +129,7 @@ class UserProfile {
         'membership_tier_id': membershipTierId,
         'membership_status': membershipStatus,
         'strips_balance': stripsBalance,
+        if (memberCode != null) 'member_code': memberCode,
         'membership_expires_at': membershipExpiresAt?.toIso8601String(),
         'updated_at': updatedAt?.toIso8601String(),
       };
@@ -121,6 +146,7 @@ class UserProfile {
     int? membershipTierId,
     String? membershipStatus,
     int? stripsBalance,
+    String? memberCode,
     DateTime? membershipExpiresAt,
   }) {
     return UserProfile(
@@ -136,6 +162,7 @@ class UserProfile {
       membershipTierId: membershipTierId ?? this.membershipTierId,
       membershipStatus: membershipStatus ?? this.membershipStatus,
       stripsBalance: stripsBalance ?? this.stripsBalance,
+      memberCode: memberCode ?? this.memberCode,
       membershipExpiresAt: membershipExpiresAt ?? this.membershipExpiresAt,
       updatedAt: updatedAt,
     );

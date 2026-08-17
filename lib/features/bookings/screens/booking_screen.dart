@@ -1,12 +1,21 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:tigerbay_app/core/constants/app_colors.dart';
+import 'package:tigerbay_app/core/constants/app_routes.dart';
 import 'package:tigerbay_app/core/constants/dmn_config.dart';
+import 'package:tigerbay_app/core/theme/app_typography.dart';
 import 'package:tigerbay_app/data/models/branch_model.dart';
 import 'package:tigerbay_app/features/home/providers/home_provider.dart';
+import 'package:tigerbay_app/shared/widgets/apple_touch_feedback.dart';
 
+/// ═══════════════════════════════════════════════════════════════════════════
+/// TigerBay International — Reserve a Table / Spot Screen (Apple HIG Edition)
+/// ═══════════════════════════════════════════════════════════════════════════
 class BookingScreen extends ConsumerStatefulWidget {
   const BookingScreen({super.key});
 
@@ -18,6 +27,15 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
   WebViewController? _webViewController;
   bool _isLoading = true;
   String? _lastLoadedVenueId;
+
+  void _handleBack(BuildContext context) {
+    HapticFeedback.lightImpact();
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go(AppRoutes.home);
+    }
+  }
 
   /// Builds (or rebuilds) the WebView controller for the given DMN [venueId].
   void _initWebView(String venueId) {
@@ -40,10 +58,12 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
             if (mounted) setState(() => _isLoading = false);
           },
           onHttpError: (error) {
-            debugPrint('WebView HTTP ${error.response?.statusCode}: ${error.request?.uri}');
+            debugPrint(
+                'WebView HTTP ${error.response?.statusCode}: ${error.request?.uri}');
           },
           onWebResourceError: (error) {
-            debugPrint('WebView error [${error.errorCode}]: ${error.description}');
+            debugPrint(
+                'WebView error [${error.errorCode}]: ${error.description}');
             if (mounted) setState(() => _isLoading = false);
           },
         ),
@@ -99,125 +119,173 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
       });
     }
 
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // ── Branch Selector ───────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-              child: Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      width: 44,
-                      height: 44,
-                      color: Colors.grey.shade100,
-                      child: const Icon(Icons.store_outlined,
-                          color: AppColors.gold),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: branches.when(
-                      data: (list) => DropdownButtonHideUnderline(
-                        child: DropdownButton<int>(
-                          value: selectedBranch?.id ??
-                              (list.isNotEmpty ? list.first.id : null),
-                          isExpanded: true,
-                          icon: Icon(Icons.keyboard_arrow_down,
-                              color: Colors.grey.shade600),
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black87,
-                          ),
-                          onChanged: (id) {
-                            if (id == null) return;
-                            final b = list.firstWhere((b) => b.id == id);
-                            _onBranchChanged(b, list);
-                          },
-                          items: list
-                              .map((b) => DropdownMenuItem(
-                                    value: b.id,
-                                    child: Text(b.title),
-                                  ))
-                              .toList(),
-                        ),
-                      ),
-                      loading: () => const Text('Loading branches…',
-                          style: TextStyle(fontSize: 14)),
-                      error: (_, __) => const Text('Select a venue',
-                          style: TextStyle(fontSize: 15)),
-                    ),
-                  ),
-                ],
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _handleBack(context);
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.brandBlack,
+        appBar: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          leading: AppleTouchFeedback(
+            onTap: () => _handleBack(context),
+            child: const Padding(
+              padding: EdgeInsets.only(left: 12),
+              child: Icon(
+                CupertinoIcons.chevron_back,
+                size: 22,
+                color: AppColors.textPrimary,
               ),
             ),
-
-            const SizedBox(height: 12),
-
-            // ── Section Title + Actions (Refresh & Open in Browser) ─────────
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Book a Table',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.black87,
-                      ),
-                    ),
+          ),
+          title: Text(
+            'Reserve a Table',
+            style: AppTypography.headline.copyWith(
+              color: AppColors.textPrimary,
+              fontSize: 17,
+            ),
+          ),
+          centerTitle: true,
+          actions: [
+            if (venueId != null) ...[
+              // Open in Safari / External Browser
+              AppleTouchFeedback(
+                onTap: () => _openInBrowser(
+                  selectedBranch?.title ?? 'Kingsbury',
+                  venueId,
+                ),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8),
+                  child: Icon(
+                    CupertinoIcons.compass,
+                    size: 20,
+                    color: AppColors.champagneGold,
                   ),
-                  if (venueId != null) ...[
-                    GestureDetector(
-                      onTap: () => _openInBrowser(
-                        selectedBranch?.title ?? 'Kingsbury',
-                        venueId,
+                ),
+              ),
+              // Refresh WebView
+              AppleTouchFeedback(
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  _lastLoadedVenueId = null;
+                  _initWebView(venueId);
+                },
+                child: const Padding(
+                  padding: EdgeInsets.only(left: 4, right: 14),
+                  child: Icon(
+                    CupertinoIcons.arrow_clockwise,
+                    size: 19,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              // ── Apple Inset Branch Selector ───────────────────────────────────
+              Container(
+                margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: AppColors.glassBorder,
+                    width: 0.8,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: AppColors.gold.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(Icons.open_in_browser,
-                            size: 20, color: Colors.grey.shade700),
+                      child: const Icon(
+                        CupertinoIcons.building_2_fill,
+                        size: 18,
+                        color: AppColors.champagneGold,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: () {
-                        _lastLoadedVenueId = null; // Force reload
-                        _initWebView(venueId);
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(10),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: branches.when(
+                        data: (list) => DropdownButtonHideUnderline(
+                          child: DropdownButton<int>(
+                            value: selectedBranch?.id ??
+                                (list.isNotEmpty ? list.first.id : null),
+                            isExpanded: true,
+                            dropdownColor: const Color(0xFF1E1E22),
+                            borderRadius: BorderRadius.circular(14),
+                            icon: const Icon(
+                              CupertinoIcons.chevron_down,
+                              size: 14,
+                              color: AppColors.textHint,
+                            ),
+                            style: AppTypography.subheadline.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
+                            onChanged: (id) {
+                              if (id == null) return;
+                              final b = list.firstWhere((b) => b.id == id);
+                              _onBranchChanged(b, list);
+                            },
+                            items: list
+                                .map((b) => DropdownMenuItem(
+                                      value: b.id,
+                                      child: Text(
+                                        b.title,
+                                        style: AppTypography.subheadline.copyWith(
+                                          color: AppColors.textPrimary,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ))
+                                .toList(),
+                          ),
                         ),
-                        child: Icon(Icons.refresh,
-                            size: 20, color: Colors.grey.shade700),
+                        loading: () => Text(
+                          'Loading branches…',
+                          style: AppTypography.subheadline.copyWith(
+                            color: AppColors.textHint,
+                          ),
+                        ),
+                        error: (_, __) => Text(
+                          'Select a venue',
+                          style: AppTypography.subheadline.copyWith(
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
                       ),
                     ),
                   ],
-                ],
+                ),
               ),
-            ),
 
-            const SizedBox(height: 12),
-
-            // ── WebView / Loading / Fallback ──────────────────────────────
-            Expanded(
-              child: _buildBody(venueId, selectedBranch),
-            ),
-          ],
+              // ── WebView / Loading / Fallback Body ────────────────────────────
+              Expanded(
+                child: Container(
+                  clipBehavior: Clip.antiAlias,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                  ),
+                  child: _buildBody(venueId, selectedBranch),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -240,16 +308,16 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
-                  Icons.event_busy_outlined,
-                  size: 36,
+                  CupertinoIcons.calendar_badge_minus,
+                  size: 34,
                   color: AppColors.gold,
                 ),
               ),
               const SizedBox(height: 20),
-              const Text(
+              Text(
                 'Online Booking Not Available',
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: AppTypography.headline.copyWith(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
                   color: Colors.black87,
@@ -258,13 +326,13 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
               const SizedBox(height: 8),
               Text(
                 selectedBranch != null
-                    ? 'Online booking is not yet available for ${selectedBranch.title}. Please call the restaurant to make a reservation.'
+                    ? 'Online booking is not currently available for ${selectedBranch.title}. Please call the restaurant directly to make a reservation.'
                     : 'Please select a venue to book a table.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: AppTypography.body.copyWith(
                   fontSize: 14,
-                  color: Colors.grey.shade500,
-                  height: 1.5,
+                  color: Colors.black54,
+                  height: 1.4,
                 ),
               ),
             ],
@@ -275,18 +343,18 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
 
     // WebView controller not yet created — show spinner while microtask fires
     if (_webViewController == null) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(
+            const CircularProgressIndicator(
               color: AppColors.gold,
               strokeWidth: 2.5,
             ),
-            SizedBox(height: 14),
+            const SizedBox(height: 14),
             Text(
-              'Loading booking form…',
-              style: TextStyle(fontSize: 13, color: Colors.black45),
+              'Connecting to reservation system…',
+              style: AppTypography.footnote.copyWith(color: Colors.black54),
             ),
           ],
         ),
@@ -298,18 +366,20 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
       children: [
         WebViewWidget(controller: _webViewController!),
         if (_isLoading)
-          const Center(
+          Container(
+            color: Colors.white,
+            alignment: Alignment.center,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                CircularProgressIndicator(
+                const CircularProgressIndicator(
                   color: AppColors.gold,
                   strokeWidth: 2.5,
                 ),
-                SizedBox(height: 14),
+                const SizedBox(height: 14),
                 Text(
                   'Loading booking form…',
-                  style: TextStyle(fontSize: 13, color: Colors.black45),
+                  style: AppTypography.footnote.copyWith(color: Colors.black54),
                 ),
               ],
             ),

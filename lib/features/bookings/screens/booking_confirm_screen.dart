@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -109,8 +110,15 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, size: 20, color: Colors.black87),
-          onPressed: () => context.pop(),
+          icon: const Icon(CupertinoIcons.chevron_back,
+              size: 22, color: Colors.black87),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go(AppRoutes.home);
+            }
+          },
         ),
         title: const Text(
           'Confirm Booking',
@@ -528,9 +536,15 @@ class BookingDetailScreen extends ConsumerWidget {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon:
-              const Icon(Icons.arrow_back_ios, size: 20, color: Colors.black87),
-          onPressed: () => context.pop(),
+          icon: const Icon(CupertinoIcons.chevron_back,
+              size: 22, color: Colors.black87),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go(AppRoutes.home);
+            }
+          },
         ),
         title: const Text(
           'Booking Details',

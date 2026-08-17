@@ -3,42 +3,49 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:crypto/crypto.dart';
 
-/// Generates a new QR payload every 60 seconds.
-/// Each payload is a HMAC-SHA256 signed token containing:
-///   userId + timestamp (floored to 60s window) + deviceId
-/// This prevents token sharing between sessions or devices.
+/// Generates a steady, secure QR payload refreshed every 60 seconds.
+/// The QR payload remains completely stable during the 60-second window,
+/// updating only when the security interval expires.
 class QrTimer {
   static const int refreshIntervalSeconds = 60;
 
   final String userId;
+  final String? memberCode;
   final String deviceId;
   final String _secret; // from env / Supabase edge function secret
 
   late StreamController<QrPayload> _controller;
   Timer? _timer;
   int _secondsRemaining = refreshIntervalSeconds;
+  String _cachedQrData = '';
 
   Stream<QrPayload> get stream => _controller.stream;
   int get secondsRemaining => _secondsRemaining;
 
   QrTimer({
     required this.userId,
+    this.memberCode,
     required this.deviceId,
     required String secret,
   }) : _secret = secret;
 
   void start() {
     _controller = StreamController<QrPayload>.broadcast();
-    _emitPayload();
+    _secondsRemaining = refreshIntervalSeconds;
+    _refreshPayload();
 
     _timer = Timer.periodic(const Duration(seconds: 1), (t) {
       _secondsRemaining--;
       if (_secondsRemaining <= 0) {
         _secondsRemaining = refreshIntervalSeconds;
-        _emitPayload();
+        _refreshPayload();
       } else {
-        // Emit tick with same payload but updated countdown
-        _controller.add(_buildPayload(_currentWindow()));
+        // Emit tick with the EXACT SAME cached QR string, updating only countdown
+        _controller.add(QrPayload(
+          qrData: _cachedQrData,
+          secondsRemaining: _secondsRemaining,
+          generatedAt: DateTime.now(),
+        ));
       }
     });
   }
@@ -48,34 +55,35 @@ class QrTimer {
     _controller.close();
   }
 
-  void _emitPayload() {
+  void _refreshPayload() {
     final window = _currentWindow();
-    _controller.add(_buildPayload(window));
-  }
-
-  int _currentWindow() {
-    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    return (now ~/ refreshIntervalSeconds) * refreshIntervalSeconds;
-  }
-
-  QrPayload _buildPayload(int window) {
     final nonce = _generateNonce();
-    final data = '$userId:$deviceId:$window:$nonce';
+    final displayCode = memberCode ??
+        (userId.isNotEmpty
+            ? (userId.hashCode.abs() % 900000 + 100000).toString()
+            : '100000');
+    final data = '$userId:$displayCode:$deviceId:$window:$nonce';
     final signature = _sign(data);
 
-    final payload = jsonEncode({
+    _cachedQrData = jsonEncode({
       'uid': userId,
+      'code': displayCode,
       'did': deviceId,
       'w': window,
       'n': nonce,
       'sig': signature,
     });
 
-    return QrPayload(
-      qrData: payload,
+    _controller.add(QrPayload(
+      qrData: _cachedQrData,
       secondsRemaining: _secondsRemaining,
       generatedAt: DateTime.now(),
-    );
+    ));
+  }
+
+  int _currentWindow() {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    return (now ~/ refreshIntervalSeconds) * refreshIntervalSeconds;
   }
 
   String _sign(String data) {
@@ -98,7 +106,7 @@ class QrPayload {
   final int secondsRemaining;
   final DateTime generatedAt;
 
-  QrPayload({
+  const QrPayload({
     required this.qrData,
     required this.secondsRemaining,
     required this.generatedAt,

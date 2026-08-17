@@ -1,11 +1,11 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_paypal_payment/flutter_paypal_payment.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:tigerbay_app/core/config/paypal_config.dart';
+import 'package:tigerbay_app/core/services/paypal_checkout_screen.dart';
 
 /// ═══════════════════════════════════════════════════════════════════════════
 /// TigerBay International — PayPal Payment Service
 /// ═══════════════════════════════════════════════════════════════════════════
-/// Wraps [PaypalCheckoutView] (WebView redirect) into awaitable async calls.
+/// Wraps [TigerBayPayPalCheckout] (WebView redirect) into awaitable async calls.
 ///
 /// • [pay]                     — Generic boolean payment (bookings, etc.)
 /// • [presentMembershipPayment]— Membership-specific call that returns a
@@ -32,8 +32,9 @@ class PayPalService {
     bool result = false;
 
     await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => PaypalCheckoutView(
+      CupertinoPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => TigerBayPayPalCheckout(
           sandboxMode: PayPalConfig.isSandbox,
           clientId: PayPalConfig.clientId,
           secretKey: PayPalConfig.secretKey,
@@ -62,20 +63,17 @@ class PayPalService {
             },
           ],
           note: 'Contact TigerBay International for refund queries.',
-          onSuccess: (params) async {
+          onSuccess: (params) {
             debugPrint('[PayPal] ✅ Payment approved: $params');
             result = true;
-            if (context.mounted) Navigator.of(context).pop();
           },
           onError: (error) {
             debugPrint('[PayPal] ❌ Payment error: $error');
             result = false;
-            if (context.mounted) Navigator.of(context).pop();
           },
           onCancel: () {
             debugPrint('[PayPal] ⚠️ Payment cancelled by user.');
             result = false;
-            if (context.mounted) Navigator.of(context).pop();
           },
         ),
       ),
@@ -109,8 +107,9 @@ class PayPalService {
     final tracker = _ResultTracker();
 
     await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => PaypalCheckoutView(
+      CupertinoPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => TigerBayPayPalCheckout(
           sandboxMode: PayPalConfig.isSandbox,
           clientId: PayPalConfig.clientId,
           secretKey: PayPalConfig.secretKey,
@@ -143,7 +142,7 @@ class PayPalService {
           onSuccess: (params) {
             debugPrint('[PayPal] ✅ Membership payment approved: $params');
             final orderId =
-                (params['orderID'] ?? params['paymentID'] ?? '') as String;
+                (params['id'] ?? params['orderID'] ?? params['paymentID'] ?? 'paypal_${DateTime.now().millisecondsSinceEpoch}') as String;
             tracker.complete(PayPalPaymentResult.success(orderId));
           },
           onError: (error) {

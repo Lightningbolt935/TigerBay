@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/qr_timer.dart';
 import '../../../data/repositories/loyalty_repository.dart';
 import '../../../shared/widgets/apple_touch_feedback.dart';
@@ -37,11 +39,18 @@ class _QrDisplayScreenState extends ConsumerState<QrDisplayScreen> {
   Future<void> _init() async {
     final user = ref.read(currentUserProvider);
     if (user == null) return;
+    final profile = ref.read(userProfileProvider);
+    final memberCode = profile?.displayMemberId;
     final secret = await LoyaltyRepository()
         .generateQrSecret(user.id)
         .catchError((_) => 'fallback_${user.id}');
 
-    _qrTimer = QrTimer(userId: user.id, deviceId: 'device', secret: secret);
+    _qrTimer = QrTimer(
+      userId: user.id,
+      memberCode: memberCode,
+      deviceId: 'device',
+      secret: secret,
+    );
     _qrTimer!.start();
     _sub = _qrTimer!.stream.listen((p) {
       if (mounted) {
@@ -60,20 +69,20 @@ class _QrDisplayScreenState extends ConsumerState<QrDisplayScreen> {
     super.dispose();
   }
 
-  void _copyUserId(String userId) {
-    if (userId.isEmpty) return;
+  void _copyMemberId(String memberId) {
+    if (memberId.isEmpty) return;
     HapticFeedback.lightImpact();
-    Clipboard.setData(ClipboardData(text: userId));
+    Clipboard.setData(ClipboardData(text: memberId));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
           children: [
-            const Icon(Icons.check_circle_rounded,
+            const Icon(CupertinoIcons.checkmark_seal_fill,
                 color: AppColors.champagneGold, size: 18),
             const SizedBox(width: 10),
             Text(
-              'Member ID copied to clipboard',
-              style: GoogleFonts.poppins(fontSize: 13, color: Colors.white),
+              'Member ID ($memberId) copied to clipboard',
+              style: AppTypography.footnote.copyWith(color: Colors.white),
             ),
           ],
         ),
@@ -98,6 +107,11 @@ class _QrDisplayScreenState extends ConsumerState<QrDisplayScreen> {
     final profile =
         profileStream.asData?.value ?? ref.watch(userProfileProvider);
     final userId = user?.id ?? '';
+    final memberCode = profile?.displayMemberId ??
+        (userId.isNotEmpty
+            ? (userId.hashCode.abs() % 900000 + 100000).toString()
+            : '100000');
+    final formattedMemberId = 'TB-$memberCode';
     final memberName = profile?.fullName ??
         (user?.email?.split('@').first ?? 'TigerBay Member');
 
@@ -119,14 +133,13 @@ class _QrDisplayScreenState extends ConsumerState<QrDisplayScreen> {
         elevation: 0,
         leading: AppleTouchFeedback(
           onTap: () => Navigator.pop(context),
-          child: const Icon(Icons.arrow_back_ios_new_rounded,
-              size: 18, color: AppColors.textPrimary),
+          child: const Icon(CupertinoIcons.chevron_back,
+              size: 22, color: AppColors.textPrimary),
         ),
         title: Text(
           'Digital Member Pass',
-          style: GoogleFonts.poppins(
+          style: AppTypography.headline.copyWith(
             fontSize: 16,
-            fontWeight: FontWeight.w600,
             color: AppColors.textPrimary,
           ),
         ),
@@ -172,7 +185,7 @@ class _QrDisplayScreenState extends ConsumerState<QrDisplayScreen> {
                     alignment: Alignment.center,
                     child: Text(
                       profile?.initials ?? 'TB',
-                      style: GoogleFonts.poppins(
+                      style: AppTypography.sfPro(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
                         color: AppColors.champagneGold,
@@ -186,9 +199,8 @@ class _QrDisplayScreenState extends ConsumerState<QrDisplayScreen> {
                       children: [
                         Text(
                           memberName,
-                          style: GoogleFonts.poppins(
+                          style: AppTypography.headline.copyWith(
                             fontSize: 15,
-                            fontWeight: FontWeight.w600,
                             color: AppColors.textPrimary,
                           ),
                           maxLines: 1,
@@ -206,8 +218,7 @@ class _QrDisplayScreenState extends ConsumerState<QrDisplayScreen> {
                               ),
                               child: Text(
                                 tierName,
-                                style: GoogleFonts.poppins(
-                                  fontSize: 10,
+                                style: AppTypography.caption2.copyWith(
                                   fontWeight: FontWeight.w700,
                                   color: AppColors.champagneGold,
                                   letterSpacing: 0.8,
@@ -217,7 +228,7 @@ class _QrDisplayScreenState extends ConsumerState<QrDisplayScreen> {
                             const SizedBox(width: 8),
                             Text(
                               '${profile?.stripsBalance ?? 0} Strips',
-                              style: GoogleFonts.poppins(
+                              style: AppTypography.subheadline.copyWith(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
                                 color: AppColors.textSecondary,
@@ -234,9 +245,9 @@ class _QrDisplayScreenState extends ConsumerState<QrDisplayScreen> {
 
             const SizedBox(height: 18),
 
-            // ── Copyable User ID Banner ──────────────────────────────────────
+            // ── Copyable 6-Digit Member ID Banner ────────────────────────────
             AppleTouchFeedback(
-              onTap: () => _copyUserId(userId),
+              onTap: () => _copyMemberId(formattedMemberId),
               child: Container(
                 width: double.infinity,
                 padding:
@@ -252,30 +263,28 @@ class _QrDisplayScreenState extends ConsumerState<QrDisplayScreen> {
                 child: Row(
                   children: [
                     const Icon(
-                      Icons.badge_outlined,
+                      CupertinoIcons.person_crop_square,
                       size: 20,
                       color: AppColors.champagneGold,
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'MEMBER USER ID',
-                            style: GoogleFonts.poppins(
+                            '6-DIGIT MEMBER ID',
+                            style: AppTypography.sectionHeader.copyWith(
                               fontSize: 9.5,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 1.2,
                               color: AppColors.textHint,
                             ),
                           ),
-                          const SizedBox(height: 1),
+                          const SizedBox(height: 2),
                           Text(
-                            userId.isNotEmpty ? userId : 'Loading ID...',
-                            style: GoogleFonts.poppins(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
+                            formattedMemberId,
+                            style: AppTypography.memberIdStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
                               color: AppColors.textPrimary,
                             ),
                             maxLines: 1,
@@ -284,10 +293,30 @@ class _QrDisplayScreenState extends ConsumerState<QrDisplayScreen> {
                         ],
                       ),
                     ),
-                    const Icon(
-                      Icons.copy_rounded,
-                      size: 18,
-                      color: AppColors.champagneGold,
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.gold.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            CupertinoIcons.doc_on_doc,
+                            size: 13,
+                            color: AppColors.champagneGold,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Copy',
+                            style: AppTypography.caption2.copyWith(
+                              color: AppColors.champagneGold,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -354,9 +383,9 @@ class _QrDisplayScreenState extends ConsumerState<QrDisplayScreen> {
 
                   const SizedBox(height: 18),
 
-                  // User ID under QR code
+                  // 6-Digit Member ID under QR code
                   AppleTouchFeedback(
-                    onTap: () => _copyUserId(userId),
+                    onTap: () => _copyMemberId(formattedMemberId),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 14, vertical: 6),
@@ -372,28 +401,23 @@ class _QrDisplayScreenState extends ConsumerState<QrDisplayScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            'ID: ',
-                            style: GoogleFonts.poppins(
-                              fontSize: 11,
+                            'MEMBER ID: ',
+                            style: AppTypography.caption2.copyWith(
                               fontWeight: FontWeight.w600,
                               color: AppColors.champagneGold,
                             ),
                           ),
-                          Flexible(
-                            child: Text(
-                              userId.isNotEmpty ? userId : 'N/A',
-                              style: GoogleFonts.poppins(
-                                fontSize: 11,
-                                color: AppColors.textSecondary,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                          Text(
+                            formattedMemberId,
+                            style: AppTypography.memberIdStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
                             ),
                           ),
                           const SizedBox(width: 6),
                           const Icon(
-                            Icons.copy_rounded,
+                            CupertinoIcons.doc_on_doc,
                             size: 13,
                             color: AppColors.textHint,
                           ),

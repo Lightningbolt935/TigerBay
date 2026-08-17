@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -168,18 +169,18 @@ class HomeScreen extends ConsumerWidget {
                   loading: () => _HeroBanner(
                     title: null,
                     subtitle: null,
-                    onReserve: () => context.go('${AppRoutes.myBookings}/new'),
+                    onReserve: () => context.push(AppRoutes.booking),
                   ),
                   error: (_, __) => _HeroBanner(
                     title: null,
                     subtitle: null,
-                    onReserve: () => context.go('${AppRoutes.myBookings}/new'),
+                    onReserve: () => context.push(AppRoutes.booking),
                   ),
                   data: (config) => _HeroBanner(
                     title: config?.bannerTitle,
                     subtitle: config?.bannerSubtitle,
                     isPromoActive: config?.isPromoActive ?? false,
-                    onReserve: () => context.go('${AppRoutes.myBookings}/new'),
+                    onReserve: () => context.push(AppRoutes.booking),
                   ),
                 ),
               ),
@@ -623,10 +624,11 @@ class _HomeBranchChip extends StatelessWidget {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            height: 36,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
             decoration: BoxDecoration(
               color: AppColors.glassSurface,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(18),
               border: Border.all(
                 color: AppColors.glassBorder,
                 width: 0.8,
@@ -634,30 +636,35 @@ class _HomeBranchChip extends StatelessWidget {
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const Icon(
-                  Icons.location_on_rounded,
+                  CupertinoIcons.location_solid,
                   color: AppColors.gold,
-                  size: 14,
+                  size: 13,
                 ),
-                const SizedBox(width: 6),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 110),
-                  child: Text(
-                    selected?.title ?? 'Select Branch',
-                    style: GoogleFonts.poppins(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
+                const SizedBox(width: 5),
+                Padding(
+                  padding: const EdgeInsets.only(top: 2.0),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 105),
+                    child: Text(
+                      selected?.title ?? 'Select Branch',
+                      style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                const SizedBox(width: 3),
+                const SizedBox(width: 4),
                 const Icon(
-                  Icons.keyboard_arrow_down_rounded,
+                  CupertinoIcons.chevron_down,
                   color: AppColors.textSecondary,
-                  size: 16,
+                  size: 11,
                 ),
               ],
             ),
@@ -696,9 +703,10 @@ class _HomeBranchChip extends StatelessWidget {
             const SizedBox(height: 20),
 
             Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const Icon(Icons.location_on_rounded,
-                    color: AppColors.gold, size: 20),
+                const Icon(CupertinoIcons.location_solid,
+                    color: AppColors.gold, size: 18),
                 const SizedBox(width: 8),
                 Text(
                   'Select Branch',

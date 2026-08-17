@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/apple_touch_feedback.dart';
 
 /// ═══════════════════════════════════════════════════════════════════════════
@@ -11,6 +11,7 @@ class LiveLoyaltyCard extends StatefulWidget {
   final String tierName;
   final int balance;
   final String userName;
+  final String? memberCode;
   final VoidCallback? onTap;
 
   const LiveLoyaltyCard({
@@ -18,6 +19,7 @@ class LiveLoyaltyCard extends StatefulWidget {
     required this.tierName,
     required this.balance,
     required this.userName,
+    this.memberCode,
     this.onTap,
   });
 
@@ -38,7 +40,7 @@ class _LiveLoyaltyCardState extends State<LiveLoyaltyCard>
       duration: const Duration(seconds: 4),
     )..repeat();
 
-    _shimmerAnimation = Tween<double>(begin: -1.8, end: 2.8).animate(
+    _shimmerAnimation = Tween<double>(begin: -0.5, end: 1.5).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeInOutCubic),
     );
   }
@@ -122,26 +124,28 @@ class _LiveLoyaltyCardState extends State<LiveLoyaltyCard>
                 ),
               ),
 
-              // ── Diagonal Gloss Stripe Sweep ───────────────────────────
+              // ── Animated Sheen Sweep ──────────────────────────────────
               AnimatedBuilder(
                 animation: _shimmerAnimation,
                 builder: (context, child) {
-                  return FractionalTranslation(
-                    translation: Offset(_shimmerAnimation.value, 0),
+                  return Positioned.fill(
                     child: Transform.rotate(
-                      angle: -math.pi / 5,
+                      angle: -math.pi / 4,
                       child: Container(
-                        width: 90,
-                        height: 440,
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
-                            colors: [
-                              Colors.white.withValues(alpha: 0.0),
-                              Colors.white.withValues(alpha: 0.15),
-                              Colors.white.withValues(alpha: 0.0),
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            stops: [
+                              math.max(0.0, _shimmerAnimation.value - 0.25),
+                              math.max(0.0, _shimmerAnimation.value),
+                              math.min(1.0, _shimmerAnimation.value + 0.25),
                             ],
-                            begin: Alignment.centerLeft,
-                            end: Alignment.centerRight,
+                            colors: [
+                              Colors.transparent,
+                              Colors.white.withValues(alpha: 0.08),
+                              Colors.transparent,
+                            ],
                           ),
                         ),
                       ),
@@ -196,10 +200,9 @@ class _LiveLoyaltyCardState extends State<LiveLoyaltyCard>
                     // Middle: Available Balance
                     Text(
                       'AVAILABLE BALANCE',
-                      style: GoogleFonts.poppins(
+                      style: AppTypography.sectionHeader.copyWith(
                         color: Colors.white60,
                         fontSize: 10,
-                        fontWeight: FontWeight.w600,
                         letterSpacing: 1.5,
                       ),
                     ),
@@ -210,7 +213,7 @@ class _LiveLoyaltyCardState extends State<LiveLoyaltyCard>
                       children: [
                         Text(
                           '${widget.balance}',
-                          style: GoogleFonts.poppins(
+                          style: AppTypography.sfPro(
                             color: Colors.white,
                             fontSize: 34,
                             fontWeight: FontWeight.w800,
@@ -220,7 +223,7 @@ class _LiveLoyaltyCardState extends State<LiveLoyaltyCard>
                         const SizedBox(width: 6),
                         Text(
                           'STRIPS',
-                          style: GoogleFonts.poppins(
+                          style: AppTypography.sfPro(
                             color: AppColors.champagneGold,
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
@@ -232,16 +235,43 @@ class _LiveLoyaltyCardState extends State<LiveLoyaltyCard>
 
                     const Spacer(),
 
-                    // Bottom: Live Member Name
-                    Text(
-                      widget.userName.toUpperCase(),
-                      style: GoogleFonts.poppins(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 1.8,
-                      ),
-                      overflow: TextOverflow.ellipsis,
+                    // Bottom Row: Live Member Name + 6-Digit ID
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            widget.userName.toUpperCase(),
+                            style: AppTypography.subheadline.copyWith(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 1.5,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (widget.memberCode != null && widget.memberCode!.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.35),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.15),
+                                width: 0.5,
+                              ),
+                            ),
+                            child: Text(
+                              'ID: ${widget.memberCode}',
+                              style: AppTypography.memberIdStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.champagneGold,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ],
                 ),
@@ -281,7 +311,7 @@ class _LiveLoyaltyCardState extends State<LiveLoyaltyCard>
           const SizedBox(width: 5),
           Text(
             displayTier,
-            style: GoogleFonts.poppins(
+            style: AppTypography.caption2.copyWith(
               color: AppColors.champagneGold,
               fontWeight: FontWeight.w700,
               fontSize: 10.5,

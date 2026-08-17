@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../constants/app_colors.dart';
+import 'app_typography.dart';
 
 /// ═══════════════════════════════════════════════════════════════════════════
 /// TigerBay International — Application Theme (Apple Dark Luxury Edition)
 /// ═══════════════════════════════════════════════════════════════════════════
-/// Single dark theme with Cupertino physics, refined typography, and
+/// Single dark theme with Cupertino physics, Apple SF Pro typography, and
 /// glassmorphic styling matching the Apple Human Interface Guidelines.
 class AppTheme {
   AppTheme._();
@@ -15,7 +15,8 @@ class AppTheme {
     final base = ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      fontFamily: 'Poppins',
+      fontFamily: AppTypography.sfProText,
+      fontFamilyFallback: AppTypography.fontFallbacks,
       colorScheme: const ColorScheme.dark(
         primary: AppColors.gold,
         secondary: AppColors.brandRed,
@@ -39,22 +40,16 @@ class AppTheme {
     );
 
     return base.copyWith(
-      textTheme: GoogleFonts.poppinsTextTheme(base.textTheme).apply(
-        bodyColor: AppColors.textPrimary,
-        displayColor: AppColors.textPrimary,
-      ),
+      textTheme: AppTypography.createTextTheme(AppColors.textPrimary),
 
-      // ── App Bar ─────────────────────────────────────────────────────────
+      // ── App Bar (Apple Translucent Header) ───────────────────────────────
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: true,
         iconTheme: const IconThemeData(color: AppColors.textPrimary, size: 20),
-        titleTextStyle: GoogleFonts.poppins(
-          fontSize: 17,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.2,
+        titleTextStyle: AppTypography.headline.copyWith(
           color: AppColors.textPrimary,
         ),
         systemOverlayStyle: const SystemUiOverlayStyle(
@@ -64,7 +59,7 @@ class AppTheme {
         ),
       ),
 
-      // ── Elevated Button ─────────────────────────────────────────────────
+      // ── Elevated Button (Apple Pill Button) ──────────────────────────────
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.gold,
@@ -73,35 +68,31 @@ class AppTheme {
           disabledForegroundColor: Colors.black.withValues(alpha: 0.5),
           minimumSize: const Size(double.infinity, 54),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(28),
+            borderRadius: BorderRadius.circular(16),
           ),
-          textStyle: GoogleFonts.poppins(
-            fontSize: 15,
+          textStyle: AppTypography.callout.copyWith(
             fontWeight: FontWeight.w600,
-            letterSpacing: 0.3,
           ),
           elevation: 0,
         ),
       ),
 
-      // ── Outlined Button ─────────────────────────────────────────────────
+      // ── Outlined Button (Apple Outlined Inset) ───────────────────────────
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.gold,
           minimumSize: const Size(double.infinity, 52),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(28),
+            borderRadius: BorderRadius.circular(16),
           ),
           side: const BorderSide(color: AppColors.gold, width: 1.2),
-          textStyle: GoogleFonts.poppins(
-            fontSize: 14,
+          textStyle: AppTypography.subheadline.copyWith(
             fontWeight: FontWeight.w600,
-            letterSpacing: 0.3,
           ),
         ),
       ),
 
-      // ── Input Decoration ────────────────────────────────────────────────
+      // ── Input Decoration (Apple Inset Rounded Fields) ────────────────────
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: AppColors.surface,
@@ -127,18 +118,16 @@ class AppTheme {
           borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: AppColors.error, width: 1.5),
         ),
-        hintStyle: GoogleFonts.poppins(
+        hintStyle: AppTypography.subheadline.copyWith(
           color: AppColors.textHint,
-          fontSize: 14,
         ),
-        labelStyle: GoogleFonts.poppins(
+        labelStyle: AppTypography.footnote.copyWith(
           color: AppColors.textSecondary,
-          fontSize: 13,
           fontWeight: FontWeight.w600,
         ),
       ),
 
-      // ── Card ────────────────────────────────────────────────────────────
+      // ── Card (Apple Inset Grouped Surface) ───────────────────────────────
       cardTheme: CardThemeData(
         elevation: 0,
         color: AppColors.surface,
@@ -161,19 +150,15 @@ class AppTheme {
         unselectedItemColor: AppColors.textHint,
         type: BottomNavigationBarType.fixed,
         elevation: 0,
-        selectedLabelStyle: GoogleFonts.poppins(
-          fontSize: 10,
+        selectedLabelStyle: AppTypography.caption2.copyWith(
           fontWeight: FontWeight.w600,
-          letterSpacing: 0.5,
         ),
-        unselectedLabelStyle: GoogleFonts.poppins(
-          fontSize: 10,
+        unselectedLabelStyle: AppTypography.caption2.copyWith(
           fontWeight: FontWeight.w400,
-          letterSpacing: 0.5,
         ),
       ),
 
-      // ── Bottom Sheet ────────────────────────────────────────────────────
+      // ── Bottom Sheet (Apple Inset Modal) ─────────────────────────────────
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: AppColors.surface,
         shape: RoundedRectangleBorder(
@@ -183,44 +168,40 @@ class AppTheme {
         showDragHandle: true,
       ),
 
-      // ── Dialog ──────────────────────────────────────────────────────────
+      // ── Dialog (Apple Alert Dialog) ──────────────────────────────────────
       dialogTheme: DialogThemeData(
         backgroundColor: AppColors.surface,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(22),
           side: const BorderSide(color: AppColors.glassBorder, width: 0.8),
         ),
-        titleTextStyle: GoogleFonts.poppins(
+        titleTextStyle: AppTypography.headline.copyWith(
           fontSize: 18,
-          fontWeight: FontWeight.w700,
           color: AppColors.textPrimary,
         ),
       ),
 
-      // ── Snack Bar ───────────────────────────────────────────────────────
+      // ── Snack Bar (Apple Dynamic Toast) ──────────────────────────────────
       snackBarTheme: SnackBarThemeData(
         backgroundColor: const Color(0xFF1E1E22),
-        contentTextStyle: GoogleFonts.poppins(
-          fontSize: 13,
-          fontWeight: FontWeight.w500,
+        contentTextStyle: AppTypography.subheadline.copyWith(
           color: AppColors.textPrimary,
         ),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(16),
           side: const BorderSide(color: AppColors.glassBorder, width: 0.8),
         ),
         behavior: SnackBarBehavior.floating,
       ),
 
-      // ── Chip ────────────────────────────────────────────────────────────
+      // ── Chip (Apple Capsule Chip) ────────────────────────────────────────
       chipTheme: ChipThemeData(
         backgroundColor: Colors.transparent,
         side: const BorderSide(color: AppColors.gold, width: 1.0),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
         ),
-        labelStyle: GoogleFonts.poppins(
-          fontSize: 11,
+        labelStyle: AppTypography.caption2.copyWith(
           fontWeight: FontWeight.w600,
           color: AppColors.gold,
           letterSpacing: 0.8,
@@ -233,12 +214,10 @@ class AppTheme {
         indicatorColor: AppColors.gold,
         labelColor: AppColors.textPrimary,
         unselectedLabelColor: AppColors.textSecondary,
-        labelStyle: GoogleFonts.poppins(
-          fontSize: 13,
+        labelStyle: AppTypography.subheadline.copyWith(
           fontWeight: FontWeight.w600,
         ),
-        unselectedLabelStyle: GoogleFonts.poppins(
-          fontSize: 13,
+        unselectedLabelStyle: AppTypography.subheadline.copyWith(
           fontWeight: FontWeight.w400,
         ),
       ),

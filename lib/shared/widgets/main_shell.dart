@@ -1,10 +1,11 @@
 import 'dart:ui';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:tigerbay_app/core/constants/app_colors.dart';
 import 'package:tigerbay_app/core/constants/app_routes.dart';
+import 'package:tigerbay_app/core/theme/app_typography.dart';
 import 'apple_touch_feedback.dart';
 
 /// ═══════════════════════════════════════════════════════════════════════════
@@ -17,32 +18,32 @@ class MainShell extends StatelessWidget {
   static const List<_NavItem> _items = [
     _NavItem(
       label: 'Feed',
-      icon: Icons.rss_feed_rounded,
-      activeIcon: Icons.rss_feed_rounded,
+      icon: CupertinoIcons.square_grid_2x2,
+      activeIcon: CupertinoIcons.square_grid_2x2_fill,
       route: AppRoutes.home,
     ),
     _NavItem(
       label: 'Menu',
-      icon: Icons.restaurant_menu_outlined,
-      activeIcon: Icons.restaurant_menu_rounded,
+      icon: CupertinoIcons.book,
+      activeIcon: CupertinoIcons.book_fill,
       route: AppRoutes.menu,
     ),
     _NavItem(
       label: 'Wallet',
-      icon: Icons.account_balance_wallet_outlined,
-      activeIcon: Icons.account_balance_wallet_rounded,
+      icon: CupertinoIcons.creditcard,
+      activeIcon: CupertinoIcons.creditcard_fill,
       route: AppRoutes.loyalty,
     ),
     _NavItem(
       label: 'Rewards',
-      icon: Icons.card_giftcard_outlined,
-      activeIcon: Icons.card_giftcard_rounded,
+      icon: CupertinoIcons.gift,
+      activeIcon: CupertinoIcons.gift_fill,
       route: AppRoutes.rewardStore,
     ),
     _NavItem(
       label: 'Profile',
-      icon: Icons.person_outline_rounded,
-      activeIcon: Icons.person_rounded,
+      icon: CupertinoIcons.person_crop_circle,
+      activeIcon: CupertinoIcons.person_crop_circle_fill,
       route: AppRoutes.profile,
     ),
   ];
@@ -143,7 +144,7 @@ class MainShell extends StatelessWidget {
                               const SizedBox(height: 3),
                               Text(
                                 item.label,
-                                style: GoogleFonts.poppins(
+                                style: AppTypography.caption2.copyWith(
                                   fontSize: 10,
                                   fontWeight: isSelected
                                       ? FontWeight.w600

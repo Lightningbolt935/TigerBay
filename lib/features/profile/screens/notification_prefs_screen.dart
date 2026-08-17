@@ -1,7 +1,10 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/theme/app_typography.dart';
+import '../../../shared/widgets/apple_touch_feedback.dart';
 
 // ── Notification preference keys ──────────────────────────────────────────────
 const _kBookingReminders = 'notif_booking_reminders';
@@ -58,29 +61,28 @@ class NotifPrefsNotifier extends StateNotifier<NotifPrefsState> {
     );
   }
 
-  Future<void> toggle(String key, bool value) async {
+  Future<void> toggle(String key, bool val) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(key, value);
+    await prefs.setBool(key, val);
     switch (key) {
       case _kBookingReminders:
-        state = state.copyWith(bookingReminders: value);
+        state = state.copyWith(bookingReminders: val);
       case _kLoyaltyUpdates:
-        state = state.copyWith(loyaltyUpdates: value);
+        state = state.copyWith(loyaltyUpdates: val);
       case _kPromotions:
-        state = state.copyWith(promotions: value);
+        state = state.copyWith(promotions: val);
       case _kNewMenuItems:
-        state = state.copyWith(newMenuItems: value);
+        state = state.copyWith(newMenuItems: val);
       case _kMemberEvents:
-        state = state.copyWith(memberEvents: value);
+        state = state.copyWith(memberEvents: val);
     }
   }
 }
 
 final notifPrefsProvider =
     StateNotifierProvider<NotifPrefsNotifier, NotifPrefsState>(
-        (_) => NotifPrefsNotifier());
-
-// ── Screen ────────────────────────────────────────────────────────────────────
+  (ref) => NotifPrefsNotifier(),
+);
 
 class NotificationPrefsScreen extends ConsumerWidget {
   const NotificationPrefsScreen({super.key});
@@ -93,64 +95,87 @@ class NotificationPrefsScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: AppColors.brandBlack,
       appBar: AppBar(
-        backgroundColor: AppColors.brandBlack,
+        backgroundColor: AppColors.surface,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios,
-              size: 20, color: AppColors.textPrimary),
-          onPressed: () => Navigator.pop(context),
+        leading: AppleTouchFeedback(
+          onTap: () => Navigator.pop(context),
+          child: const Padding(
+            padding: EdgeInsets.only(left: 12),
+            child: Icon(
+              CupertinoIcons.chevron_back,
+              size: 22,
+              color: AppColors.textPrimary,
+            ),
+          ),
         ),
-        title: const Text(
+        title: Text(
           'Notifications',
-          style: TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.w600,
+          style: AppTypography.headline.copyWith(
             color: AppColors.textPrimary,
-            fontFamily: 'Poppins',
+            fontSize: 17,
           ),
         ),
         centerTitle: true,
       ),
       body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
         children: [
-          const _SectionLabel('BOOKINGS'),
-          const SizedBox(height: 8),
-          _NotifTile(
-            title: 'Booking Reminders',
-            subtitle: 'Reminder 24h before your reservation',
-            value: prefs.bookingReminders,
-            onChanged: (v) => notifier.toggle(_kBookingReminders, v),
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 8),
+            child: Text('BOOKINGS', style: AppTypography.sectionHeader),
           ),
-          const SizedBox(height: 20),
-          const _SectionLabel('LOYALTY'),
-          const SizedBox(height: 8),
-          _NotifTile(
-            title: 'Points Updates',
-            subtitle: 'When you earn or redeem points',
-            value: prefs.loyaltyUpdates,
-            onChanged: (v) => notifier.toggle(_kLoyaltyUpdates, v),
+          _AppleGroupedCard(
+            tiles: [
+              _NotifRow(
+                title: 'Booking Reminders',
+                subtitle: 'Reminder 24h before your reservation',
+                value: prefs.bookingReminders,
+                onChanged: (v) => notifier.toggle(_kBookingReminders, v),
+              ),
+            ],
           ),
-          const SizedBox(height: 20),
-          const _SectionLabel('PROMOTIONS'),
-          const SizedBox(height: 8),
-          _NotifTile(
-            title: 'Member Promotions',
-            subtitle: 'Exclusive offers and deals',
-            value: prefs.promotions,
-            onChanged: (v) => notifier.toggle(_kPromotions, v),
+          const SizedBox(height: 24),
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 8),
+            child: Text('LOYALTY & STRIPS', style: AppTypography.sectionHeader),
           ),
-          _NotifTile(
-            title: 'New Menu Items',
-            subtitle: 'When new dishes or cocktails are added',
-            value: prefs.newMenuItems,
-            onChanged: (v) => notifier.toggle(_kNewMenuItems, v),
+          _AppleGroupedCard(
+            tiles: [
+              _NotifRow(
+                title: 'Points & Strips Updates',
+                subtitle: 'When you earn or redeem Strips',
+                value: prefs.loyaltyUpdates,
+                onChanged: (v) => notifier.toggle(_kLoyaltyUpdates, v),
+              ),
+            ],
           ),
-          _NotifTile(
-            title: 'Member Events',
-            subtitle: 'Exclusive events at your branch',
-            value: prefs.memberEvents,
-            onChanged: (v) => notifier.toggle(_kMemberEvents, v),
+          const SizedBox(height: 24),
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 8),
+            child: Text('PROMOTIONS & EVENTS', style: AppTypography.sectionHeader),
+          ),
+          _AppleGroupedCard(
+            tiles: [
+              _NotifRow(
+                title: 'Member Promotions',
+                subtitle: 'Exclusive offers and dining deals',
+                value: prefs.promotions,
+                onChanged: (v) => notifier.toggle(_kPromotions, v),
+              ),
+              _NotifRow(
+                title: 'New Menu Items',
+                subtitle: 'When new dishes or cocktails are added',
+                value: prefs.newMenuItems,
+                onChanged: (v) => notifier.toggle(_kNewMenuItems, v),
+              ),
+              _NotifRow(
+                title: 'Member Events',
+                subtitle: 'Exclusive events at your home branch',
+                value: prefs.memberEvents,
+                onChanged: (v) => notifier.toggle(_kMemberEvents, v),
+              ),
+            ],
           ),
         ],
       ),
@@ -158,32 +183,38 @@ class NotificationPrefsScreen extends ConsumerWidget {
   }
 }
 
-class _SectionLabel extends StatelessWidget {
-  final String text;
-  const _SectionLabel(this.text);
+class _AppleGroupedCard extends StatelessWidget {
+  final List<_NotifRow> tiles;
+  const _AppleGroupedCard({required this.tiles});
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: const TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 1.3,
-        color: AppColors.textSecondary,
-        fontFamily: 'Poppins',
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.glassBorder, width: 0.8),
+      ),
+      child: Column(
+        children: [
+          for (int i = 0; i < tiles.length; i++) ...[
+            tiles[i],
+            if (i < tiles.length - 1)
+              const Divider(height: 1, indent: 16, color: AppColors.glassBorder),
+          ],
+        ],
       ),
     );
   }
 }
 
-class _NotifTile extends StatelessWidget {
+class _NotifRow extends StatelessWidget {
   final String title;
   final String subtitle;
   final bool value;
   final ValueChanged<bool> onChanged;
 
-  const _NotifTile({
+  const _NotifRow({
     required this.title,
     required this.subtitle,
     required this.value,
@@ -192,14 +223,8 @@ class _NotifTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
           Expanded(
@@ -208,20 +233,18 @@ class _NotifTile extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
-                    fontSize: 14,
+                  style: AppTypography.body.copyWith(
+                    fontSize: 15,
                     fontWeight: FontWeight.w500,
                     color: AppColors.textPrimary,
-                    fontFamily: 'Poppins',
                   ),
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: const TextStyle(
+                  style: AppTypography.footnote.copyWith(
                     fontSize: 12,
                     color: AppColors.textSecondary,
-                    fontFamily: 'Poppins',
                   ),
                 ),
               ],

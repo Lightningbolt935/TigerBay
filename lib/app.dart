@@ -18,8 +18,6 @@ import 'package:tigerbay_app/shared/widgets/main_shell.dart';
 import 'package:tigerbay_app/features/auth/screens/splash_screen.dart';
 import 'package:tigerbay_app/features/auth/screens/login_screen.dart';
 import 'package:tigerbay_app/features/auth/screens/otp_screen.dart';
-// ── Update this import in app.dart ──────────────────────────────────────────
-import 'package:tigerbay_app/features/auth/screens/register_screen.dart';
 import 'package:tigerbay_app/features/auth/screens/email_verification_pending_screen.dart';
 import 'package:tigerbay_app/features/membership/screens/membership_paywall_screen.dart';
 
@@ -215,7 +213,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: AppRoutes.register,
-        builder: (_, __) => const RegisterScreen(),
+        builder: (_, __) => const LoginScreen(initialTabIndex: 1),
       ),
       GoRoute(
         path: AppRoutes.pendingVerification,
@@ -231,10 +229,56 @@ final routerProvider = Provider<GoRouter>((ref) {
       // ── Notifications Inbox (full-screen, outside shell) ──────────
       GoRoute(
         path: AppRoutes.notifications,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (_, __) => const NotificationsScreen(),
       ),
 
-      // ── Main shell with bottom nav ──────────────────────────────────
+      // ── Full-screen Modal / Sub-routes (Completely OUTSIDE ShellRoute) ──
+      GoRoute(
+        path: AppRoutes.editProfile,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (_, __) => const EditProfileScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.notificationPrefs,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (_, __) => const NotificationPrefsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.qrDisplay,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (_, __) => const QrDisplayScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.transactionHistory,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (_, __) => const TransactionHistoryScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.linkPhysicalCard,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (_, __) => const LinkPhysicalCardScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.redeem,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (_, __) => const RedeemScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.booking,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (_, __) => const BookingScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.bookingConfirm,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) {
+          final data = state.extra as Map<String, dynamic>? ?? {};
+          return BookingConfirmScreen(bookingData: data);
+        },
+      ),
+
+      // ── Main Shell with Bottom Nav Dock ─────────────────────────────
       ShellRoute(
         navigatorKey: shellNavigatorKey,
         builder: (context, state, child) => MainShell(child: child),
@@ -261,24 +305,6 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.loyalty,
             builder: (_, __) => const LoyaltyScreen(),
-            routes: [
-              GoRoute(
-                path: 'qr',
-                builder: (_, __) => const QrDisplayScreen(),
-              ),
-              GoRoute(
-                path: 'transactions',
-                builder: (_, __) => const TransactionHistoryScreen(),
-              ),
-              GoRoute(
-                path: 'link-card',
-                builder: (_, __) => const LinkPhysicalCardScreen(),
-              ),
-              GoRoute(
-                path: 'redeem',
-                builder: (_, __) => const RedeemScreen(),
-              ),
-            ],
           ),
 
           // Reward Store
@@ -291,35 +317,12 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.myBookings,
             builder: (_, __) => const MyBookingsScreen(),
-            routes: [
-              GoRoute(
-                path: 'new',
-                builder: (_, __) => const BookingScreen(),
-              ),
-              GoRoute(
-                path: 'confirm',
-                builder: (context, state) {
-                  final data = state.extra as Map<String, dynamic>? ?? {};
-                  return BookingConfirmScreen(bookingData: data);
-                },
-              ),
-            ],
           ),
 
           // Profile / Settings
           GoRoute(
             path: AppRoutes.profile,
             builder: (_, __) => const ProfileScreen(),
-            routes: [
-              GoRoute(
-                path: 'edit',
-                builder: (_, __) => const EditProfileScreen(),
-              ),
-              GoRoute(
-                path: 'notifications',
-                builder: (_, __) => const NotificationPrefsScreen(),
-              ),
-            ],
           ),
         ],
       ),

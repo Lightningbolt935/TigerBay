@@ -21,6 +21,8 @@ dependencies:
 
   # Payments
   flutter_paypal_payment: ^1.0.8
+  flutter_inappwebview: ^6.0.0
+  dio: ^5.4.0
   # flutter_stripe: coming soon — add pk_test_... key to .env first
 
   # Auth (Social)
@@ -34,6 +36,8 @@ dependencies:
   google_fonts: ^6.2.1
 
   # UI & Utilities
+  cupertino_icons: ^1.0.8
+  image_picker: ^1.1.2
   cached_network_image: ^3.3.1
   shimmer: ^3.0.0
   url_launcher: ^6.2.5

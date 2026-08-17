@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -89,6 +90,7 @@ class LoyaltyScreen extends ConsumerWidget {
                     tierName: tierName,
                     balance: profile?.stripsBalance ?? 0,
                     userName: profile?.fullName ?? 'TigerBay Member',
+                    memberCode: profile?.displayMemberId,
                     onTap: () => context.push(AppRoutes.qrDisplay),
                   );
                 },
@@ -108,6 +110,7 @@ class LoyaltyScreen extends ConsumerWidget {
                     tierName: tierName,
                     balance: fallback?.stripsBalance ?? 0,
                     userName: fallback?.fullName ?? 'TigerBay Member',
+                    memberCode: fallback?.displayMemberId,
                     onTap: () => context.push(AppRoutes.qrDisplay),
                   );
                 },
@@ -130,28 +133,28 @@ class LoyaltyScreen extends ConsumerWidget {
                   _ActionCard(
                     title: 'Live QR Pass',
                     subtitle: 'Scan at lounge to earn & spend',
-                    icon: Icons.qr_code_scanner_rounded,
+                    icon: CupertinoIcons.qrcode_viewfinder,
                     iconColor: AppColors.gold,
                     onTap: () => context.push(AppRoutes.qrDisplay),
                   ),
                   _ActionCard(
                     title: 'Redeem Perks',
                     subtitle: 'Spend Strips on gifts & perks',
-                    icon: Icons.card_giftcard_rounded,
+                    icon: CupertinoIcons.gift_fill,
                     iconColor: AppColors.brandRed,
                     onTap: () => context.push(AppRoutes.rewardStore),
                   ),
                   _ActionCard(
                     title: 'Physical Card',
                     subtitle: 'Link membership card badge',
-                    icon: Icons.credit_card_rounded,
+                    icon: CupertinoIcons.creditcard_fill,
                     iconColor: const Color(0xFFE5A93C),
                     onTap: () => context.push(AppRoutes.linkPhysicalCard),
                   ),
                   _ActionCard(
                     title: 'Ledger Audit',
                     subtitle: 'View points history & logs',
-                    icon: Icons.receipt_long_rounded,
+                    icon: CupertinoIcons.chart_bar_alt_fill,
                     iconColor: const Color(0xFF38BDF8),
                     onTap: () => context.push(AppRoutes.transactionHistory),
                   ),
@@ -191,8 +194,8 @@ class LoyaltyScreen extends ConsumerWidget {
                         ),
                         const SizedBox(width: 4),
                         const Icon(
-                          Icons.chevron_right_rounded,
-                          size: 16,
+                          CupertinoIcons.chevron_right,
+                          size: 14,
                           color: AppColors.gold,
                         ),
                       ],

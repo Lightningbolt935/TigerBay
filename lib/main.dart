@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:tigerbay_app/core/config/env_config.dart';
 import 'app.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ── Load env variables ─────────────────────────────────────────────────────
-  await dotenv.load(fileName: '.env');
+  // ── Load Environment Configuration (Safe for CI/Docker/Azure/Local) ────────
+  await EnvConfig.initialize();
 
   // ── Mobile-only system chrome settings ─────────────────────────────────────
   // SystemChrome APIs are not supported on web and will throw if called.
@@ -29,10 +29,10 @@ Future<void> main() async {
     ));
   }
 
-  // ── Init Supabase (works on all platforms) ─────────────────────────────────
+  // ── Init Supabase (works on all platforms: Web, Android, iOS, Windows) ─────
   await Supabase.initialize(
-    url: dotenv.env['SUPABASE_URL']!,
-    publishableKey: dotenv.env['SUPABASE_ANON_KEY']!,
+    url: EnvConfig.supabaseUrl,
+    publishableKey: EnvConfig.supabaseAnonKey,
   );
 
   // ── TODO: Init Stripe when API key is ready ────────────────────────────────

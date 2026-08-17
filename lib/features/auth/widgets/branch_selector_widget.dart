@@ -1,16 +1,18 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tigerbay_app/data/models/branch_model.dart';
 import 'package:tigerbay_app/core/constants/app_colors.dart';
+import 'package:tigerbay_app/core/theme/app_typography.dart';
 import 'package:tigerbay_app/features/auth/providers/auth_provider.dart';
 
 /// A dropdown location selector that fetches active branches from Supabase
 /// and matches the existing TigerBay form input style precisely:
-///   - BorderRadius.circular(14)
-///   - Border color: AppColors.border (#E5E5EA)
-///   - Focused border: AppColors.gold gold, width 1.5
+///   - BorderRadius.circular(16)
+///   - Border color: Color(0xFF28282B)
+///   - Focused border: AppColors.champagneGold, width 1.2
 ///   - Error border: AppColors.error red
-///   - Poppins font throughout
+///   - Apple typography throughout
 ///   - Padding: horizontal 16, vertical 16
 ///
 /// Usage:
@@ -45,14 +47,14 @@ class _BranchSelectorWidgetState extends ConsumerState<BranchSelectorWidget> {
 
   Color get _borderColor {
     if (widget.showError) return AppColors.error;
-    if (_isFocused) return AppColors.gold;
-    return AppColors.border;
+    if (_isFocused) return AppColors.champagneGold;
+    return const Color(0xFF28282B);
   }
 
   double get _borderWidth {
     if (widget.showError) return 1.0;
-    if (_isFocused) return 1.5;
-    return 1.0;
+    if (_isFocused) return 1.2;
+    return 0.9;
   }
 
   void _openPicker(List<Branch> branches) async {
@@ -60,9 +62,10 @@ class _BranchSelectorWidgetState extends ConsumerState<BranchSelectorWidget> {
 
     await showModalBottomSheet<Branch>(
       context: context,
-      backgroundColor: const Color(0xFF0A0A0A),
+      backgroundColor: const Color(0xFF141416),
+      barrierColor: Colors.black.withValues(alpha: 0.75),
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       builder: (ctx) => _BranchPickerSheet(
         branches: branches,
@@ -84,34 +87,29 @@ class _BranchSelectorWidgetState extends ConsumerState<BranchSelectorWidget> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          widget.label,
-          style: const TextStyle(
-            fontFamily: 'Poppins',
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
+        if (widget.label.isNotEmpty) ...[
+          Text(
+            widget.label,
+            style: AppTypography.caption1.copyWith(
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.8,
+            ),
           ),
-        ),
-        const SizedBox(height: 8),
+          const SizedBox(height: 8),
+        ],
         branchAsync.when(
           loading: () => _buildContainer(
-            child: const Row(
+            child: Row(
               children: [
-                SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppColors.gold,
-                  ),
+                const CupertinoActivityIndicator(
+                  radius: 8,
+                  color: AppColors.champagneGold,
                 ),
-                SizedBox(width: 12),
+                const SizedBox(width: 12),
                 Text(
                   'Loading venues…',
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 15,
+                  style: AppTypography.body.copyWith(
                     color: AppColors.textHint,
                   ),
                 ),
@@ -126,16 +124,17 @@ class _BranchSelectorWidgetState extends ConsumerState<BranchSelectorWidget> {
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 border: Border.all(color: Colors.red.withValues(alpha: 0.5)),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.error_outline, color: Colors.red),
+                  const Icon(CupertinoIcons.exclamationmark_triangle,
+                      color: Colors.red, size: 18),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'Debug Error: ${error.toString()}',
-                      style: const TextStyle(fontFamily: 'Poppins', color: Colors.red, fontSize: 11),
+                      style: AppTypography.caption1.copyWith(color: Colors.red),
                     ),
                   ),
                 ],
@@ -146,17 +145,15 @@ class _BranchSelectorWidgetState extends ConsumerState<BranchSelectorWidget> {
             child: Row(
               children: [
                 const Icon(
-                  Icons.location_on_outlined,
+                  CupertinoIcons.location_solid,
                   size: 18,
-                  color: AppColors.brandRed,
+                  color: AppColors.champagneGold,
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     widget.selectedBranch?.title ?? widget.hint,
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 15,
+                    style: AppTypography.body.copyWith(
                       color: widget.selectedBranch != null
                           ? AppColors.textPrimary
                           : AppColors.textHint,
@@ -165,9 +162,9 @@ class _BranchSelectorWidgetState extends ConsumerState<BranchSelectorWidget> {
                   ),
                 ),
                 const Icon(
-                  Icons.keyboard_arrow_down_rounded,
-                  size: 20,
-                  color: Colors.white38,
+                  CupertinoIcons.chevron_down,
+                  size: 16,
+                  color: AppColors.textHint,
                 ),
               ],
             ),
@@ -176,11 +173,9 @@ class _BranchSelectorWidgetState extends ConsumerState<BranchSelectorWidget> {
         ),
         if (widget.showError) ...[
           const SizedBox(height: 6),
-          const Text(
+          Text(
             'Please select your home venue to continue',
-            style: TextStyle(
-              fontFamily: 'Poppins',
-              fontSize: 12,
+            style: AppTypography.caption1.copyWith(
               color: AppColors.error,
             ),
           ),
@@ -200,8 +195,8 @@ class _BranchSelectorWidgetState extends ConsumerState<BranchSelectorWidget> {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         decoration: BoxDecoration(
-          color: const Color(0xFF1C1C1E),
-          borderRadius: BorderRadius.circular(14),
+          color: const Color(0xFF141416),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: _borderColor,
             width: _borderWidth,
@@ -241,29 +236,26 @@ class _BranchPickerSheet extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        const Text(
+        Text(
           'Select Your Home Venue',
-          style: TextStyle(
-            fontFamily: 'Poppins',
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
+          style: AppTypography.title3.copyWith(
+            fontWeight: FontWeight.w700,
             color: AppColors.textPrimary,
           ),
         ),
-        const SizedBox(height: 8),
-        const Text(
+        const SizedBox(height: 4),
+        Text(
           'Your closest TigerBay International location',
-          style: TextStyle(
-            fontFamily: 'Poppins',
-            fontSize: 12,
+          style: AppTypography.caption1.copyWith(
             color: AppColors.textSecondary,
           ),
         ),
-        const SizedBox(height: 12),
-        const Divider(height: 1),
+        const SizedBox(height: 16),
+        const Divider(color: Color(0xFF28282B), height: 1),
         Flexible(
           child: ListView.separated(
             shrinkWrap: true,
+            physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.symmetric(vertical: 8),
             itemCount: branches.length,
             separatorBuilder: (_, __) =>
@@ -274,47 +266,51 @@ class _BranchPickerSheet extends StatelessWidget {
 
               return ListTile(
                 contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
                 leading: Container(
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? AppColors.brandRed.withValues(alpha: 0.1)
-                        : Colors.white10,
-                    borderRadius: BorderRadius.circular(10),
+                        ? AppColors.champagneGold.withValues(alpha: 0.15)
+                        : const Color(0xFF1C1C1E),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isSelected
+                          ? AppColors.champagneGold.withValues(alpha: 0.4)
+                          : const Color(0xFF28282B),
+                      width: 0.8,
+                    ),
                   ),
                   child: Icon(
-                    Icons.storefront_outlined,
-                    size: 20,
+                    CupertinoIcons.building_2_fill,
+                    size: 18,
                     color: isSelected
-                        ? AppColors.brandRed
-                        : Colors.white38,
+                        ? AppColors.champagneGold
+                        : AppColors.textSecondary,
                   ),
                 ),
                 title: Text(
                   branch.title,
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 15,
+                  style: AppTypography.body.copyWith(
                     fontWeight:
-                        isSelected ? FontWeight.w600 : FontWeight.w400,
-                    color: AppColors.textPrimary,
+                        isSelected ? FontWeight.w700 : FontWeight.w500,
+                    color: isSelected
+                        ? AppColors.champagneGold
+                        : AppColors.textPrimary,
                   ),
                 ),
                 subtitle: branch.city != null
                     ? Text(
                         branch.city!,
-                        style: const TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 12,
+                        style: AppTypography.caption1.copyWith(
                           color: AppColors.textSecondary,
                         ),
                       )
                     : null,
                 trailing: isSelected
-                    ? const Icon(Icons.check_circle_rounded,
-                        color: AppColors.gold, size: 22)
+                    ? const Icon(CupertinoIcons.checkmark_circle_fill,
+                        color: AppColors.champagneGold, size: 20)
                     : null,
                 onTap: () => onSelect(branch),
               );

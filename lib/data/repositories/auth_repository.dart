@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:math' as dart_math;
 
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:tigerbay_app/core/config/env_config.dart';
 import 'package:tigerbay_app/data/models/user_model.dart';
 import 'package:tigerbay_app/core/utils/device_binding.dart';
 
@@ -263,10 +263,7 @@ class AuthRepository {
   // ── Google ──────────────────────────────────────────────────────────────────
 
   Future<AuthResponse> signInWithGoogle() async {
-    final envClientId = dotenv.env['GOOGLE_WEB_CLIENT_ID'];
-    final webClientId = (envClientId != null && envClientId.contains('.apps.googleusercontent.com'))
-        ? envClientId
-        : '887005202939-17lt5hs4rae4i8rrslc86i70velaqich.apps.googleusercontent.com';
+    final webClientId = EnvConfig.googleWebClientId;
 
     final googleSignIn = GoogleSignIn(
       clientId: kIsWeb ? webClientId : null,
@@ -307,7 +304,7 @@ class AuthRepository {
   // ── Apple ───────────────────────────────────────────────────────────────────
 
   Future<void> signInWithApple() async {
-    final appScheme = dotenv.env['APP_SCHEME'] ?? 'io.tigerbay.app';
+    final appScheme = EnvConfig.appScheme;
     await _client.auth.signInWithOAuth(
       OAuthProvider.apple,
       redirectTo: '$appScheme://login-callback',
@@ -317,7 +314,7 @@ class AuthRepository {
   // ── Facebook ─────────────────────────────────────────────────────────────────
 
   Future<void> signInWithFacebook() async {
-    final appScheme = dotenv.env['APP_SCHEME'] ?? 'io.tigerbay.app';
+    final appScheme = EnvConfig.appScheme;
     await _client.auth.signInWithOAuth(
       OAuthProvider.facebook,
       redirectTo: '$appScheme://login-callback',

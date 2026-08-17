@@ -1,0 +1,222 @@
+name: Production Release & Azure Deployment
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      deploy_to_azure:
+        description: 'Deploy Web to Azure Static Web Apps'
+        required: false
+        default: true
+        type: boolean
+
+concurrency:
+  group: production-release
+  cancel-in-progress: false
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # 1. Quality Gate: Linting & Automated Tests
+  # ═══════════════════════════════════════════════════════════════════════════
+  quality-gate:
+    name: Lint & Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Analyze Dart Code
+        run: flutter analyze lib/ test/
+
+      - name: Run Automated Unit Tests
+        run: flutter test --coverage
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # 2. Build Android Production (APK & App Bundle .aab)
+  # ═══════════════════════════════════════════════════════════════════════════
+  build-android-production:
+    name: Build Android (APK & AAB)
+    needs: quality-gate
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: 'stable'
+          cache: true
+
+      - name: Make gradlew executable
+        run: chmod +x android/gradlew
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build Android Release APK
+        run: |
+          flutter build apk --release \
+            --dart-define=SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
+            --dart-define=SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}" \
+            --dart-define=STRIPE_PUBLISHABLE_KEY="${{ secrets.STRIPE_PUBLISHABLE_KEY }}" \
+            --dart-define=PAYPAL_CLIENT_ID="${{ secrets.PAYPAL_CLIENT_ID }}" \
+            --dart-define=PAYPAL_CLIENT_SECRET="${{ secrets.PAYPAL_CLIENT_SECRET }}" \
+            --dart-define=PAYPAL_MODE="${{ secrets.PAYPAL_MODE || 'live' }}" \
+            --dart-define=GOOGLE_WEB_CLIENT_ID="${{ secrets.GOOGLE_WEB_CLIENT_ID }}" \
+            --dart-define=APP_SCHEME="${{ secrets.APP_SCHEME || 'io.tigerbay.app' }}" \
+            --dart-define=APP_ENV=production
+
+      - name: Build Android App Bundle (Google Play Store)
+        run: |
+          flutter build appbundle --release \
+            --dart-define=SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
+            --dart-define=SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}" \
+            --dart-define=STRIPE_PUBLISHABLE_KEY="${{ secrets.STRIPE_PUBLISHABLE_KEY }}" \
+            --dart-define=PAYPAL_CLIENT_ID="${{ secrets.PAYPAL_CLIENT_ID }}" \
+            --dart-define=PAYPAL_CLIENT_SECRET="${{ secrets.PAYPAL_CLIENT_SECRET }}" \
+            --dart-define=PAYPAL_MODE="${{ secrets.PAYPAL_MODE || 'live' }}" \
+            --dart-define=GOOGLE_WEB_CLIENT_ID="${{ secrets.GOOGLE_WEB_CLIENT_ID }}" \
+            --dart-define=APP_SCHEME="${{ secrets.APP_SCHEME || 'io.tigerbay.app' }}" \
+            --dart-define=APP_ENV=production
+
+      - name: Upload Android Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: tigerbay-android-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Upload Android Play Store AAB Bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: tigerbay-android-release-bundle
+          path: build/app/outputs/bundle/release/app-release.aab
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # 3. Build & Deploy Flutter Web to Azure Static Web Apps
+  # ═══════════════════════════════════════════════════════════════════════════
+  deploy-azure-web:
+    name: Build & Deploy Web (Azure)
+    needs: quality-gate
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build Production Flutter Web
+        run: |
+          flutter build web --release \
+            --dart-define=SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
+            --dart-define=SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}" \
+            --dart-define=STRIPE_PUBLISHABLE_KEY="${{ secrets.STRIPE_PUBLISHABLE_KEY }}" \
+            --dart-define=PAYPAL_CLIENT_ID="${{ secrets.PAYPAL_CLIENT_ID }}" \
+            --dart-define=PAYPAL_CLIENT_SECRET="${{ secrets.PAYPAL_CLIENT_SECRET }}" \
+            --dart-define=PAYPAL_MODE="${{ secrets.PAYPAL_MODE || 'live' }}" \
+            --dart-define=GOOGLE_WEB_CLIENT_ID="${{ secrets.GOOGLE_WEB_CLIENT_ID }}" \
+            --dart-define=APP_SCHEME="${{ secrets.APP_SCHEME || 'io.tigerbay.app' }}" \
+            --dart-define=APP_ENV=production
+
+      - name: Copy Azure SWA Config into Output
+        run: |
+          if [ -f web/staticwebapp.config.json ]; then
+            cp web/staticwebapp.config.json build/web/
+          fi
+
+      - name: Upload Web Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tigerbay-web-production-bundle
+          path: build/web
+
+      - name: Deploy to Azure Static Web Apps
+        if: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN != '' }}
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: 'upload'
+          app_location: 'build/web'
+          skip_app_build: true
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # 4. Build iOS Release Bundle
+  # ═══════════════════════════════════════════════════════════════════════════
+  build-ios-production:
+    name: Build iOS App & IPA
+    needs: quality-gate
+    runs-on: macos-14
+    environment: production
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build iOS Release (No codesign for CI artifact)
+        run: |
+          flutter build ios --release --no-codesign \
+            --dart-define=SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
+            --dart-define=SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}" \
+            --dart-define=STRIPE_PUBLISHABLE_KEY="${{ secrets.STRIPE_PUBLISHABLE_KEY }}" \
+            --dart-define=PAYPAL_CLIENT_ID="${{ secrets.PAYPAL_CLIENT_ID }}" \
+            --dart-define=PAYPAL_CLIENT_SECRET="${{ secrets.PAYPAL_CLIENT_SECRET }}" \
+            --dart-define=PAYPAL_MODE="${{ secrets.PAYPAL_MODE || 'live' }}" \
+            --dart-define=GOOGLE_WEB_CLIENT_ID="${{ secrets.GOOGLE_WEB_CLIENT_ID }}" \
+            --dart-define=APP_SCHEME="${{ secrets.APP_SCHEME || 'io.tigerbay.app' }}" \
+            --dart-define=APP_ENV=production
+
+      - name: Package .ipa File
+        run: |
+          mkdir -p build/ios/ipa_out/Payload
+          cp -r build/ios/iphoneos/Runner.app build/ios/ipa_out/Payload/
+          cd build/ios/ipa_out
+          zip -qr TigerBay.ipa Payload
+          cd ../../..
+
+      - name: Upload iOS IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tigerbay-ios-ipa-bundle
+          path: build/ios/ipa_out/TigerBay.ipa

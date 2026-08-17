@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -42,9 +43,22 @@ class _MyBookingsScreenState extends ConsumerState<MyBookingsScreen>
           children: [
             // ── Header ───────────────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 16, 0),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
               child: Row(
                 children: [
+                  if (context.canPop()) ...[
+                    GestureDetector(
+                      onTap: () => context.pop(),
+                      child: const Padding(
+                        padding: EdgeInsets.only(right: 12),
+                        child: Icon(
+                          CupertinoIcons.chevron_back,
+                          size: 24,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ),
+                  ],
                   const Text(
                     'Reservations',
                     style: TextStyle(

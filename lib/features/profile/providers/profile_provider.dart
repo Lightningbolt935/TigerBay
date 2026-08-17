@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../data/models/user_model.dart';
@@ -165,25 +166,40 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
     }
   }
 
-  Future<bool> uploadAvatar(String filePath, fileBytes) async {
+  Future<bool> uploadAvatar(String fileName, Uint8List fileBytes) async {
+    state = state.copyWith(isSaving: true, error: null);
     try {
-      final ext = filePath.split('.').last;
+      final rawExt = fileName.split('.').last.toLowerCase();
+      final ext = (rawExt == 'png' || rawExt == 'webp' || rawExt == 'jpeg')
+          ? rawExt
+          : 'jpg';
+      final mimeType = ext == 'png'
+          ? 'image/png'
+          : (ext == 'webp' ? 'image/webp' : 'image/jpeg');
       final path = 'avatars/$_userId.$ext';
+
       await _supabase.storage.from('avatars').uploadBinary(
             path,
             fileBytes,
-            fileOptions: FileOptions(contentType: 'image/$ext', upsert: true),
+            fileOptions: FileOptions(contentType: mimeType, upsert: true),
           );
-      final url = _supabase.storage.from('avatars').getPublicUrl(path);
+      final rawUrl = _supabase.storage.from('avatars').getPublicUrl(path);
+      // Append cache-busting timestamp so UI refreshes immediately
+      final url = '$rawUrl?t=${DateTime.now().millisecondsSinceEpoch}';
+
       await _supabase
           .from('profiles')
           .update({'avatar_url': url})
           .eq('id', _userId);
+
       state = state.copyWith(
+        isSaving: false,
         profile: state.profile?.copyWith(avatarUrl: url),
       );
       return true;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[ProfileProvider] Error uploading avatar: $e');
+      state = state.copyWith(isSaving: false, error: e.toString());
       return false;
     }
   }

@@ -1,8 +1,10 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tigerbay_app/data/models/branch_model.dart';
 import 'package:tigerbay_app/core/constants/app_colors.dart';
+import 'package:tigerbay_app/core/theme/app_typography.dart';
 import 'package:tigerbay_app/features/auth/providers/auth_provider.dart';
 import 'package:tigerbay_app/features/auth/widgets/branch_selector_widget.dart';
 import 'package:tigerbay_app/shared/widgets/apple_touch_feedback.dart';
@@ -16,7 +18,8 @@ import 'package:tigerbay_app/shared/widgets/apple_touch_feedback.dart';
 /// The [Branch] chosen during registration is written directly to
 /// `profiles.home_site_id` (INT) upon successful auth creation.
 class LoginScreen extends ConsumerStatefulWidget {
-  const LoginScreen({super.key});
+  final int initialTabIndex;
+  const LoginScreen({super.key, this.initialTabIndex = 0});
 
   @override
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
@@ -52,7 +55,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: widget.initialTabIndex.clamp(0, 1),
+    );
     _tabController.addListener(() => setState(() {}));
   }
 
@@ -192,26 +199,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     return Column(
       children: [
         Container(
-          width: 110,
-          height: 110,
+          width: 104,
+          height: 104,
           decoration: BoxDecoration(
             color: AppColors.brandBlack,
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: AppColors.glassBorder,
+              width: 0.8,
+            ),
             boxShadow: [
               BoxShadow(
-                color: AppColors.brandRed.withValues(alpha: 0.2),
-                blurRadius: 24,
-                offset: const Offset(0, 6),
+                color: AppColors.brandRed.withValues(alpha: 0.25),
+                blurRadius: 28,
+                offset: const Offset(0, 8),
               ),
             ],
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: BorderRadius.circular(24),
             child: Image.asset(
               'assets/images/tigerbay_logo.png',
               fit: BoxFit.cover,
               errorBuilder: (_, __, ___) => const Icon(
-                Icons.pets,
+                CupertinoIcons.paw,
                 size: 44,
                 color: AppColors.brandRed,
               ),
@@ -219,33 +230,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           ),
         ),
         const SizedBox(height: 16),
-        const Text(
+        Text(
           'TigerBay',
-          style: TextStyle(
-            fontFamily: 'Poppins',
-            fontSize: 26,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 3,
+          style: AppTypography.title1.copyWith(
+            fontWeight: FontWeight.w800,
+            letterSpacing: 2,
             color: AppColors.brandRed,
           ),
         ),
         const SizedBox(height: 2),
-        const Text(
+        Text(
           'INTERNATIONAL',
-          style: TextStyle(
-            fontFamily: 'Poppins',
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 4,
+          style: AppTypography.caption2.copyWith(
+            fontWeight: FontWeight.w700,
+            letterSpacing: 3.5,
             color: AppColors.gold,
           ),
         ),
         const SizedBox(height: 6),
-        const Text(
+        Text(
           'Member Access',
-          style: TextStyle(
-            fontFamily: 'Poppins',
-            fontSize: 13,
+          style: AppTypography.subheadline.copyWith(
             color: AppColors.textSecondary,
           ),
         ),
@@ -261,10 +266,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       child: Container(
         height: 48,
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          color: const Color(0xFF141416),
           borderRadius: BorderRadius.circular(24),
           border: Border.all(
-            color: AppColors.glassBorder,
+            color: const Color(0xFF28282B),
             width: 0.8,
           ),
         ),
@@ -272,7 +277,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         child: TabBar(
           controller: _tabController,
           indicator: BoxDecoration(
-            color: AppColors.surfaceLight,
+            color: const Color(0xFF242428),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: AppColors.glassBorder,
@@ -280,23 +285,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.3),
+                color: Colors.black.withValues(alpha: 0.4),
                 blurRadius: 8,
                 offset: const Offset(0, 2),
               ),
             ],
           ),
           indicatorSize: TabBarIndicatorSize.tab,
-          labelColor: AppColors.textPrimary,
+          labelColor: AppColors.champagneGold,
           unselectedLabelColor: AppColors.textSecondary,
-          labelStyle: const TextStyle(
-            fontFamily: 'Poppins',
-            fontSize: 13,
+          labelStyle: AppTypography.subheadline.copyWith(
             fontWeight: FontWeight.w600,
           ),
-          unselectedLabelStyle: const TextStyle(
-            fontFamily: 'Poppins',
-            fontSize: 13,
+          unselectedLabelStyle: AppTypography.subheadline.copyWith(
             fontWeight: FontWeight.w400,
           ),
           tabs: const [
@@ -312,6 +313,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   Widget _buildLoginForm(AuthState authState) {
     return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
       child: Form(
         key: _loginFormKey,
@@ -322,13 +324,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ── Email ───────────────────────────────────────────────────────────
-            _buildFieldLabel('Email Address'),
+            _buildFieldLabel('EMAIL ADDRESS'),
             const SizedBox(height: 8),
             _buildTextField(
               controller: _loginEmailController,
               hint: 'your@email.com',
               inputType: TextInputType.emailAddress,
-              prefixIcon: Icons.email_outlined,
+              prefixIcon: CupertinoIcons.mail,
               validator: (v) {
                 if (v == null || v.trim().isEmpty) return 'Email is required';
                 if (!v.contains('@')) return 'Enter a valid email address';
@@ -339,18 +341,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             const SizedBox(height: 18),
 
             // ── Password ────────────────────────────────────────────────────────
-            _buildFieldLabel('Password'),
+            _buildFieldLabel('PASSWORD'),
             const SizedBox(height: 8),
             _buildTextField(
               controller: _loginPasswordController,
               hint: 'Enter your password',
               obscure: _loginPasswordObscured,
-              prefixIcon: Icons.lock_outline_rounded,
+              prefixIcon: CupertinoIcons.lock,
               suffixIcon: IconButton(
                 icon: Icon(
                   _loginPasswordObscured
-                      ? Icons.visibility_outlined
-                      : Icons.visibility_off_outlined,
+                      ? CupertinoIcons.eye
+                      : CupertinoIcons.eye_slash,
                   size: 20,
                   color: AppColors.textHint,
                 ),
@@ -374,13 +376,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                   minimumSize: Size.zero,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
-                child: const Text(
+                child: Text(
                   'Forgot password?',
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 12,
-                    color: AppColors.gold,
-                    fontWeight: FontWeight.w500,
+                  style: AppTypography.caption1.copyWith(
+                    color: AppColors.champagneGold,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
@@ -442,6 +442,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   Widget _buildRegisterForm(AuthState authState) {
     return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
       child: Form(
         key: _registerFormKey,
@@ -452,13 +453,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ── Full Name ───────────────────────────────────────────────────────
-            _buildFieldLabel('Full Name'),
+            _buildFieldLabel('FULL NAME'),
             const SizedBox(height: 8),
             _buildTextField(
               controller: _registerFullNameController,
               hint: 'Your full name',
               inputType: TextInputType.name,
-              prefixIcon: Icons.person_outline_rounded,
+              prefixIcon: CupertinoIcons.person,
               validator: (v) {
                 if (v == null || v.trim().isEmpty) return 'Full name is required';
                 if (v.trim().length < 2) return 'Enter at least 2 characters';
@@ -469,13 +470,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             const SizedBox(height: 18),
 
             // ── Email ───────────────────────────────────────────────────────────
-            _buildFieldLabel('Email Address'),
+            _buildFieldLabel('EMAIL ADDRESS'),
             const SizedBox(height: 8),
             _buildTextField(
               controller: _registerEmailController,
               hint: 'your@email.com',
               inputType: TextInputType.emailAddress,
-              prefixIcon: Icons.email_outlined,
+              prefixIcon: CupertinoIcons.mail,
               validator: (v) {
                 if (v == null || v.trim().isEmpty) return 'Email is required';
                 if (!v.contains('@')) return 'Enter a valid email address';
@@ -486,18 +487,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             const SizedBox(height: 18),
 
             // ── Password ────────────────────────────────────────────────────────
-            _buildFieldLabel('Password'),
+            _buildFieldLabel('PASSWORD'),
             const SizedBox(height: 8),
             _buildTextField(
               controller: _registerPasswordController,
               hint: 'Create a password',
               obscure: _registerPasswordObscured,
-              prefixIcon: Icons.lock_outline_rounded,
+              prefixIcon: CupertinoIcons.lock,
               suffixIcon: IconButton(
                 icon: Icon(
                   _registerPasswordObscured
-                      ? Icons.visibility_outlined
-                      : Icons.visibility_off_outlined,
+                      ? CupertinoIcons.eye
+                      : CupertinoIcons.eye_slash,
                   size: 20,
                   color: AppColors.textHint,
                 ),
@@ -514,18 +515,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             const SizedBox(height: 18),
 
             // ── Confirm Password ────────────────────────────────────────────────
-            _buildFieldLabel('Confirm Password'),
+            _buildFieldLabel('CONFIRM PASSWORD'),
             const SizedBox(height: 8),
             _buildTextField(
               controller: _registerConfirmPasswordController,
               hint: 'Re-enter your password',
               obscure: _registerConfirmObscured,
-              prefixIcon: Icons.lock_outline_rounded,
+              prefixIcon: CupertinoIcons.lock,
               suffixIcon: IconButton(
                 icon: Icon(
                   _registerConfirmObscured
-                      ? Icons.visibility_outlined
-                      : Icons.visibility_off_outlined,
+                      ? CupertinoIcons.eye
+                      : CupertinoIcons.eye_slash,
                   size: 20,
                   color: AppColors.textHint,
                 ),
@@ -544,7 +545,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             const SizedBox(height: 18),
 
             // ── Home Location Selector (Branch → home_site_id: INT) ─────────────
-            _buildFieldLabel('Home Location'),
+            _buildFieldLabel('HOME LOCATION'),
             const SizedBox(height: 8),
             BranchSelectorWidget(
               selectedBranch: chosenHomeSite,
@@ -576,11 +577,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   Widget _buildFieldLabel(String label) {
     return Text(
       label,
-      style: const TextStyle(
-        fontFamily: 'Poppins',
-        fontSize: 14,
+      style: AppTypography.caption1.copyWith(
+        color: AppColors.textSecondary,
         fontWeight: FontWeight.w600,
-        color: AppColors.textPrimary,
+        letterSpacing: 0.8,
       ),
     );
   }
@@ -598,21 +598,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       controller: controller,
       keyboardType: inputType,
       obscureText: obscure,
-      style: const TextStyle(
-        fontFamily: 'Poppins',
-        fontSize: 15,
+      style: AppTypography.body.copyWith(
         color: AppColors.textPrimary,
       ),
       validator: validator,
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: const TextStyle(
-          fontFamily: 'Poppins',
-          fontSize: 15,
+        hintStyle: AppTypography.body.copyWith(
           color: AppColors.textHint,
         ),
         filled: true,
-        fillColor: const Color(0xFF1C1C1E),
+        fillColor: const Color(0xFF141416),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
           vertical: 16,
@@ -622,28 +618,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             : null,
         suffixIcon: suffixIcon,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.border),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: Color(0xFF28282B)),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.border),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: Color(0xFF28282B)),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.gold, width: 1.5),
+          borderRadius: BorderRadius.circular(16),
+          borderSide:
+              const BorderSide(color: AppColors.champagneGold, width: 1.2),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: AppColors.error),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.error, width: 1.5),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: AppColors.error, width: 1.2),
         ),
-        errorStyle: const TextStyle(
-          fontFamily: 'Poppins',
-          fontSize: 12,
+        errorStyle: AppTypography.caption1.copyWith(
           color: AppColors.error,
         ),
       ),
@@ -662,11 +657,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         height: 54,
         decoration: BoxDecoration(
           gradient: AppColors.goldGradient,
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(27),
           boxShadow: [
             BoxShadow(
-              color: AppColors.gold.withValues(alpha: 0.35),
-              blurRadius: 16,
+              color: AppColors.gold.withValues(alpha: 0.3),
+              blurRadius: 18,
               offset: const Offset(0, 4),
             ),
           ],
@@ -683,9 +678,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 )
               : Text(
                   label,
-                  style: const TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 15,
+                  style: AppTypography.headline.copyWith(
                     fontWeight: FontWeight.w700,
                     color: Colors.black,
                     letterSpacing: 0.3,
@@ -697,21 +690,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   Widget _buildSocialDivider() {
-    return const Row(
+    return Row(
       children: [
-        Expanded(child: Divider(color: AppColors.glassBorder)),
+        const Expanded(
+            child: Divider(color: Color(0xFF28282B), height: 1)),
         Padding(
-          padding: EdgeInsets.symmetric(horizontal: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
           child: Text(
-            'or continue with',
-            style: TextStyle(
-              fontFamily: 'Poppins',
-              fontSize: 12,
+            'OR CONTINUE WITH',
+            style: AppTypography.caption2.copyWith(
+              letterSpacing: 1.2,
               color: AppColors.textHint,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ),
-        Expanded(child: Divider(color: AppColors.glassBorder)),
+        const Expanded(
+            child: Divider(color: Color(0xFF28282B), height: 1)),
       ],
     );
   }
@@ -790,20 +785,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     return RichText(
       textAlign: TextAlign.center,
       text: TextSpan(
-        style: const TextStyle(
-          fontFamily: 'Poppins',
-          fontSize: 11,
+        style: AppTypography.caption1.copyWith(
           color: AppColors.textHint,
         ),
         children: [
           const TextSpan(text: 'By continuing, you agree to our '),
           TextSpan(
             text: 'Terms of Service',
-            style: const TextStyle(
-              fontFamily: 'Poppins',
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-              color: AppColors.textPrimary,
+            style: AppTypography.caption1.copyWith(
+              fontWeight: FontWeight.w600,
+              color: AppColors.champagneGold,
               decoration: TextDecoration.underline,
             ),
             recognizer: TapGestureRecognizer()..onTap = () {},
@@ -811,11 +802,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           const TextSpan(text: ' & '),
           TextSpan(
             text: 'Privacy Policy',
-            style: const TextStyle(
-              fontFamily: 'Poppins',
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-              color: AppColors.textPrimary,
+            style: AppTypography.caption1.copyWith(
+              fontWeight: FontWeight.w600,
+              color: AppColors.champagneGold,
               decoration: TextDecoration.underline,
             ),
             recognizer: TapGestureRecognizer()..onTap = () {},
@@ -847,12 +836,12 @@ class _SocialButton extends StatelessWidget {
         width: double.infinity,
         height: 54,
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          color: const Color(0xFF141416),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.glassBorder, width: 0.8),
+          border: Border.all(color: const Color(0xFF28282B), width: 0.8),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.15),
+              color: Colors.black.withValues(alpha: 0.2),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -866,16 +855,14 @@ class _SocialButton extends StatelessWidget {
             Expanded(
               child: Text(
                 label,
-                style: const TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14.5,
-                  fontWeight: FontWeight.w500,
+                style: AppTypography.subheadline.copyWith(
+                  fontWeight: FontWeight.w600,
                   color: AppColors.textPrimary,
                 ),
               ),
             ),
-            const Icon(Icons.chevron_right_rounded,
-                size: 20, color: AppColors.textHint),
+            const Icon(CupertinoIcons.chevron_right,
+                size: 16, color: AppColors.textHint),
           ],
         ),
       ),

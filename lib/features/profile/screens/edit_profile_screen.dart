@@ -1,11 +1,19 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/theme/app_typography.dart';
+import '../../../shared/widgets/apple_touch_feedback.dart';
 import '../../../shared/widgets/safe_network_image.dart';
 import '../providers/profile_provider.dart';
 
+/// ═══════════════════════════════════════════════════════════════════════════
+/// TigerBay International — Edit Profile Screen (Apple HIG Luxury Edition)
+/// ═══════════════════════════════════════════════════════════════════════════
 class EditProfileScreen extends ConsumerStatefulWidget {
   const EditProfileScreen({super.key});
 
@@ -68,32 +76,288 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     }
   }
 
-  Future<void> _pickDate() async {
-    final DateTime? picked = await showDatePicker(
+  // ── iOS Cupertino Date Picker Modal ───────────────────────────────────────
+  void _pickDateCupertino() {
+    HapticFeedback.selectionClick();
+    DateTime tempPickedDate = _selectedDob ?? DateTime(2000, 1, 1);
+
+    showModalBottomSheet<void>(
       context: context,
-      initialDate: _selectedDob ?? DateTime(2000, 1, 1),
-      firstDate: DateTime(1930),
-      lastDate: DateTime.now(),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: AppColors.gold,
-              onPrimary: Colors.black,
-              surface: Color(0xFF1E1E1E),
-              onSurface: Colors.white,
-            ),
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (BuildContext bContext) {
+        return SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Apple Modal Header with Cancel & Done actions
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: const BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                        color: AppColors.glassBorder, width: 0.5),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      child: Text(
+                        'Cancel',
+                        style: AppTypography.subheadline.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      onPressed: () => Navigator.pop(bContext),
+                    ),
+                    Text(
+                      'Date of Birth',
+                      style: AppTypography.headline.copyWith(
+                        color: AppColors.textPrimary,
+                        fontSize: 16,
+                      ),
+                    ),
+                    CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      child: Text(
+                        'Done',
+                        style: AppTypography.headline.copyWith(
+                          color: AppColors.champagneGold,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
+                        ),
+                      ),
+                      onPressed: () {
+                        setState(() => _selectedDob = tempPickedDate);
+                        Navigator.pop(bContext);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(
+                height: 216,
+                child: CupertinoTheme(
+                  data: CupertinoThemeData(
+                    brightness: Brightness.dark,
+                    textTheme: CupertinoTextThemeData(
+                      dateTimePickerTextStyle: AppTypography.title3.copyWith(
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                  child: CupertinoDatePicker(
+                    mode: CupertinoDatePickerMode.date,
+                    initialDateTime: _selectedDob ?? DateTime(2000, 1, 1),
+                    minimumDate: DateTime(1920),
+                    maximumDate: DateTime.now(),
+                    onDateTimeChanged: (DateTime newDate) {
+                      tempPickedDate = newDate;
+                    },
+                  ),
+                ),
+              ),
+            ],
           ),
-          child: child!,
         );
       },
     );
-    if (picked != null && picked != _selectedDob && mounted) {
-      setState(() => _selectedDob = picked);
+  }
+
+  // ── iOS Cupertino Gender ActionSheet Modal ────────────────────────────────
+  void _pickGenderCupertino() {
+    HapticFeedback.selectionClick();
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (BuildContext aContext) => CupertinoActionSheet(
+        title: Text(
+          'Select Gender',
+          style: AppTypography.subheadline.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        actions: _genderOptions.map((option) {
+          final isSelected = _selectedGender == option;
+          return CupertinoActionSheetAction(
+            onPressed: () {
+              setState(() => _selectedGender = option);
+              Navigator.pop(aContext);
+            },
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (isSelected) ...[
+                  const Icon(Icons.check_rounded,
+                      size: 18, color: AppColors.gold),
+                  const SizedBox(width: 8),
+                ],
+                Text(
+                  option,
+                  style: AppTypography.callout.copyWith(
+                    color: isSelected ? AppColors.gold : Colors.white,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+        cancelButton: CupertinoActionSheetAction(
+          isDefaultAction: true,
+          onPressed: () => Navigator.pop(aContext),
+          child: Text(
+            'Cancel',
+            style: AppTypography.callout.copyWith(
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── iOS Cupertino Image Picker ActionSheet ───────────────────────────────
+  void _showImageSourceSheet() {
+    HapticFeedback.selectionClick();
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (BuildContext aContext) => CupertinoActionSheet(
+        title: Text(
+          'Change Profile Photo',
+          style: AppTypography.subheadline.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(aContext);
+              _pickImage(ImageSource.camera);
+            },
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(CupertinoIcons.camera,
+                    size: 20, color: AppColors.gold),
+                const SizedBox(width: 10),
+                Text(
+                  'Take Photo',
+                  style: AppTypography.callout.copyWith(color: Colors.white),
+                ),
+              ],
+            ),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(aContext);
+              _pickImage(ImageSource.gallery);
+            },
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(CupertinoIcons.photo_on_rectangle,
+                    size: 20, color: AppColors.gold),
+                const SizedBox(width: 10),
+                Text(
+                  'Choose from Library',
+                  style: AppTypography.callout.copyWith(color: Colors.white),
+                ),
+              ],
+            ),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          isDefaultAction: true,
+          onPressed: () => Navigator.pop(aContext),
+          child: Text(
+            'Cancel',
+            style: AppTypography.callout.copyWith(
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final picker = ImagePicker();
+      final pickedFile = await picker.pickImage(
+        source: source,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 85,
+      );
+      if (pickedFile == null) return;
+
+      final bytes = await pickedFile.readAsBytes();
+      if (!mounted) return;
+
+      final success = await ref
+          .read(profileProvider.notifier)
+          .uploadAvatar(pickedFile.name, bytes);
+
+      if (mounted) {
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(CupertinoIcons.checkmark_seal_fill,
+                      color: AppColors.champagneGold, size: 18),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Profile photo updated',
+                    style: AppTypography.subheadline
+                        .copyWith(color: Colors.white),
+                  ),
+                ],
+              ),
+              backgroundColor: const Color(0xFF1E1E22),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+                side:
+                    const BorderSide(color: AppColors.glassBorder, width: 0.8),
+              ),
+            ),
+          );
+        } else {
+          final error = ref.read(profileProvider).error;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content:
+                  Text(error ?? 'Failed to upload photo. Please try again.'),
+              backgroundColor: AppColors.error,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error selecting photo: $e'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
   Future<void> _save() async {
+    HapticFeedback.mediumImpact();
     final success = await ref.read(profileProvider.notifier).updateProfile(
           fullName: _nameController.text.trim(),
           email: _emailController.text.trim(),
@@ -105,11 +369,23 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     if (success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Profile updated successfully'),
-          backgroundColor: AppColors.success,
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle_rounded,
+                  color: AppColors.champagneGold, size: 18),
+              const SizedBox(width: 10),
+              Text(
+                'Profile updated successfully',
+                style: AppTypography.subheadline.copyWith(color: Colors.white),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFF1E1E22),
           behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: const BorderSide(color: AppColors.glassBorder, width: 0.8),
+          ),
         ),
       );
       Navigator.pop(context);
@@ -117,30 +393,43 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       final error = ref.read(profileProvider).error;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(error ?? 'Failed to update profile'),
-          backgroundColor: AppColors.error,
+          content: Row(
+            children: [
+              const Icon(Icons.error_outline_rounded,
+                  color: AppColors.error, size: 18),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  error ?? 'Failed to update profile',
+                  style:
+                      AppTypography.subheadline.copyWith(color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFF2C1414),
           behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: const BorderSide(color: AppColors.error, width: 0.8),
+          ),
         ),
       );
     }
   }
 
-  // ── Avatar fallback — initials inside a filled circle ─────────────────────
   Widget _initialsWidget(String initials) {
     return Container(
-      width: 90,
-      height: 90,
+      width: 92,
+      height: 92,
       color: AppColors.surface,
       alignment: Alignment.center,
       child: Text(
         initials,
-        style: const TextStyle(
-          fontSize: 26,
+        style: AppTypography.sfPro(
+          fontSize: 28,
           fontWeight: FontWeight.w700,
-          color: AppColors.textPrimary,
-          fontFamily: 'Poppins',
+          color: AppColors.champagneGold,
         ),
       ),
     );
@@ -150,253 +439,365 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   Widget build(BuildContext context) {
     final profileState = ref.watch(profileProvider);
     _initFields(profileState);
+    final bottomSafePadding = MediaQuery.paddingOf(context).bottom;
 
     return Scaffold(
       backgroundColor: AppColors.brandBlack,
       appBar: AppBar(
-        backgroundColor: AppColors.brandBlack,
+        backgroundColor: AppColors.surface,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios,
-              size: 20, color: AppColors.textPrimary),
-          onPressed: () => Navigator.pop(context),
+        scrolledUnderElevation: 0,
+        leading: AppleTouchFeedback(
+          onTap: () => Navigator.pop(context),
+          child: const Padding(
+            padding: EdgeInsets.only(left: 12),
+            child: Icon(
+              CupertinoIcons.chevron_back,
+              size: 22,
+              color: AppColors.textPrimary,
+            ),
+          ),
         ),
-        title: const Text(
+        title: Text(
           'Edit Profile',
-          style: TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.w600,
+          style: AppTypography.headline.copyWith(
             color: AppColors.textPrimary,
-            fontFamily: 'Poppins',
+            fontSize: 17,
           ),
         ),
         centerTitle: true,
+        actions: [
+          // ── Apple Top-Right "Save" Action Button ─────────────────────────
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: AppleTouchFeedback(
+              onTap: profileState.isSaving ? null : _save,
+              child: Container(
+                alignment: Alignment.center,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: profileState.isSaving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          color: AppColors.champagneGold,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : Text(
+                        'Save',
+                        style: AppTypography.headline.copyWith(
+                          color: AppColors.champagneGold,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
+                        ),
+                      ),
+              ),
+            ),
+          ),
+        ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
+        physics: const BouncingScrollPhysics(),
+        padding: EdgeInsets.fromLTRB(18, 16, 18, bottomSafePadding + 64),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 20),
-
-            // ── Avatar ─────────────────────────────────────────────────
+            // ── Apple Avatar Inset ──────────────────────────────────────────
             Center(
-              child: Stack(
+              child: Column(
                 children: [
-                  Container(
-                    width: 90,
-                    height: 90,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                          color: AppColors.gold, width: 2),
-                    ),
-                    child: ClipOval(
-                      child: profileState.profile?.avatarUrl != null
-                          ? SafeNetworkImage(
-                              imageUrl: profileState.profile!.avatarUrl,
-                              width: 90,
-                              height: 90,
-                              fit: BoxFit.cover,
-                              fallback: _initialsWidget(
-                                  profileState.profile?.initials ?? '?'),
-                            )
-                          : _initialsWidget(
-                              profileState.profile?.initials ?? '?'),
+                  AppleTouchFeedback(
+                    onTap: _showImageSourceSheet,
+                    child: Stack(
+                      children: [
+                        Container(
+                          width: 96,
+                          height: 96,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: AppColors.champagneGold,
+                              width: 2.2,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.gold.withValues(alpha: 0.2),
+                                blurRadius: 16,
+                                spreadRadius: 1,
+                              ),
+                            ],
+                          ),
+                          child: ClipOval(
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                profileState.profile?.avatarUrl != null
+                                    ? SafeNetworkImage(
+                                        imageUrl:
+                                            profileState.profile!.avatarUrl,
+                                        width: 96,
+                                        height: 96,
+                                        fit: BoxFit.cover,
+                                        fallback: _initialsWidget(
+                                            profileState.profile?.initials ??
+                                                '?'),
+                                      )
+                                    : _initialsWidget(
+                                        profileState.profile?.initials ?? '?'),
+                                if (profileState.isSaving)
+                                  Container(
+                                    color: Colors.black.withValues(alpha: 0.5),
+                                    alignment: Alignment.center,
+                                    child: const CupertinoActivityIndicator(
+                                      color: AppColors.champagneGold,
+                                      radius: 12,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: Container(
+                            width: 30,
+                            height: 30,
+                            decoration: BoxDecoration(
+                              color: AppColors.gold,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: AppColors.brandBlack,
+                                width: 2,
+                              ),
+                            ),
+                            child: const Icon(
+                              CupertinoIcons.camera_fill,
+                              size: 14,
+                              color: Colors.black,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
-                    child: Container(
-                      width: 28,
-                      height: 28,
-                      decoration: BoxDecoration(
-                        color: AppColors.gold,
-                        shape: BoxShape.circle,
-                        border:
-                            Border.all(color: AppColors.brandBlack, width: 2),
-                      ),
-                      child: const Icon(Icons.camera_alt_rounded,
-                          size: 14, color: Colors.white),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Tap avatar to change photo',
+                    style: AppTypography.caption1.copyWith(
+                      color: AppColors.gold,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
               ),
             ),
 
-            const SizedBox(height: 8),
+            const SizedBox(height: 28),
 
-            const Center(
+            // ── Section 1: ACCOUNT DETAILS (Apple Inset Group) ──────────────
+            Padding(
+              padding: const EdgeInsets.only(left: 4, bottom: 8),
               child: Text(
-                'JPG or PNG. Max 5MB',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppColors.textSecondary,
-                  fontFamily: 'Poppins',
-                ),
+                'ACCOUNT DETAILS',
+                style: AppTypography.sectionHeader,
               ),
             ),
-
-            const SizedBox(height: 28),
-
-            // ── Fields ─────────────────────────────────────────────────
-            const _EditFieldLabel('FULL NAME'),
-            const SizedBox(height: 8),
-            _EditField(
-              controller: _nameController,
-              hint: 'Your full name',
-              inputType: TextInputType.name,
-            ),
-
-            const SizedBox(height: 18),
-
-            const _EditFieldLabel('EMAIL ADDRESS'),
-            const SizedBox(height: 8),
-            _EditField(
-              controller: _emailController,
-              hint: 'your@email.com',
-              inputType: TextInputType.emailAddress,
-              readOnly: true,
-              suffixIcon: const Icon(
-                Icons.lock_outline_rounded,
-                size: 18,
-                color: AppColors.textHint,
-              ),
-              helperText: 'Account email cannot be modified',
-            ),
-
-            const SizedBox(height: 18),
-
-            const _EditFieldLabel('MOBILE NUMBER'),
-            const SizedBox(height: 8),
-            _EditField(
-              controller: _phoneController,
-              hint: '+44 7700 900000',
-              inputType: TextInputType.phone,
-            ),
-
-            const SizedBox(height: 28),
-
-            // ── Gender & Date of Birth ──────────────────────────────────
-            const _EditFieldLabel('PERSONAL DETAILS'),
-            const SizedBox(height: 16),
-
-            const _EditFieldLabel('DATE OF BIRTH'),
-            const SizedBox(height: 8),
-            InkWell(
-              onTap: _pickDate,
-              borderRadius: BorderRadius.circular(14),
-              child: Container(
-                width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      _selectedDob == null
-                          ? 'Select Date of Birth'
-                          : DateFormat('dd MMM yyyy').format(_selectedDob!),
-                      style: TextStyle(
-                        color: _selectedDob == null
-                            ? AppColors.textHint
-                            : AppColors.textPrimary,
-                        fontSize: 14,
-                        fontFamily: 'Poppins',
-                      ),
-                    ),
-                    const Icon(Icons.calendar_today_rounded,
-                        color: AppColors.gold, size: 18),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 18),
-
-            const _EditFieldLabel('GENDER'),
-            const SizedBox(height: 8),
             Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(
                 color: AppColors.surface,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.border),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: AppColors.glassBorder, width: 0.8),
               ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: _selectedGender,
-                  hint: const Text(
-                    'Select Gender',
-                    style: TextStyle(
+              child: Column(
+                children: [
+                  _AppleInputField(
+                    label: 'Full Name',
+                    controller: _nameController,
+                    hint: 'Your full name',
+                    inputType: TextInputType.name,
+                  ),
+                  const Divider(
+                      height: 1, indent: 16, color: AppColors.glassBorder),
+                  _AppleInputField(
+                    label: 'Email',
+                    controller: _emailController,
+                    hint: 'your@email.com',
+                    inputType: TextInputType.emailAddress,
+                    readOnly: true,
+                    suffixIcon: const Icon(
+                      CupertinoIcons.lock_fill,
+                      size: 15,
                       color: AppColors.textHint,
-                      fontSize: 14,
-                      fontFamily: 'Poppins',
                     ),
                   ),
-                  dropdownColor: AppColors.surface,
-                  isExpanded: true,
-                  icon: const Icon(Icons.arrow_drop_down,
-                      color: AppColors.gold),
-                  items: _genderOptions.map((String option) {
-                    return DropdownMenuItem<String>(
-                      value: option,
-                      child: Text(
-                        option,
-                        style: const TextStyle(
-                          color: AppColors.textPrimary,
-                          fontSize: 14,
-                          fontFamily: 'Poppins',
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                  onChanged: (val) => setState(() => _selectedGender = val),
+                  const Divider(
+                      height: 1, indent: 16, color: AppColors.glassBorder),
+                  _AppleInputField(
+                    label: 'Mobile Number',
+                    controller: _phoneController,
+                    hint: '+44 7700 900000',
+                    inputType: TextInputType.phone,
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(left: 12, top: 6),
+              child: Text(
+                'Account email cannot be modified directly.',
+                style: AppTypography.caption2.copyWith(
+                  color: AppColors.textHint,
                 ),
               ),
             ),
 
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
 
-            // ── Single Save Changes Button ──────────────────────────────
-            SizedBox(
-              width: double.infinity,
-              height: 54,
-              child: OutlinedButton(
-                onPressed: profileState.isSaving ? null : _save,
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(
-                      color: AppColors.gold, width: 1.2),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
+            // ── Section 2: PERSONAL DETAILS (Apple Inset Group) ─────────────
+            Padding(
+              padding: const EdgeInsets.only(left: 4, bottom: 8),
+              child: Text(
+                'PERSONAL DETAILS',
+                style: AppTypography.sectionHeader,
+              ),
+            ),
+            Container(
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: AppColors.glassBorder, width: 0.8),
+              ),
+              child: Column(
+                children: [
+                  // Date of Birth Row
+                  AppleTouchFeedback(
+                    onTap: _pickDateCupertino,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 15),
+                      child: Row(
+                        children: [
+                          Text(
+                            'Date of Birth',
+                            style: AppTypography.body.copyWith(
+                              fontSize: 15,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            _selectedDob == null
+                                ? 'Select Date'
+                                : DateFormat('dd MMM yyyy')
+                                    .format(_selectedDob!),
+                            style: AppTypography.body.copyWith(
+                              fontSize: 15,
+                              color: _selectedDob == null
+                                  ? AppColors.textHint
+                                  : AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Icon(
+                            CupertinoIcons.chevron_right,
+                            size: 16,
+                            color: AppColors.textHint,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const Divider(
+                      height: 1, indent: 16, color: AppColors.glassBorder),
+
+                  // Gender Row
+                  AppleTouchFeedback(
+                    onTap: _pickGenderCupertino,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 15),
+                      child: Row(
+                        children: [
+                          Text(
+                            'Gender',
+                            style: AppTypography.body.copyWith(
+                              fontSize: 15,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            _selectedGender ?? 'Select Gender',
+                            style: AppTypography.body.copyWith(
+                              fontSize: 15,
+                              color: _selectedGender == null
+                                  ? AppColors.textHint
+                                  : AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Icon(
+                            CupertinoIcons.chevron_right,
+                            size: 16,
+                            color: AppColors.textHint,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 36),
+
+            // ── Primary Save Changes Pill Button ────────────────────────────
+            AppleTouchFeedback(
+              onTap: profileState.isSaving ? null : _save,
+              child: Container(
+                width: double.infinity,
+                height: 52,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [
+                      AppColors.gold,
+                      AppColors.champagneGold,
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.gold.withValues(alpha: 0.3),
+                      blurRadius: 18,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
                 ),
+                alignment: Alignment.center,
                 child: profileState.isSaving
                     ? const SizedBox(
                         width: 22,
                         height: 22,
                         child: CircularProgressIndicator(
-                            color: AppColors.gold, strokeWidth: 2),
+                          color: Colors.black,
+                          strokeWidth: 2.2,
+                        ),
                       )
-                    : const Text(
+                    : Text(
                         'Save Changes',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.gold,
-                          fontFamily: 'Poppins',
+                        style: AppTypography.callout.copyWith(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.black,
                         ),
                       ),
               ),
             ),
 
-            const SizedBox(height: 32),
+            const SizedBox(height: 20),
           ],
         ),
       ),
@@ -404,85 +805,71 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   }
 }
 
-class _EditFieldLabel extends StatelessWidget {
-  final String text;
-  const _EditFieldLabel(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: const TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 1.2,
-        color: AppColors.textSecondary,
-        fontFamily: 'Poppins',
-      ),
-    );
-  }
-}
-
-class _EditField extends StatelessWidget {
+/// Inset Apple-style row text field
+class _AppleInputField extends StatelessWidget {
+  final String label;
   final TextEditingController controller;
   final String hint;
   final TextInputType inputType;
   final bool readOnly;
   final Widget? suffixIcon;
-  final String? helperText;
 
-  const _EditField({
+  const _AppleInputField({
+    required this.label,
     required this.controller,
     required this.hint,
     required this.inputType,
     this.readOnly = false,
     this.suffixIcon,
-    this.helperText,
   });
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      readOnly: readOnly,
-      keyboardType: inputType,
-      style: TextStyle(
-        fontSize: 14,
-        color: readOnly ? AppColors.textSecondary : AppColors.textPrimary,
-        fontFamily: 'Poppins',
-      ),
-      decoration: InputDecoration(
-        hintText: hint,
-        helperText: helperText,
-        helperStyle: const TextStyle(
-          fontSize: 11,
-          color: AppColors.textHint,
-          fontFamily: 'Poppins',
-        ),
-        suffixIcon: suffixIcon,
-        filled: true,
-        fillColor: readOnly ? const Color(0xFF141414) : AppColors.surface,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.border),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(
-            color: readOnly
-                ? AppColors.border.withValues(alpha: 0.5)
-                : AppColors.border,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: AppTypography.body.copyWith(
+                fontSize: 15,
+                color: AppColors.textSecondary,
+              ),
+            ),
           ),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(
-            color: readOnly ? AppColors.border : AppColors.gold,
-            width: readOnly ? 1.0 : 1.5,
+          Expanded(
+            child: TextField(
+              controller: controller,
+              readOnly: readOnly,
+              keyboardType: inputType,
+              textAlign: TextAlign.end,
+              style: AppTypography.body.copyWith(
+                fontSize: 15,
+                color:
+                    readOnly ? AppColors.textSecondary : AppColors.textPrimary,
+              ),
+              decoration: InputDecoration(
+                hintText: hint,
+                hintStyle: AppTypography.body.copyWith(
+                  fontSize: 15,
+                  color: AppColors.textHint,
+                ),
+                suffixIcon: suffixIcon,
+                suffixIconConstraints: const BoxConstraints(
+                  maxWidth: 24,
+                  maxHeight: 24,
+                ),
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                filled: false,
+                contentPadding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

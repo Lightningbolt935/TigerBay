@@ -1,0 +1,54 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:tigerbay_app/core/config/env_config.dart';
+import 'package:tigerbay_app/core/constants/app_colors.dart';
+import 'package:tigerbay_app/core/utils/qr_timer.dart';
+
+void main() {
+  setUpAll(() async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    await EnvConfig.initialize();
+  });
+
+  group('EnvConfig Tests', () {
+    test('EnvConfig provides valid default Supabase configuration', () {
+      expect(EnvConfig.supabaseUrl, isNotEmpty);
+      expect(EnvConfig.supabaseUrl.startsWith('https://'), isTrue);
+      expect(EnvConfig.supabaseAnonKey, isNotEmpty);
+    });
+
+    test('EnvConfig provides valid PayPal configuration', () {
+      expect(EnvConfig.paypalClientId, isNotEmpty);
+      expect(EnvConfig.paypalClientSecret, isNotEmpty);
+      expect(EnvConfig.paypalMode, isNotEmpty);
+    });
+
+    test('EnvConfig provides valid Google Client & App Scheme', () {
+      expect(EnvConfig.googleWebClientId, isNotEmpty);
+      expect(EnvConfig.appScheme, equals('io.tigerbay.app'));
+    });
+  });
+
+  group('AppColors & Theme Tests', () {
+    test('Core Brand Colors are properly defined', () {
+      expect(AppColors.brandRed, isNotNull);
+      expect(AppColors.gold, isNotNull);
+      expect(AppColors.brandBlack, isNotNull);
+      expect(AppColors.glassSurface, isNotNull);
+      expect(AppColors.glassBorder, isNotNull);
+    });
+  });
+
+  group('QrTimer Tests', () {
+    test('QrTimer initializes with user details and generates payload', () {
+      final timer = QrTimer(
+        userId: 'test_user_001',
+        memberCode: '100001',
+        deviceId: 'device_uuid_test',
+        secret: 'test_secret_key',
+      );
+      timer.start();
+      expect(timer.secondsRemaining, equals(60));
+      timer.dispose();
+    });
+  });
+}

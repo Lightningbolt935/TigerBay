@@ -1,24 +1,19 @@
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:tigerbay_app/core/config/env_config.dart';
 
 /// ═══════════════════════════════════════════════════════════════════════════
 /// TigerBay International — PayPal Configuration
 /// ═══════════════════════════════════════════════════════════════════════════
-/// Reads PayPal credentials from .env. Switch PAYPAL_MODE to 'live' for
-/// production. Return/cancel URLs are deep-link safe — they match the app
-/// scheme defined in AndroidManifest / Info.plist.
+/// Reads PayPal credentials from EnvConfig (supports .env and dart-define).
 class PayPalConfig {
   PayPalConfig._();
 
-  static String get clientId =>
-      dotenv.env['PAYPAL_CLIENT_ID'] ?? '';
+  static String get clientId => EnvConfig.paypalClientId;
 
-  static String get secretKey =>
-      dotenv.env['PAYPAL_CLIENT_SECRET'] ?? '';
+  static String get secretKey => EnvConfig.paypalClientSecret;
 
-  static String get mode =>
-      dotenv.env['PAYPAL_MODE'] ?? 'sandbox';
+  static String get mode => EnvConfig.paypalMode;
 
-  static bool get isSandbox => mode == 'sandbox';
+  static bool get isSandbox => EnvConfig.isPayPalSandbox;
 
   /// PayPal will redirect here after a successful payment.
   /// Must match an allowed return URL registered in your PayPal app dashboard.

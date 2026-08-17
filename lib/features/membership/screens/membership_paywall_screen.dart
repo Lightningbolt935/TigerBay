@@ -1,11 +1,15 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tigerbay_app/core/constants/app_colors.dart';
+import 'package:tigerbay_app/core/constants/app_routes.dart';
 import 'package:tigerbay_app/core/services/paypal_service.dart';
 import 'package:tigerbay_app/data/models/membership_tier_model.dart';
 import 'package:tigerbay_app/features/auth/providers/profile_state_provider.dart';
 import 'package:tigerbay_app/features/profile/providers/membership_provider.dart';
+import 'package:tigerbay_app/shared/widgets/apple_touch_feedback.dart';
 
 /// ═══════════════════════════════════════════════════════════════════════════
 /// TigerBay International — Membership Paywall Screen
@@ -31,6 +35,14 @@ class _MembershipPaywallScreenState
   void dispose() {
     _pageController.dispose();
     super.dispose();
+  }
+
+  void _handleBack() {
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go(AppRoutes.home);
+    }
   }
 
   Future<void> _activateMembership(MembershipTier tier) async {
@@ -123,7 +135,11 @@ class _MembershipPaywallScreenState
           ),
         ),
       );
-      // GoRouter auto-redirects via Gate 4 as soon as profileState updates!
+      // Auto return home after brief delay
+      await Future.delayed(const Duration(milliseconds: 600));
+      if (mounted) {
+        _handleBack();
+      }
     } else {
       final error = ref.read(membershipActivationNotifierProvider).error;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -149,13 +165,18 @@ class _MembershipPaywallScreenState
     final profile = ref.watch(profileStateProvider).profile;
     final isActive = profile?.membershipStatus == 'active';
 
-    return Scaffold(
-      backgroundColor: AppColors.brandBlack,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: tiersAsync.when(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _handleBack();
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.brandBlack,
+        body: SafeArea(
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: tiersAsync.when(
           loading: () => const Center(
             child: CircularProgressIndicator(
               color: AppColors.gold,
@@ -364,27 +385,36 @@ class _MembershipPaywallScreenState
           },
             ),
           ),
-          if (isActive)
-            Positioned(
-              top: 8,
-              left: 8,
-              child: Material(
-                color: AppColors.surface.withValues(alpha: 0.9),
-                shape: const CircleBorder(),
-                elevation: 2,
-                child: IconButton(
-                  icon: const Icon(Icons.arrow_back_rounded,
-                      color: Colors.white, size: 22),
-                  onPressed: () => Navigator.of(context).maybePop(),
-                  tooltip: 'Back',
+          Positioned(
+            top: 12,
+            left: 14,
+            child: AppleTouchFeedback(
+              onTap: _handleBack,
+              child: Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: AppColors.glassSurface,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AppColors.glassBorder,
+                    width: 0.8,
+                  ),
+                ),
+                child: const Icon(
+                  CupertinoIcons.chevron_back,
+                  color: Colors.white,
+                  size: 20,
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
-    );
-  }
+    ),
+  ),
+);
+}
 
   Widget _buildBrandHeader() {
     return Padding(

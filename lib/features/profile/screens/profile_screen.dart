@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_routes.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../data/models/branch_model.dart';
 import '../../../data/models/user_model.dart';
 import '../../../shared/widgets/apple_touch_feedback.dart';
@@ -76,13 +78,13 @@ class ProfileScreen extends ConsumerWidget {
             child: _SettingsCard(
               tiles: [
                 _SettingsTile(
-                  icon: Icons.person_outline_rounded,
+                  icon: CupertinoIcons.person_crop_circle,
                   label: 'Edit Profile',
                   subtitle: profile?.fullName ?? 'Update your details',
                   onTap: () => context.push(AppRoutes.editProfile),
                 ),
                 _SettingsTile(
-                  icon: Icons.notifications_outlined,
+                  icon: CupertinoIcons.bell_fill,
                   label: 'Notifications',
                   subtitle: 'Manage alerts & preferences',
                   onTap: () => context.push(AppRoutes.notificationPrefs),
@@ -101,7 +103,7 @@ class ProfileScreen extends ConsumerWidget {
             child: _SettingsCard(
               tiles: [
                 _SettingsTile(
-                  icon: Icons.workspace_premium_outlined,
+                  icon: CupertinoIcons.sparkles,
                   label: 'Membership',
                   subtitle: _membershipLabel(profile),
                   subtitleColor: _membershipColor(profile),
@@ -112,9 +114,9 @@ class ProfileScreen extends ConsumerWidget {
                       _MembershipBadge(profile: profile),
                       const SizedBox(width: 4),
                       const Icon(
-                        Icons.chevron_right_rounded,
+                        CupertinoIcons.chevron_right,
                         color: AppColors.textHint,
-                        size: 20,
+                        size: 16,
                       ),
                     ],
                   ),
@@ -133,19 +135,19 @@ class ProfileScreen extends ConsumerWidget {
             child: _SettingsCard(
               tiles: [
                 _SettingsTile(
-                  icon: Icons.shield_outlined,
+                  icon: CupertinoIcons.shield_lefthalf_fill,
                   label: 'Privacy Policy',
                   labelColor: AppColors.gold,
                   onTap: () => _launch('https://tigerbayinternational.com/privacy'),
                 ),
                 _SettingsTile(
-                  icon: Icons.description_outlined,
+                  icon: CupertinoIcons.doc_text_fill,
                   label: 'Terms of Service',
                   labelColor: AppColors.gold,
                   onTap: () => _launch('https://tigerbayinternational.com/terms'),
                 ),
                 _SettingsTile(
-                  icon: Icons.gavel_outlined,
+                  icon: CupertinoIcons.checkmark_shield_fill,
                   label: 'GDPR Compliance',
                   labelColor: AppColors.gold,
                   onTap: () => _launch('https://tigerbayinternational.com/gdpr'),
@@ -228,9 +230,10 @@ class ProfileScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 20),
             Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const Icon(Icons.location_on_rounded,
-                    color: AppColors.gold, size: 20),
+                const Icon(CupertinoIcons.location_solid,
+                    color: AppColors.gold, size: 18),
                 const SizedBox(width: 8),
                 Text(
                   'Select Branch',
@@ -446,7 +449,7 @@ class _ProfileHero extends StatelessWidget {
                       border: Border.all(
                           color: AppColors.brandBlack, width: 2),
                     ),
-                    child: const Icon(Icons.edit_rounded,
+                    child: const Icon(CupertinoIcons.camera_fill,
                         size: 14, color: Colors.black),
                   ),
                 ),
@@ -471,11 +474,31 @@ class _ProfileHero extends StatelessWidget {
             if (displayEmail != null && displayEmail.isNotEmpty)
               Text(
                 displayEmail,
-                style: GoogleFonts.poppins(
+                style: AppTypography.subheadline.copyWith(
                   fontSize: 13,
                   color: AppColors.textSecondary,
                 ),
               ),
+
+            const SizedBox(height: 8),
+
+            // 6-Digit Member ID
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.glassBorder, width: 0.8),
+              ),
+              child: Text(
+                'MEMBER ID: ${profile?.formattedMemberCode ?? 'TB-100000'}',
+                style: AppTypography.memberIdStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.champagneGold,
+                ),
+              ),
+            ),
 
             const SizedBox(height: 12),
 
@@ -834,12 +857,12 @@ class _SignOutButton extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.logout_rounded,
+            const Icon(CupertinoIcons.square_arrow_right,
                 color: AppColors.brandRed, size: 18),
             const SizedBox(width: 10),
             Text(
               'Sign Out',
-              style: GoogleFonts.poppins(
+              style: AppTypography.headline.copyWith(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
                 color: AppColors.brandRed,
@@ -867,33 +890,44 @@ class _BranchPill extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(17),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          height: 34,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.07),
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(17),
             border: Border.all(
               color: Colors.white.withValues(alpha: 0.12),
+              width: 0.8,
             ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.location_on_rounded,
-                  color: AppColors.gold, size: 14),
+              const Icon(CupertinoIcons.location_solid,
+                  color: AppColors.gold, size: 13),
               const SizedBox(width: 5),
-              Text(
-                label,
-                style: GoogleFonts.poppins(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12.5,
+              Padding(
+                padding: const EdgeInsets.only(top: 2.0),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 120),
+                  child: Text(
+                    label,
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
-              const SizedBox(width: 3),
-              Icon(Icons.keyboard_arrow_down_rounded,
-                  color: Colors.white.withValues(alpha: 0.6), size: 16),
+              const SizedBox(width: 4),
+              Icon(CupertinoIcons.chevron_down,
+                  color: Colors.white.withValues(alpha: 0.6), size: 11),
             ],
           ),
         ),
