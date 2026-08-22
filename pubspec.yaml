@@ -21,7 +21,7 @@ dependencies:
 
   # Payments
   flutter_paypal_payment: ^1.0.8
-  flutter_inappwebview: ^6.0.0
+  flutter_inappwebview: ^6.1.5
   dio: ^5.4.0
   # flutter_stripe: coming soon — add pk_test_... key to .env first
 
