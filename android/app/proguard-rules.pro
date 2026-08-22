@@ -1,4 +1,5 @@
 # Proguard keep rules for TigerBay Loyalty App
+-dontoptimize
 
 # Stripe Android rules & missing pushProvisioning suppressions
 -dontwarn com.stripe.android.pushProvisioning.**
@@ -8,3 +9,4 @@
 # Flutter InAppWebView rules
 -keep class com.pichillilorenzo.flutter_inappwebview_android.** { *; }
 -dontwarn com.pichillilorenzo.flutter_inappwebview_android.**
+
