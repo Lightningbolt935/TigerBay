@@ -20,6 +20,14 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Prepare .env file
+        run: |
+          if [ -f .env.example ]; then
+            cp .env.example .env
+          else
+            touch .env
+          fi
+
       - name: Install Dependencies
         run: flutter pub get
 
@@ -57,7 +65,11 @@ jobs:
           fi
 
       - name: Ensure gradlew is executable
-        run: chmod +x android/gradlew
+        run: |
+          if [ -f android/gradlew ]; then
+            chmod +x android/gradlew
+          fi
+
 
       - name: Install Dependencies
         run: flutter pub get
