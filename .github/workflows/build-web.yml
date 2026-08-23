@@ -1,7 +1,11 @@
 name: Build Flutter Web and Zip
 
 on:
-  workflow_dispatch: # Allows you to run this manually
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
   build:
