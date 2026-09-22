@@ -28,24 +28,8 @@ class SupabaseConfig {
     return v!;
   }
 
-  // ── PayPal ──────────────────────────────────────────────────────────────
-
-  static String get paypalClientId {
-    final v = dotenv.env['PAYPAL_CLIENT_ID'];
-    assert(v != null && v.isNotEmpty, 'PAYPAL_CLIENT_ID is missing from .env');
-    return v!;
-  }
-
-  static String get paypalClientSecret {
-    final v = dotenv.env['PAYPAL_CLIENT_SECRET'];
-    assert(
-        v != null && v.isNotEmpty, 'PAYPAL_CLIENT_SECRET is missing from .env');
-    return v!;
-  }
-
-  /// `true` when PAYPAL_MODE=sandbox (default). `false` for live payments.
-  static bool get paypalSandboxMode {
-    final v = dotenv.env['PAYPAL_MODE'] ?? 'sandbox';
-    return v.toLowerCase() == 'sandbox';
+  static String get stripeSecretKey {
+    final v = dotenv.env['STRIPE_SECRET_KEY'];
+    return v ?? '';
   }
 }

@@ -1,34 +1,55 @@
-// TigerBay International — Payment Repository (Stripe Stub)
-// ──────────────────────────────────────────────────────────
-// flutter_stripe has been temporarily removed from pubspec.yaml until
-// a real Stripe API key is available. This file is a stub that preserves
-// the class shape so nothing else in the codebase breaks.
-//
-// TO ACTIVATE STRIPE: see lib/core/services/stripe_service.dart for full instructions.
-
 import 'package:flutter/material.dart';
+import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:tigerbay_app/core/config/stripe_config.dart';
 
+/// ═══════════════════════════════════════════════════════════════════════════
+/// TigerBay International — Payment Repository
+/// ═══════════════════════════════════════════════════════════════════════════
 class PaymentRepository {
   final SupabaseClient _supabase = Supabase.instance.client;
 
-  /// Stub: no-op until Stripe is configured.
+  /// Initializes Stripe with publishable key.
   static Future<void> init(String publishableKey) async {
-    debugPrint('[PaymentRepository] Stripe not configured — init skipped.');
+    if (publishableKey.startsWith('pk_')) {
+      Stripe.publishableKey = publishableKey;
+      Stripe.merchantIdentifier = 'merchant.io.tigerbay.app';
+      await Stripe.instance.applySettings();
+      debugPrint('[PaymentRepository] Stripe initialized successfully.');
+    }
   }
 
-  /// Stub: always returns cancelled until Stripe is configured.
+  /// Presents the Stripe deposit payment sheet for an already-obtained client secret.
   Future<PaymentResult> presentDepositSheet({
     required String clientSecret,
     required double amount,
     required String currency,
     required String merchantName,
   }) async {
-    return const PaymentResult(
-      success: false,
-      cancelled: true,
-      error: 'Stripe not configured yet.',
-    );
+    try {
+      await Stripe.instance.initPaymentSheet(
+        paymentSheetParameters: SetupPaymentSheetParameters(
+          paymentIntentClientSecret: clientSecret,
+          merchantDisplayName: merchantName.isNotEmpty
+              ? merchantName
+              : StripeConfig.merchantDisplayName,
+          style: ThemeMode.dark,
+        ),
+      );
+
+      await Stripe.instance.presentPaymentSheet();
+      return const PaymentResult(success: true);
+    } on StripeException catch (e) {
+      if (e.error.code == FailureCode.Canceled) {
+        return const PaymentResult(success: false, cancelled: true);
+      }
+      return PaymentResult(
+        success: false,
+        error: e.error.localizedMessage ?? 'Payment failed',
+      );
+    } catch (e) {
+      return PaymentResult(success: false, error: e.toString());
+    }
   }
 
   /// Trigger a refund for a cancelled booking via Edge Function.

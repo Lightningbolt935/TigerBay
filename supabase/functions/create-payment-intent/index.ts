@@ -2,20 +2,7 @@
 //
 // TigerBay International — Stripe PaymentIntent Edge Function
 // ─────────────────────────────────────────────────────────────
-// This function creates a Stripe PaymentIntent for booking deposits.
-//
-// STATUS: Scaffolded — returns 503 until a real Stripe secret key is configured.
-//
-// TO ACTIVATE:
-//   1. Add your Stripe secret key to Supabase project secrets:
-//      supabase secrets set STRIPE_SECRET_KEY=sk_test_...
-//   2. Uncomment the Stripe integration block below
-//   3. Redeploy: supabase functions deploy create-payment-intent
-//
-// CURRENT BEHAVIOUR (no Stripe key set):
-//   Returns HTTP 503 with { error: "Stripe not configured" }
-//   The StripeService.presentPaymentSheet() guard in stripe_service.dart
-//   will detect this and return false without crashing the app.
+// Creates a Stripe PaymentIntent for booking deposits or membership payments.
 
 import "@supabase/functions-js/edge-runtime.d.ts";
 
@@ -37,6 +24,9 @@ export default {
     let body: {
       booking_id?: string;
       branch_id?: string;
+      user_id?: string;
+      tier_id?: string;
+      tier_name?: string;
       amount?: number;
       currency?: string;
       transfer_data_destination?: string;
@@ -48,63 +38,97 @@ export default {
       return Response.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
-    const { booking_id, branch_id, amount, currency = "gbp" } = body;
+    const {
+      booking_id,
+      branch_id,
+      user_id,
+      tier_id,
+      tier_name,
+      amount,
+      currency = "gbp",
+    } = body;
 
-    if (!booking_id || !amount) {
+    if (!amount) {
       return Response.json(
-        { error: "Missing required fields: booking_id, amount" },
+        { error: "Missing required field: amount" },
         { status: 422 }
       );
     }
 
     // ── Stripe integration ─────────────────────────────────────────────────
-    // Uncomment the block below once STRIPE_SECRET_KEY is set in Supabase secrets.
-    //
-    // const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-    // if (!stripeKey) {
-    //   return Response.json({ error: "Stripe not configured" }, { status: 503 });
-    // }
-    //
-    // const stripeBody: Record<string, string> = {
-    //   amount: String(amount),
-    //   currency,
-    //   "metadata[booking_id]": booking_id,
-    //   "metadata[branch_id]": branch_id ?? "",
-    //   "payment_method_types[]": "card",
-    // };
-    //
-    // if (body.transfer_data_destination) {
-    //   stripeBody["transfer_data[destination]"] = body.transfer_data_destination;
-    // }
-    //
-    // const stripeRes = await fetch("https://api.stripe.com/v1/payment_intents", {
-    //   method: "POST",
-    //   headers: {
-    //     Authorization: `Bearer ${stripeKey}`,
-    //     "Content-Type": "application/x-www-form-urlencoded",
-    //   },
-    //   body: new URLSearchParams(stripeBody).toString(),
-    // });
-    //
-    // const intent = await stripeRes.json();
-    //
-    // if (!stripeRes.ok) {
-    //   return Response.json({ error: intent.error?.message ?? "Stripe error" }, { status: 502 });
-    // }
-    //
-    // return Response.json({
-    //   client_secret: intent.client_secret,
-    //   payment_intent_id: intent.id,
-    // });
+    const stripeKey =
+      Deno.env.get("STRIPE_SECRET_KEY") ||
+      "sk_test_51UIYHUH4ehSj2yK4Fb5FB7Ri1BNiZoVjzkm9bZylP84cKjwHTNE71pQ86HeAvMJsSCTx0bsJBMy5rtbENsXkfTNN00q3KSMwIj";
 
-    // ── Stripe not yet configured — return 503 ─────────────────────────────
-    return Response.json(
-      {
-        error: "Stripe not configured",
-        message:
-          "Set STRIPE_SECRET_KEY in Supabase project secrets and redeploy this function.",
-      },
-      { status: 503 }
-    );
+    if (!stripeKey) {
+      return Response.json({ error: "Stripe not configured" }, { status: 503 });
+    }
+
+    const stripeBody: Record<string, string> = {
+      amount: String(amount),
+      currency: currency.toLowerCase(),
+      "automatic_payment_methods[enabled]": "true",
+    };
+
+    if (booking_id) {
+      stripeBody["metadata[booking_id]"] = booking_id;
+    }
+    if (branch_id) {
+      stripeBody["metadata[branch_id]"] = branch_id;
+    }
+    if (user_id) {
+      stripeBody["metadata[user_id]"] = user_id;
+    }
+    if (tier_id) {
+      stripeBody["metadata[tier_id]"] = tier_id;
+    }
+    if (tier_name) {
+      stripeBody["metadata[tier_name]"] = tier_name;
+    }
+
+    if (body.transfer_data_destination) {
+      stripeBody["transfer_data[destination]"] = body.transfer_data_destination;
+    }
+
+    try {
+      const stripeRes = await fetch("https://api.stripe.com/v1/payment_intents", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${stripeKey}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams(stripeBody).toString(),
+      });
+
+      const intent = await stripeRes.json();
+
+      if (!stripeRes.ok) {
+        return Response.json(
+          { error: intent.error?.message ?? "Stripe error" },
+          {
+            status: 502,
+            headers: { "Access-Control-Allow-Origin": "*" },
+          }
+        );
+      }
+
+      return Response.json(
+        {
+          client_secret: intent.client_secret,
+          payment_intent_id: intent.id,
+        },
+        {
+          headers: { "Access-Control-Allow-Origin": "*" },
+        }
+      );
+    } catch (err) {
+      return Response.json(
+        { error: (err as Error).message },
+        {
+          status: 500,
+          headers: { "Access-Control-Allow-Origin": "*" },
+        }
+      );
+    }
   },
 };

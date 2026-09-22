@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:tigerbay_app/core/config/env_config.dart';
 import 'app.dart';
 
@@ -35,17 +36,15 @@ Future<void> main() async {
     publishableKey: EnvConfig.supabaseAnonKey,
   );
 
-  // ── TODO: Init Stripe when API key is ready ────────────────────────────────
-  // Uncomment the block below and add flutter_stripe back to pubspec.yaml
-  // once a real Stripe publishable key (pk_test_... / pk_live_...) is in .env:
-  //
-  // if (!kIsWeb) {
-  //   final stripeKey = dotenv.env['STRIPE_PUBLISHABLE_KEY'] ?? '';
-  //   if (stripeKey.startsWith('pk_')) {
-  //     Stripe.publishableKey = stripeKey;
-  //     await Stripe.instance.applySettings();
-  //   }
-  // }
+  // ── Init Stripe ────────────────────────────────────────────────────────────
+  final stripeKey = EnvConfig.stripePublishableKey;
+  if (stripeKey.startsWith('pk_')) {
+    Stripe.publishableKey = stripeKey;
+    Stripe.merchantIdentifier = 'merchant.io.tigerbay.app';
+    if (!kIsWeb) {
+      await Stripe.instance.applySettings();
+    }
+  }
 
   runApp(
     const ProviderScope(

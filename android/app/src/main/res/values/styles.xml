@@ -6,7 +6,7 @@
     </style>
 
     <!-- Normal theme applied after launch. Flutter draws its own UI on top. -->
-    <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
+    <style name="NormalTheme" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="android:windowBackground">?android:colorBackground</item>
     </style>
 </resources>

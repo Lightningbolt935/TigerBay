@@ -4,20 +4,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tigerbay_app/core/constants/app_colors.dart';
 import 'package:tigerbay_app/core/constants/app_routes.dart';
-import 'package:tigerbay_app/core/services/paypal_service.dart';
+import 'package:tigerbay_app/core/services/stripe_service.dart';
 import 'package:tigerbay_app/data/models/booking_model.dart';
 import 'package:tigerbay_app/features/bookings/providers/booking_provider.dart';
-
-// ── Payment method enum ───────────────────────────────────────────────────────
-enum _PaymentMethod { paypal, stripe }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // BookingConfirmScreen
 // ═══════════════════════════════════════════════════════════════════════════════
 // Handles the final deposit payment step before a booking is confirmed.
-// - PayPal: fully wired — launches PaypalCheckoutView WebView, then flips
-//   booking status to 'upcoming' in Supabase via confirmBookingPaymentPayPal().
-// - Stripe: Coming Soon — tab displayed but disabled until pk_test_ key is set.
+// Uses Stripe Payment Sheet (Credit/Debit Card, Apple Pay, Google Pay)
+// and updates the booking status to 'upcoming' upon successful completion.
 class BookingConfirmScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic> bookingData;
 
@@ -29,69 +25,67 @@ class BookingConfirmScreen extends ConsumerStatefulWidget {
 }
 
 class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
-  _PaymentMethod _selectedMethod = _PaymentMethod.paypal;
   bool _isProcessing = false;
-
-  // TODO(stripe): When Stripe is activated, re-add _stripeAccountId fetch
-  // via repo.fetchBranchStripeAccountId(branchId) and pass it to the
-  // create-payment-intent edge function as transfer_data_destination.
 
   @override
   void initState() {
     super.initState();
   }
 
-  // ── PayPal payment flow ───────────────────────────────────────────────────
-  Future<void> _handlePayPal() async {
+  // ── Stripe payment flow ───────────────────────────────────────────────────
+  Future<void> _handleStripePayment() async {
     final bookingId = widget.bookingData['bookingId'] as String? ?? '';
+    final branchId = widget.bookingData['branchId'] as String? ?? '';
     final depositAmount =
         (widget.bookingData['depositAmount'] as num?)?.toDouble() ?? 20.0;
+    final amountPence = (depositAmount * 100).round();
 
     setState(() => _isProcessing = true);
     try {
-      final paid = await PayPalService.pay(
+      final result = await StripeService.presentBookingDepositSheet(
         context: context,
-        amount: depositAmount.toStringAsFixed(2),
-        currency: 'GBP',
-        description: 'TigerBay Table Deposit',
+        bookingId: bookingId,
+        branchId: branchId,
+        amountPence: amountPence,
+        currency: 'gbp',
       );
 
       if (!mounted) return;
 
-      if (paid) {
+      if (result.success) {
         // ── Confirm booking status in Supabase ──────────────────────────────
-        // PaypalCheckoutView does not expose the raw order ID directly, so we
-        // store a timestamp-prefixed sentinel. Server-side reconciliation via
-        // PayPal webhooks should be used for production auditing.
         try {
           final repo = ref.read(bookingRepositoryProvider);
-          await repo.confirmBookingPaymentPayPal(
+          await repo.confirmBookingPayment(
             bookingId: bookingId,
-            paypalOrderId: 'paypal_${DateTime.now().millisecondsSinceEpoch}',
+            stripePaymentIntentId:
+                result.paymentIntentId ?? 'pi_${DateTime.now().millisecondsSinceEpoch}',
           );
         } catch (e) {
-          debugPrint('[TigerBay] confirmBookingPaymentPayPal DB update failed: $e');
-          // Payment was real — log and continue. Status will be reconciled
-          // server-side via PayPal webhook.
+          debugPrint('[TigerBay] confirmBookingPayment DB update failed: $e');
         }
 
         if (!mounted) return;
         _showSuccess();
+      } else if (result.cancelled) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Payment cancelled. No charge was made.'),
+            backgroundColor: Colors.black87,
+          ),
+        );
       } else {
-        // User cancelled or PayPal returned an error
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Payment cancelled. No charge was made.'),
-              backgroundColor: Colors.black87,
-            ),
-          );
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result.error ?? 'Payment failed. Please try again.'),
+            backgroundColor: AppColors.error,
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('PayPal error: $e')),
+          SnackBar(content: Text('Payment error: $e')),
         );
       }
     } finally {
@@ -158,8 +152,7 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'A £${depositAmount.toStringAsFixed(2)} deposit secures your table. '
-                          'Fully refundable if cancelled 24h in advance.',
+                          'A £${depositAmount.toStringAsFixed(2)} deposit secures your table. Fully refundable if cancelled 24h in advance.',
                           style: TextStyle(
                               color: Colors.grey.shade600,
                               fontSize: 12,
@@ -209,30 +202,17 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
             ),
             const SizedBox(height: 14),
 
-            // PayPal — fully active
-            _PaymentMethodTile(
-              id: 'paypal_tile',
-              icon: Icons.account_balance_wallet_rounded,
-              iconColor: const Color(0xFF003087),
-              title: 'PayPal',
-              subtitle: 'Secure checkout via PayPal',
-              selected: _selectedMethod == _PaymentMethod.paypal,
-              onTap: () =>
-                  setState(() => _selectedMethod = _PaymentMethod.paypal),
-            ),
-            const SizedBox(height: 10),
-
-            // Stripe — disabled, Coming Soon
+            // Stripe Payment Card (Apple Pay, Google Pay, Cards)
             _PaymentMethodTile(
               id: 'stripe_tile',
               icon: Icons.credit_card_rounded,
-              iconColor: Colors.black45,
-              title: 'Card (Stripe)',
-              subtitle: 'Visa, Mastercard, Amex',
-              selected: _selectedMethod == _PaymentMethod.stripe,
-              disabled: true,
-              badge: 'Coming Soon',
-              onTap: null,
+              iconColor: AppColors.gold,
+              title: 'Card & Digital Wallet (Stripe)',
+              subtitle: 'Apple Pay, Google Pay, Visa, Mastercard, Amex',
+              selected: true,
+              disabled: false,
+              badge: 'Instant',
+              onTap: () {},
             ),
 
             const Spacer(),
@@ -242,7 +222,7 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
               width: double.infinity,
               height: 54,
               child: ElevatedButton(
-                onPressed: _isProcessing ? null : _handlePayPal,
+                onPressed: _isProcessing ? null : _handleStripePayment,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.gold,
                   disabledBackgroundColor:
@@ -265,7 +245,7 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
                               color: Colors.white, size: 16),
                           const SizedBox(width: 8),
                           Text(
-                            'Pay £${depositAmount.toStringAsFixed(2)} with PayPal',
+                            'Pay £${depositAmount.toStringAsFixed(2)} Deposit',
                             style: const TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w600,

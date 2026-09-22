@@ -66,37 +66,24 @@ class EnvConfig {
   static String get stripePublishableKey {
     const compileTime = String.fromEnvironment('STRIPE_PUBLISHABLE_KEY');
     if (compileTime.isNotEmpty) return compileTime;
-    return _resolve('STRIPE_PUBLISHABLE_KEY', defaultValue: '');
+    return _resolve('STRIPE_PUBLISHABLE_KEY',
+        defaultValue:
+            'pk_test_51UIYHUH4ehSj2yK4wdoP3TcZqezk5JTgebZ5pJnLV20ba0cr7c678OrkzMN6ZmOHxAURhp8jEKVkKheySZitDOoz00Ah20eGjx');
   }
 
   static bool get isStripeConfigured =>
       stripePublishableKey.startsWith('pk_');
 
-  // ── PayPal ─────────────────────────────────────────────────────────────────
-
-  static String get paypalClientId {
-    const compileTime = String.fromEnvironment('PAYPAL_CLIENT_ID');
+  static String get stripeSecretKey {
+    const compileTime = String.fromEnvironment('STRIPE_SECRET_KEY');
     if (compileTime.isNotEmpty) return compileTime;
-    return _resolve('PAYPAL_CLIENT_ID',
+    return _resolve('STRIPE_SECRET_KEY',
         defaultValue:
-            'ATw_FSQNby393C2MysXL2HaT6y_GHvYgz8vDu3_H11FfVfeDG2UrrJrE3ItAdgDtPQSrpw6cYGjVjCp5');
+            'sk_test_51UIYHUH4ehSj2yK4Fb5FB7Ri1BNiZoVjzkm9bZylP84cKjwHTNE71pQ86HeAvMJsSCTx0bsJBMy5rtbENsXkfTNN00q3KSMwIj');
   }
 
-  static String get paypalClientSecret {
-    const compileTime = String.fromEnvironment('PAYPAL_CLIENT_SECRET');
-    if (compileTime.isNotEmpty) return compileTime;
-    return _resolve('PAYPAL_CLIENT_SECRET',
-        defaultValue:
-            'ECgSnr_l-UV086zWcXOBi4zNgt_VJ-kbXQhY5rHa_EsHkzYqCcJCaIPBgltE-Pd3kFGPGfFxiySUj3ff');
-  }
-
-  static String get paypalMode {
-    const compileTime = String.fromEnvironment('PAYPAL_MODE');
-    if (compileTime.isNotEmpty) return compileTime;
-    return _resolve('PAYPAL_MODE', defaultValue: 'sandbox');
-  }
-
-  static bool get isPayPalSandbox => paypalMode.toLowerCase() == 'sandbox';
+  static String get stripeMerchantDisplayName => 'TigerBay International';
+  static String get stripeCurrency => 'gbp';
 
   // ── Google OAuth & Identity ────────────────────────────────────────────────
 

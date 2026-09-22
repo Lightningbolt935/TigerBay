@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tigerbay_app/core/constants/app_colors.dart';
 import 'package:tigerbay_app/core/constants/app_routes.dart';
-import 'package:tigerbay_app/core/services/paypal_service.dart';
+import 'package:tigerbay_app/core/services/stripe_service.dart';
 import 'package:tigerbay_app/data/models/membership_tier_model.dart';
 import 'package:tigerbay_app/features/auth/providers/profile_state_provider.dart';
 import 'package:tigerbay_app/features/profile/providers/membership_provider.dart';
@@ -47,15 +47,15 @@ class _MembershipPaywallScreenState
 
   Future<void> _activateMembership(MembershipTier tier) async {
     final activator = ref.read(membershipActivationNotifierProvider.notifier);
+    final userId = ref.read(supabaseClientProvider).auth.currentUser?.id;
 
-    // ── Step 1: Collect payment via PayPal ────────────────────────────────
-    // The membership is NOT activated until PayPal confirms payment.
-    // presentMembershipPayment() opens a WebView; returns after
-    // the user completes, cancels, or encounters an error.
-    final paymentResult = await PayPalService.presentMembershipPayment(
+    // ── Step 1: Collect payment via Stripe ────────────────────────────────
+    final paymentResult = await StripeService.presentMembershipPayment(
       context: context,
       tierName: tier.name,
       amountGbp: tier.price,
+      tierId: tier.id.toString(),
+      userId: userId,
     );
 
     if (!mounted) return;
@@ -100,20 +100,19 @@ class _MembershipPaywallScreenState
     if (!mounted) return;
 
     if (success) {
-      // ── Step 3: Record PayPal order ID for audit trail ──────────────────
-      // Best-effort write — failure here does NOT roll back the activation.
-      if (paymentResult.orderId != null && paymentResult.orderId!.isNotEmpty) {
+      // ── Step 3: Record Stripe payment ID for audit trail ──────────────────
+      if (paymentResult.paymentIntentId != null &&
+          paymentResult.paymentIntentId!.isNotEmpty) {
         try {
           final supabase = ref.read(supabaseClientProvider);
-          final userId = supabase.auth.currentUser?.id;
           if (userId != null) {
             await supabase.from('profiles').update({
-              'paypal_order_id': paymentResult.orderId,
+              'paypal_order_id': paymentResult.paymentIntentId,
               'updated_at': DateTime.now().toIso8601String(),
             }).eq('id', userId);
           }
         } catch (e) {
-          debugPrint('[MembershipPaywall] orderId record failed: $e');
+          debugPrint('[MembershipPaywall] stripe payment intent record failed: $e');
         }
       }
 

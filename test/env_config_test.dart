@@ -16,10 +16,10 @@ void main() {
       expect(EnvConfig.supabaseAnonKey, isNotEmpty);
     });
 
-    test('EnvConfig provides valid PayPal configuration', () {
-      expect(EnvConfig.paypalClientId, isNotEmpty);
-      expect(EnvConfig.paypalClientSecret, isNotEmpty);
-      expect(EnvConfig.paypalMode, isNotEmpty);
+    test('EnvConfig provides valid Stripe configuration', () {
+      expect(EnvConfig.stripePublishableKey, isNotEmpty);
+      expect(EnvConfig.stripePublishableKey.startsWith('pk_'), isTrue);
+      expect(EnvConfig.isStripeConfigured, isTrue);
     });
 
     test('EnvConfig provides valid Google Client & App Scheme', () {
