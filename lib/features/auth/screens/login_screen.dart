@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:tigerbay_app/core/constants/app_routes.dart';
 import 'package:tigerbay_app/data/models/branch_model.dart';
 import 'package:tigerbay_app/core/constants/app_colors.dart';
@@ -28,9 +29,20 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen>
-    with SingleTickerProviderStateMixin {
-  // ── Tab animation ────────────────────────────────────────────────────────────
+    with TickerProviderStateMixin {
+  // ── Tab & Animation controllers ──────────────────────────────────────────────
   late final TabController _tabController;
+  late final AnimationController _entranceController;
+  late final AnimationController _pulseController;
+  late final AnimationController _sheenController;
+
+  late final Animation<double> _logoScale;
+  late final Animation<double> _logoFade;
+  late final Animation<Offset> _headerSlide;
+  late final Animation<double> _tabsFade;
+  late final Animation<Offset> _tabsSlide;
+  late final Animation<double> _formFade;
+  late final Animation<Offset> _formSlide;
 
   // ── Login form ────────────────────────────────────────────────────────────────
   final _loginFormKey = GlobalKey<FormState>();
@@ -63,11 +75,86 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       initialIndex: widget.initialTabIndex.clamp(0, 1),
     );
     _tabController.addListener(() => setState(() {}));
+
+    // ── Entrance Animation Timeline (1000ms) ─────────────────────────────────
+    _entranceController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    );
+
+    // ── Ambient Breathing Pulse (3200ms) ─────────────────────────────────────
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 3200),
+    )..repeat(reverse: true);
+
+    // ── Continuous Sheen Reflection (3000ms) ─────────────────────────────────
+    _sheenController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 3000),
+    )..repeat();
+
+    _logoFade = CurvedAnimation(
+      parent: _entranceController,
+      curve: const Interval(0.0, 0.45, curve: Curves.easeOut),
+    );
+
+    _logoScale = Tween<double>(begin: 0.82, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _entranceController,
+        curve: const Interval(0.0, 0.55, curve: Curves.easeOutBack),
+      ),
+    );
+
+    _headerSlide = Tween<Offset>(
+      begin: const Offset(0, -0.15),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _entranceController,
+        curve: const Interval(0.05, 0.5, curve: Curves.easeOutCubic),
+      ),
+    );
+
+    _tabsFade = CurvedAnimation(
+      parent: _entranceController,
+      curve: const Interval(0.25, 0.65, curve: Curves.easeOut),
+    );
+
+    _tabsSlide = Tween<Offset>(
+      begin: const Offset(0, 0.18),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _entranceController,
+        curve: const Interval(0.25, 0.65, curve: Curves.easeOutCubic),
+      ),
+    );
+
+    _formFade = CurvedAnimation(
+      parent: _entranceController,
+      curve: const Interval(0.4, 0.85, curve: Curves.easeOut),
+    );
+
+    _formSlide = Tween<Offset>(
+      begin: const Offset(0, 0.12),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _entranceController,
+        curve: const Interval(0.4, 0.85, curve: Curves.easeOutCubic),
+      ),
+    );
+
+    _entranceController.forward();
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _entranceController.dispose();
+    _pulseController.dispose();
+    _sheenController.dispose();
     _loginEmailController.dispose();
     _loginPasswordController.dispose();
     _registerFullNameController.dispose();
@@ -172,31 +259,83 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     final authState = ref.watch(authProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // ── Header ─────────────────────────────────────────────────────────
-            const SizedBox(height: 32),
-            _buildLogoHeader(),
-            const SizedBox(height: 28),
+      backgroundColor: const Color(0xFF08080A),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // ── Ambient Luxury Glow Layer ──────────────────────────────────────
+          AnimatedBuilder(
+            animation: _pulseController,
+            builder: (context, _) {
+              final pulse = 0.85 + (_pulseController.value * 0.15);
+              return Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      center: const Alignment(0, -0.65),
+                      radius: 0.95,
+                      colors: [
+                        AppColors.brandRed.withValues(alpha: 0.20 * pulse),
+                        AppColors.gold.withValues(alpha: 0.08 * pulse),
+                        Colors.transparent,
+                      ],
+                      stops: const [0.0, 0.45, 1.0],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
 
-            // ── Tab bar ─────────────────────────────────────────────────────────
-            _buildTabBar(),
-            const SizedBox(height: 4),
+          SafeArea(
+            child: Column(
+              children: [
+                const SizedBox(height: 24),
 
-            // ── Forms ───────────────────────────────────────────────────────────
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildLoginForm(authState),
-                  _buildRegisterForm(authState),
-                ],
-              ),
+                // ── Animated Logo & Brand Header ─────────────────────────────
+                SlideTransition(
+                  position: _headerSlide,
+                  child: FadeTransition(
+                    opacity: _logoFade,
+                    child: ScaleTransition(
+                      scale: _logoScale,
+                      child: _buildLogoHeader(),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 22),
+
+                // ── Animated Segmented Tab Bar ───────────────────────────────
+                SlideTransition(
+                  position: _tabsSlide,
+                  child: FadeTransition(
+                    opacity: _tabsFade,
+                    child: _buildTabBar(),
+                  ),
+                ),
+                const SizedBox(height: 6),
+
+                // ── Animated Forms ───────────────────────────────────────────
+                Expanded(
+                  child: SlideTransition(
+                    position: _formSlide,
+                    child: FadeTransition(
+                      opacity: _formFade,
+                      child: TabBarView(
+                        controller: _tabController,
+                        physics: const BouncingScrollPhysics(),
+                        children: [
+                          _buildLoginForm(authState),
+                          _buildRegisterForm(authState),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -206,59 +345,80 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   Widget _buildLogoHeader() {
     return Column(
       children: [
-        Container(
-          width: 104,
-          height: 104,
-          decoration: BoxDecoration(
-            color: AppColors.brandBlack,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: AppColors.glassBorder,
-              width: 0.8,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.brandRed.withValues(alpha: 0.25),
-                blurRadius: 28,
-                offset: const Offset(0, 8),
+        AnimatedBuilder(
+          animation: _pulseController,
+          builder: (context, child) {
+            final glowPulse = _pulseController.value;
+            return Container(
+              width: 98,
+              height: 98,
+              decoration: BoxDecoration(
+                color: AppColors.brandBlack,
+                borderRadius: BorderRadius.circular(26),
+                border: Border.all(
+                  color: AppColors.gold.withValues(alpha: 0.35 + (glowPulse * 0.25)),
+                  width: 1.2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.brandRed.withValues(alpha: 0.24 + (glowPulse * 0.16)),
+                    blurRadius: 26 + (glowPulse * 10),
+                    spreadRadius: 1,
+                    offset: const Offset(0, 6),
+                  ),
+                  BoxShadow(
+                    color: AppColors.gold.withValues(alpha: 0.14 + (glowPulse * 0.08)),
+                    blurRadius: 18 + (glowPulse * 6),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: Image.asset(
+                  'assets/images/tigerbay_logo.png',
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const Icon(
+                    CupertinoIcons.paw,
+                    size: 42,
+                    color: AppColors.brandRed,
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 14),
+        Text(
+          'TigerBay',
+          style: GoogleFonts.cinzel(
+            fontSize: 26,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 3.5,
+            color: Colors.white,
+            shadows: [
+              Shadow(
+                color: AppColors.brandRed.withValues(alpha: 0.5),
+                blurRadius: 18,
               ),
             ],
           ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(24),
-            child: Image.asset(
-              'assets/images/tigerbay_logo.png',
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => const Icon(
-                CupertinoIcons.paw,
-                size: 44,
-                color: AppColors.brandRed,
-              ),
-            ),
-          ),
         ),
-        const SizedBox(height: 16),
-        Text(
-          'TigerBay',
-          style: AppTypography.title1.copyWith(
-            fontWeight: FontWeight.w800,
-            letterSpacing: 2,
-            color: AppColors.brandRed,
-          ),
-        ),
-        const SizedBox(height: 2),
+        const SizedBox(height: 3),
         Text(
           'INTERNATIONAL',
-          style: AppTypography.caption2.copyWith(
-            fontWeight: FontWeight.w700,
-            letterSpacing: 3.5,
+          style: GoogleFonts.poppins(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 4.5,
             color: AppColors.gold,
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
         Text(
           'Member Access',
-          style: AppTypography.subheadline.copyWith(
+          style: GoogleFonts.poppins(
+            fontSize: 13,
+            fontWeight: FontWeight.w400,
             color: AppColors.textSecondary,
           ),
         ),
@@ -272,41 +432,59 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Container(
-        height: 48,
+        height: 50,
         decoration: BoxDecoration(
-          color: const Color(0xFF141416),
-          borderRadius: BorderRadius.circular(24),
+          color: const Color(0xFF131316),
+          borderRadius: BorderRadius.circular(25),
           border: Border.all(
-            color: const Color(0xFF28282B),
-            width: 0.8,
+            color: const Color(0xFF28282E),
+            width: 1.0,
           ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.35),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         padding: const EdgeInsets.all(4),
         child: TabBar(
           controller: _tabController,
           indicator: BoxDecoration(
-            color: const Color(0xFF242428),
-            borderRadius: BorderRadius.circular(20),
+            gradient: const LinearGradient(
+              colors: [Color(0xFF2B2B33), Color(0xFF1E1E24)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+            borderRadius: BorderRadius.circular(21),
             border: Border.all(
-              color: AppColors.glassBorder,
-              width: 0.8,
+              color: AppColors.gold.withValues(alpha: 0.4),
+              width: 1.0,
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.4),
-                blurRadius: 8,
+                color: Colors.black.withValues(alpha: 0.45),
+                blurRadius: 10,
                 offset: const Offset(0, 2),
+              ),
+              BoxShadow(
+                color: AppColors.gold.withValues(alpha: 0.12),
+                blurRadius: 8,
               ),
             ],
           ),
           indicatorSize: TabBarIndicatorSize.tab,
+          dividerColor: Colors.transparent,
           labelColor: AppColors.champagneGold,
           unselectedLabelColor: AppColors.textSecondary,
-          labelStyle: AppTypography.subheadline.copyWith(
+          labelStyle: GoogleFonts.poppins(
             fontWeight: FontWeight.w600,
+            fontSize: 14,
           ),
-          unselectedLabelStyle: AppTypography.subheadline.copyWith(
+          unselectedLabelStyle: GoogleFonts.poppins(
             fontWeight: FontWeight.w400,
+            fontSize: 14,
           ),
           tabs: const [
             Tab(text: 'Sign In'),
@@ -660,39 +838,98 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }) {
     return AppleTouchFeedback(
       onTap: isLoading ? null : onTap,
-      child: Container(
-        width: double.infinity,
-        height: 54,
-        decoration: BoxDecoration(
-          gradient: AppColors.goldGradient,
-          borderRadius: BorderRadius.circular(27),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.gold.withValues(alpha: 0.3),
-              blurRadius: 18,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Center(
-          child: isLoading
-              ? const SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(
-                    color: Colors.black,
-                    strokeWidth: 2,
-                  ),
-                )
-              : Text(
-                  label,
-                  style: AppTypography.headline.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: Colors.black,
-                    letterSpacing: 0.3,
-                  ),
+      child: AnimatedBuilder(
+        animation: _sheenController,
+        builder: (context, child) {
+          return Container(
+            width: double.infinity,
+            height: 54,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFE5C068), Color(0xFFD4AF37), Color(0xFFB38927)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(27),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.gold.withValues(alpha: 0.35),
+                  blurRadius: 18,
+                  offset: const Offset(0, 4),
                 ),
-        ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(27),
+              child: Stack(
+                children: [
+                  // Continuous subtle diagonal sheen reflection
+                  if (!isLoading)
+                    Positioned.fill(
+                      child: FractionalTranslation(
+                        translation: Offset((_sheenController.value * 3.0) - 1.0, 0),
+                        child: Transform.rotate(
+                          angle: 0.3,
+                          child: Container(
+                            width: 60,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.white.withValues(alpha: 0.0),
+                                  Colors.white.withValues(alpha: 0.28),
+                                  Colors.white.withValues(alpha: 0.0),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  Center(
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 250),
+                      child: isLoading
+                          ? Row(
+                              key: const ValueKey('loading'),
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.black87),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Text(
+                                  'Authenticating...',
+                                  style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.black87,
+                                    fontSize: 14,
+                                    letterSpacing: 0.2,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Text(
+                              label,
+                              key: ValueKey(label),
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.w700,
+                                color: Colors.black,
+                                fontSize: 16,
+                                letterSpacing: 0.4,
+                              ),
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
