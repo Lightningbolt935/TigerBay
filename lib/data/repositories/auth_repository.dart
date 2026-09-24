@@ -137,20 +137,28 @@ class AuthRepository {
     final user = _client.auth.currentUser;
     if (user == null) return;
 
-    final response = await _client
-        .from('profiles')
-        .select('id')
-        .eq('id', user.id)
-        .maybeSingle();
+    // Retry up to 3 times with brief delay to allow database trigger
+    // (handle_new_user) to complete profile insertion for OAuth sign-ins.
+    Map<String, dynamic>? response;
+    for (int attempt = 0; attempt < 3; attempt++) {
+      response = await _client
+          .from('profiles')
+          .select('id')
+          .eq('id', user.id)
+          .maybeSingle();
 
-    if (response == null) {
-      debugPrint(
-        '[TigerBay Auth] NO_PROFILE_EXISTS: No profiles row found for '
-        'user ${user.id.substring(0, 8)}... — signing out and blocking.',
-      );
-      await _client.auth.signOut();
-      throw const NoProfileExistsException();
+      if (response != null) return;
+      if (attempt < 2) {
+        await Future.delayed(const Duration(milliseconds: 300));
+      }
     }
+
+    debugPrint(
+      '[TigerBay Auth] NO_PROFILE_EXISTS: No profiles row found for '
+      'user ${user.id.substring(0, 8)}... — signing out and blocking.',
+    );
+    await _client.auth.signOut();
+    throw const NoProfileExistsException();
   }
 
   // ── Registration Pipeline ──────────────────────────────────────────────────
@@ -262,44 +270,24 @@ class AuthRepository {
 
   // ── Google ──────────────────────────────────────────────────────────────────
 
-  Future<AuthResponse> signInWithGoogle() async {
-    final webClientId = EnvConfig.googleWebClientId;
-
-    final googleSignIn = GoogleSignIn(
-      clientId: kIsWeb ? webClientId : null,
-      serverClientId: webClientId,
-      scopes: ['email', 'profile'],
+  /// Signs in with Google using Supabase's built-in OAuth provider.
+  ///
+  /// This uses the Supabase redirect flow (no Firebase / google-services.json
+  /// required). The user is sent to Google via the system browser, then
+  /// redirected back to the app via the [appScheme]://login-callback deep link.
+  ///
+  /// The Supabase auth state listener (in [AuthProvider]) picks up the session
+  /// automatically once the deep link returns.
+  Future<void> signInWithGoogle() async {
+    final appScheme = EnvConfig.appScheme; // io.tigerbay.app
+    await _client.auth.signInWithOAuth(
+      OAuthProvider.google,
+      redirectTo: '$appScheme://login-callback',
+      authScreenLaunchMode: LaunchMode.externalApplication,
     );
-
-    // Force account chooser dialog so the user can switch Google accounts/IDs
-    try {
-      await googleSignIn.signOut();
-    } catch (_) {
-      // Ignore errors if no previous active session
-    }
-
-    final account = await googleSignIn.signIn();
-    if (account == null) {
-      throw const AuthException('Google sign-in cancelled.');
-    }
-
-    final auth = await account.authentication;
-    final idToken = auth.idToken;
-    if (idToken == null) {
-      throw const AuthException('No Google ID token received.');
-    }
-
-    final response = await _client.auth.signInWithIdToken(
-      provider: OAuthProvider.google,
-      idToken: idToken,
-      accessToken: auth.accessToken,
-    );
-
-    if (response.user != null) {
-      unawaited(_bindDevice(response.user!.id));
-    }
-
-    return response;
+    // Note: this method returns immediately after launching the browser.
+    // The session is established asynchronously via the deep link callback
+    // and picked up by the onAuthStateChange listener in AuthProvider.
   }
   // ── Apple ───────────────────────────────────────────────────────────────────
 

@@ -348,31 +348,20 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   // ── Social ─────────────────────────────────────────────────────────────────
 
-  Future<bool> signInWithGoogle() async {
+  Future<void> signInWithGoogle() async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
       await _repo.signInWithGoogle();
-
-      // ── Register-First Guard ──────────────────────────────────────────
-      await _repo.checkProfileExistsOrSignOut();
-
-      state = state.copyWith(isLoading: false);
-      return true;
-    } on NoProfileExistsException {
-      state = state.copyWith(
-        isLoading: false,
-        error: 'No account exists with this credential. Please register first.',
-      );
-      return false;
+      // NOTE: Google OAuth uses signInWithOAuth which opens a browser redirect.
+      // The register-first guard for Google is enforced in the
+      // onAuthStateChange stream handler when the SIGNED_IN event arrives
+      // after the redirect completes. See _handleAuthEvent → authenticated.
     } on AuthException catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: _localizeAuthError(e.message),
-      );
-      return false;
+      state = state.copyWith(error: _localizeAuthError(e.message));
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
-      return false;
+      state = state.copyWith(error: e.toString());
+    } finally {
+      state = state.copyWith(isLoading: false);
     }
   }
 

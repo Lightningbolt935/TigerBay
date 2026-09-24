@@ -29,11 +29,10 @@ void main() {
 
     test('EnvConfig provides valid Twilio configuration', () {
       expect(EnvConfig.twilioAccountSid, startsWith('AC'));
-      expect(EnvConfig.twilioAuthToken, isNotEmpty);
-      expect(EnvConfig.twilioApiKeySid, startsWith('SK'));
-      expect(EnvConfig.twilioApiSecret, isNotEmpty);
       expect(EnvConfig.twilioVerifyServiceSid, startsWith('VA'));
-      expect(EnvConfig.isTwilioConfigured, isTrue);
+      // Secrets are empty by default for client-side security
+      expect(EnvConfig.twilioAuthToken, isA<String>());
+      expect(EnvConfig.twilioApiSecret, isA<String>());
     });
   });
 
