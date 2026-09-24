@@ -74,12 +74,16 @@ class EnvConfig {
   static bool get isStripeConfigured =>
       stripePublishableKey.startsWith('pk_');
 
+  /// SECURITY: The Stripe secret key must NEVER be embedded in a mobile app.
+  /// Payment intent creation is handled server-side via Supabase Edge Function.
+  /// This getter returns an empty string — the fallback direct-API path in
+  /// StripeService is disabled in production builds.
   static String get stripeSecretKey {
+    // Only allow in debug/test builds via dart-define (never a real default)
+    if (kReleaseMode) return '';
     const compileTime = String.fromEnvironment('STRIPE_SECRET_KEY');
     if (compileTime.isNotEmpty) return compileTime;
-    return _resolve('STRIPE_SECRET_KEY',
-        defaultValue:
-            'sk_test_51UIYHUH4ehSj2yK4Fb5FB7Ri1BNiZoVjzkm9bZylP84cKjwHTNE71pQ86HeAvMJsSCTx0bsJBMy5rtbENsXkfTNN00q3KSMwIj');
+    return _resolve('STRIPE_SECRET_KEY', defaultValue: '');
   }
 
   static String get stripeMerchantDisplayName => 'TigerBay International';
@@ -108,25 +112,32 @@ class EnvConfig {
   static String get twilioAccountSid {
     const compileTime = String.fromEnvironment('TWILIO_ACCOUNT_SID');
     if (compileTime.isNotEmpty) return compileTime;
+    // SID is not a secret (it's a public identifier), safe to keep
     return _resolve('TWILIO_ACCOUNT_SID', defaultValue: 'ACfe3d3114b5b5315288f76bd47b0d327f');
   }
 
+  /// SECURITY: Twilio auth token is a server-side secret.
+  /// Must NEVER be in a mobile app binary.
   static String get twilioAuthToken {
+    if (kReleaseMode) return '';
     const compileTime = String.fromEnvironment('TWILIO_AUTH_TOKEN');
     if (compileTime.isNotEmpty) return compileTime;
-    return _resolve('TWILIO_AUTH_TOKEN', defaultValue: '3abb0f1815db0aa456c108e1788b0292');
+    return _resolve('TWILIO_AUTH_TOKEN', defaultValue: '');
   }
 
   static String get twilioApiKeySid {
+    if (kReleaseMode) return '';
     const compileTime = String.fromEnvironment('TWILIO_API_KEY_SID');
     if (compileTime.isNotEmpty) return compileTime;
-    return _resolve('TWILIO_API_KEY_SID', defaultValue: 'SKacdd26eebc2dadc8c64125fd0758bb24');
+    return _resolve('TWILIO_API_KEY_SID', defaultValue: '');
   }
 
+  /// SECURITY: Twilio API secret must NEVER be in a mobile app binary.
   static String get twilioApiSecret {
+    if (kReleaseMode) return '';
     const compileTime = String.fromEnvironment('TWILIO_API_SECRET');
     if (compileTime.isNotEmpty) return compileTime;
-    return _resolve('TWILIO_API_SECRET', defaultValue: 'N7h89vtqRdb0BgfXJL6r3CiKIWJMeldM');
+    return _resolve('TWILIO_API_SECRET', defaultValue: '');
   }
 
   static String get twilioVerifyServiceSid {
