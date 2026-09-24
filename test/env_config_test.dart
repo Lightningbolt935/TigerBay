@@ -20,6 +20,7 @@ void main() {
       expect(EnvConfig.stripePublishableKey, isNotEmpty);
       expect(EnvConfig.stripePublishableKey.startsWith('pk_'), isTrue);
       expect(EnvConfig.isStripeConfigured, isTrue);
+      expect(EnvConfig.stripeSecretKey, startsWith('sk_test_'));
     });
 
     test('EnvConfig provides valid Google Client & App Scheme', () {

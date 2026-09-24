@@ -55,11 +55,14 @@ class StripeService {
 
       final clientSecret = intentData['client_secret'];
       final paymentIntentId = intentData['payment_intent_id'] ?? '';
+      final sessionError = intentData['error'];
 
       if (clientSecret == null || clientSecret.isEmpty) {
-        return const StripePaymentResult(
+        return StripePaymentResult(
           success: false,
-          error: 'Could not create secure payment session. Please try again.',
+          error: sessionError != null && sessionError.isNotEmpty
+              ? 'Could not create payment session: $sessionError'
+              : 'Could not create secure payment session. Please try again.',
         );
       }
 
@@ -169,11 +172,14 @@ class StripeService {
 
       final clientSecret = intentData['client_secret'];
       final paymentIntentId = intentData['payment_intent_id'] ?? '';
+      final sessionError = intentData['error'];
 
       if (clientSecret == null || clientSecret.isEmpty) {
-        return const StripePaymentResult(
+        return StripePaymentResult(
           success: false,
-          error: 'Could not create secure payment session. Please try again.',
+          error: sessionError != null && sessionError.isNotEmpty
+              ? 'Could not create payment session: $sessionError'
+              : 'Could not create secure payment session. Please try again.',
         );
       }
 
@@ -246,6 +252,8 @@ class StripeService {
     required String currency,
     required Map<String, String> metadata,
   }) async {
+    String? lastError;
+
     // Attempt 1: Call Supabase Edge Function
     try {
       final response = await Supabase.instance.client.functions.invoke(
@@ -264,20 +272,21 @@ class StripeService {
           };
         }
       }
+      lastError = 'Edge function status ${response.status}';
       debugPrint('[Stripe] Edge function returned status: ${response.status}, payload: ${response.data}');
     } catch (edgeErr) {
+      lastError = edgeErr.toString();
       debugPrint('[Stripe] Edge function call failed ($edgeErr), attempting direct API fallback...');
     }
 
     // Attempt 2: Resilient direct Stripe API invocation with secret key
     if (StripeConfig.secretKey.isNotEmpty) {
+      final client = HttpClient();
       try {
-        final client = HttpClient();
         final request = await client.postUrl(
           Uri.parse('https://api.stripe.com/v1/payment_intents'),
         );
-        final basicAuth = 'Basic ${base64Encode(utf8.encode('${StripeConfig.secretKey}:'))}';
-        request.headers.set('Authorization', basicAuth);
+        request.headers.set('Authorization', 'Bearer ${StripeConfig.secretKey}');
         request.headers.set('Content-Type', 'application/x-www-form-urlencoded');
 
         final formParams = <String, String>{
@@ -287,7 +296,9 @@ class StripeService {
         };
 
         metadata.forEach((k, v) {
-          formParams['metadata[$k]'] = v;
+          if (v.isNotEmpty) {
+            formParams['metadata[$k]'] = v;
+          }
         });
 
         final bodyStr = formParams.entries
@@ -300,19 +311,32 @@ class StripeService {
 
         if (httpResponse.statusCode == 200) {
           final jsonMap = jsonDecode(responseBody) as Map<String, dynamic>;
-          return {
-            'client_secret': jsonMap['client_secret'] as String?,
-            'payment_intent_id': jsonMap['id'] as String?,
-          };
+          final secret = jsonMap['client_secret'] as String?;
+          final id = jsonMap['id'] as String?;
+          if (secret != null && secret.isNotEmpty) {
+            debugPrint('[Stripe] Direct API fallback succeeded: $id');
+            return {
+              'client_secret': secret,
+              'payment_intent_id': id,
+            };
+          }
         } else {
+          lastError = 'Stripe API status ${httpResponse.statusCode}';
           debugPrint('[Stripe] Direct API fallback failed: $responseBody');
         }
       } catch (directErr) {
+        lastError = directErr.toString();
         debugPrint('[Stripe] Direct API invocation error: $directErr');
+      } finally {
+        client.close();
       }
     }
 
-    return {'client_secret': null, 'payment_intent_id': null};
+    return {
+      'client_secret': null,
+      'payment_intent_id': null,
+      'error': lastError,
+    };
   }
 }
 
