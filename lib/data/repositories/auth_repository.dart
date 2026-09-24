@@ -314,12 +314,14 @@ class AuthRepository {
     final appScheme = EnvConfig.appScheme; // io.tigerbay.app
     final webClientId = EnvConfig.googleWebClientId;
 
+    String? selectedEmail;
+
     if (!kIsWeb) {
       try {
         debugPrint('[TigerBay Auth] Starting native Google Sign-In with serverClientId: $webClientId');
         final GoogleSignIn googleSignIn = GoogleSignIn(
           serverClientId: webClientId.isNotEmpty ? webClientId : null,
-          scopes: const ['email', 'profile'],
+          scopes: const ['email', 'profile', 'openid'],
         );
 
         // Sign out cached account to guarantee account picker is shown
@@ -332,6 +334,8 @@ class AuthRepository {
           debugPrint('[TigerBay Auth] User dismissed Google account picker.');
           return;
         }
+
+        selectedEmail = googleUser.email;
 
         final googleAuth = await googleUser.authentication;
         final idToken = googleAuth.idToken;
@@ -347,17 +351,21 @@ class AuthRepository {
           debugPrint('[TigerBay Auth] Supabase native session confirmed: ${response.user?.id}');
           return;
         }
-        debugPrint('[TigerBay Auth] No ID token from GoogleSignIn; falling back to in-app OAuth...');
+        debugPrint('[TigerBay Auth] No ID token from GoogleSignIn; falling back to in-app OAuth with login_hint...');
       } catch (nativeErr) {
         debugPrint('[TigerBay Auth] Native Google Sign-In error ($nativeErr). Falling back to in-app OAuth...');
       }
     }
 
-    // In-app fallback (NEVER LaunchMode.externalApplication to keep flow strictly inside app)
+    // In-app fallback: pass login_hint so Google NEVER asks user to choose an account again!
     await _client.auth.signInWithOAuth(
       OAuthProvider.google,
       redirectTo: '$appScheme://login-callback',
       authScreenLaunchMode: LaunchMode.inAppBrowserView,
+      queryParams: {
+        if (selectedEmail != null && selectedEmail.isNotEmpty)
+          'login_hint': selectedEmail,
+      },
     );
   }
 

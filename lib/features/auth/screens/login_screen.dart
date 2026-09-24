@@ -321,12 +321,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     position: _formSlide,
                     child: FadeTransition(
                       opacity: _formFade,
-                      child: TabBarView(
-                        controller: _tabController,
-                        physics: const BouncingScrollPhysics(),
+                      child: Stack(
                         children: [
-                          _buildLoginForm(authState),
-                          _buildRegisterForm(authState),
+                          TabBarView(
+                            controller: _tabController,
+                            physics: const BouncingScrollPhysics(),
+                            children: [
+                              _buildLoginForm(authState),
+                              _buildRegisterForm(authState),
+                            ],
+                          ),
+                          if (authState.isLoading)
+                            const Positioned(
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              child: LinearProgressIndicator(
+                                backgroundColor: Colors.transparent,
+                                valueColor: AlwaysStoppedAnimation<Color>(AppColors.gold),
+                                minHeight: 2,
+                              ),
+                            ),
                         ],
                       ),
                     ),
@@ -864,65 +879,36 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               child: Stack(
                 children: [
                   // Continuous subtle diagonal sheen reflection
-                  if (!isLoading)
-                    Positioned.fill(
-                      child: FractionalTranslation(
-                        translation: Offset((_sheenController.value * 3.0) - 1.0, 0),
-                        child: Transform.rotate(
-                          angle: 0.3,
-                          child: Container(
-                            width: 60,
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  Colors.white.withValues(alpha: 0.0),
-                                  Colors.white.withValues(alpha: 0.28),
-                                  Colors.white.withValues(alpha: 0.0),
-                                ],
-                              ),
+                  Positioned.fill(
+                    child: FractionalTranslation(
+                      translation: Offset((_sheenController.value * 3.0) - 1.0, 0),
+                      child: Transform.rotate(
+                        angle: 0.3,
+                        child: Container(
+                          width: 60,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                Colors.white.withValues(alpha: 0.0),
+                                Colors.white.withValues(alpha: 0.28),
+                                Colors.white.withValues(alpha: 0.0),
+                              ],
                             ),
                           ),
                         ),
                       ),
                     ),
+                  ),
                   Center(
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 250),
-                      child: isLoading
-                          ? Row(
-                              key: const ValueKey('loading'),
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2.2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.black87),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Text(
-                                  'Authenticating...',
-                                  style: GoogleFonts.poppins(
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.black87,
-                                    fontSize: 14,
-                                    letterSpacing: 0.2,
-                                  ),
-                                ),
-                              ],
-                            )
-                          : Text(
-                              label,
-                              key: ValueKey(label),
-                              style: GoogleFonts.poppins(
-                                fontWeight: FontWeight.w700,
-                                color: Colors.black,
-                                fontSize: 16,
-                                letterSpacing: 0.4,
-                              ),
-                            ),
+                    child: Text(
+                      label,
+                      key: ValueKey(label),
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w700,
+                        color: Colors.black,
+                        fontSize: 16,
+                        letterSpacing: 0.4,
+                      ),
                     ),
                   ),
                 ],

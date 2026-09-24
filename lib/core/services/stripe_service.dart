@@ -35,6 +35,8 @@ class StripeService {
       );
     }
 
+    String paymentIntentId = '';
+
     try {
       // 1. Obtain PaymentIntent client_secret
       final intentData = await _createOrFetchPaymentIntent(
@@ -54,7 +56,7 @@ class StripeService {
       );
 
       final clientSecret = intentData['client_secret'];
-      final paymentIntentId = intentData['payment_intent_id'] ?? '';
+      paymentIntentId = intentData['payment_intent_id'] ?? '';
       final sessionError = intentData['error'];
 
       if (clientSecret == null || clientSecret.isEmpty) {
@@ -107,6 +109,17 @@ class StripeService {
         paymentIntentId: paymentIntentId,
       );
     } on StripeException catch (e) {
+      if (paymentIntentId.isNotEmpty) {
+        final isPaid = await _verifyPaymentIntentSucceeded(paymentIntentId);
+        if (isPaid) {
+          debugPrint('[Stripe] ✅ PaymentIntent verified as succeeded on Stripe server despite sheet close: $paymentIntentId');
+          return StripePaymentResult(
+            success: true,
+            paymentIntentId: paymentIntentId,
+          );
+        }
+      }
+
       if (e.error.code == FailureCode.Canceled) {
         debugPrint('[Stripe] ⚠️ Payment sheet cancelled by user.');
         return const StripePaymentResult(
@@ -120,6 +133,16 @@ class StripeService {
         error: e.error.localizedMessage ?? 'Payment failed',
       );
     } catch (e) {
+      if (paymentIntentId.isNotEmpty) {
+        final isPaid = await _verifyPaymentIntentSucceeded(paymentIntentId);
+        if (isPaid) {
+          debugPrint('[Stripe] ✅ PaymentIntent verified as succeeded on Stripe server despite exception: $paymentIntentId');
+          return StripePaymentResult(
+            success: true,
+            paymentIntentId: paymentIntentId,
+          );
+        }
+      }
       debugPrint('[Stripe] ❌ Unexpected error presenting payment sheet: $e');
       return StripePaymentResult(
         success: false,
@@ -151,6 +174,7 @@ class StripeService {
     }
 
     final amountPence = (amountGbp * 100).round();
+    String paymentIntentId = '';
 
     try {
       // 1. Obtain PaymentIntent client_secret
@@ -173,7 +197,7 @@ class StripeService {
       );
 
       final clientSecret = intentData['client_secret'];
-      final paymentIntentId = intentData['payment_intent_id'] ?? '';
+      paymentIntentId = intentData['payment_intent_id'] ?? '';
       final sessionError = intentData['error'];
 
       if (clientSecret == null || clientSecret.isEmpty) {
@@ -226,6 +250,17 @@ class StripeService {
         paymentIntentId: paymentIntentId,
       );
     } on StripeException catch (e) {
+      if (paymentIntentId.isNotEmpty) {
+        final isPaid = await _verifyPaymentIntentSucceeded(paymentIntentId);
+        if (isPaid) {
+          debugPrint('[Stripe] ✅ Membership PaymentIntent verified as succeeded on Stripe server despite sheet close: $paymentIntentId');
+          return StripePaymentResult(
+            success: true,
+            paymentIntentId: paymentIntentId,
+          );
+        }
+      }
+
       if (e.error.code == FailureCode.Canceled) {
         debugPrint('[Stripe] ⚠️ Membership payment sheet cancelled by user.');
         return const StripePaymentResult(
@@ -239,6 +274,16 @@ class StripeService {
         error: e.error.localizedMessage ?? 'Payment failed',
       );
     } catch (e) {
+      if (paymentIntentId.isNotEmpty) {
+        final isPaid = await _verifyPaymentIntentSucceeded(paymentIntentId);
+        if (isPaid) {
+          debugPrint('[Stripe] ✅ Membership PaymentIntent verified as succeeded on Stripe server despite exception: $paymentIntentId');
+          return StripePaymentResult(
+            success: true,
+            paymentIntentId: paymentIntentId,
+          );
+        }
+      }
       debugPrint('[Stripe] ❌ Unexpected error presenting membership sheet: $e');
       return StripePaymentResult(
         success: false,
@@ -341,6 +386,38 @@ class StripeService {
       'payment_intent_id': null,
       'error': lastError,
     };
+  }
+
+  /// Verifies with Stripe API whether a PaymentIntent has actually been paid
+  /// (status == 'succeeded' or 'processing').
+  ///
+  /// Prevents false cancellations when a user completes payment on Link
+  /// (checkout.link.com) and then uses the Android back button or closes
+  /// the custom tab.
+  static Future<bool> _verifyPaymentIntentSucceeded(String intentId) async {
+    if (intentId.isEmpty || StripeConfig.secretKey.isEmpty) return false;
+    final client = HttpClient();
+    try {
+      final request = await client.getUrl(
+        Uri.parse('https://api.stripe.com/v1/payment_intents/$intentId'),
+      );
+      request.headers.set('Authorization', 'Bearer ${StripeConfig.secretKey}');
+      final response = await request.close();
+      if (response.statusCode == 200) {
+        final body = await response.transform(utf8.decoder).join();
+        final json = jsonDecode(body) as Map<String, dynamic>;
+        final status = json['status'] as String?;
+        debugPrint('[Stripe] Server verification for $intentId: status=$status');
+        if (status == 'succeeded' || status == 'processing' || status == 'requires_capture') {
+          return true;
+        }
+      }
+    } catch (e) {
+      debugPrint('[Stripe] Server verification error: $e');
+    } finally {
+      client.close();
+    }
+    return false;
   }
 }
 
