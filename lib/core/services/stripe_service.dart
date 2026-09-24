@@ -296,7 +296,7 @@ class StripeService {
         final formParams = <String, String>{
           'amount': amountPence.toString(),
           'currency': currency.toLowerCase(),
-          'automatic_payment_methods[enabled]': 'true',
+          'payment_method_types[0]': 'card',
         };
 
         metadata.forEach((k, v) {

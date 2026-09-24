@@ -96,7 +96,7 @@ serve(async (req: Request) => {
       amount:   depositPence,
       currency: 'gbp',
       customer: stripeCustomerId,
-      automatic_payment_methods: { enabled: true },
+      payment_method_types: ['card'],
       metadata: {
         user_id,
         branch_id,

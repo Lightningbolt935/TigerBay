@@ -137,10 +137,10 @@ class AuthRepository {
     final user = _client.auth.currentUser;
     if (user == null) return;
 
-    // Retry up to 3 times with brief delay to allow database trigger
+    // Retry up to 4 times with delay to allow database trigger
     // (handle_new_user) to complete profile insertion for OAuth sign-ins.
     Map<String, dynamic>? response;
-    for (int attempt = 0; attempt < 3; attempt++) {
+    for (int attempt = 0; attempt < 4; attempt++) {
       response = await _client
           .from('profiles')
           .select('id')
@@ -148,9 +148,29 @@ class AuthRepository {
           .maybeSingle();
 
       if (response != null) return;
-      if (attempt < 2) {
-        await Future.delayed(const Duration(milliseconds: 300));
+      if (attempt < 3) {
+        await Future.delayed(const Duration(milliseconds: 400));
       }
+    }
+
+    // Safety fallback for OAuth sign-ins: ensure profile record exists
+    try {
+      final userMeta = user.userMetadata ?? {};
+      final fullName = userMeta['full_name'] as String? ??
+          userMeta['name'] as String? ??
+          user.email?.split('@').first ??
+          'Member';
+      await _client.from('profiles').upsert({
+        'id': user.id,
+        'email': user.email,
+        'full_name': fullName,
+        'membership_status': 'inactive',
+        'updated_at': DateTime.now().toIso8601String(),
+      });
+      debugPrint('[TigerBay Auth] Auto-created profile record for authenticated OAuth user: ${user.id}');
+      return;
+    } catch (e) {
+      debugPrint('[TigerBay Auth] OAuth profile upsert fallback notice: $e');
     }
 
     debugPrint(
@@ -278,17 +298,69 @@ class AuthRepository {
   ///
   /// The Supabase auth state listener (in [AuthProvider]) picks up the session
   /// automatically once the deep link returns.
+  // ── Google ──────────────────────────────────────────────────────────────────
+
+  /// Signs in with Google using native Google Play Services account picker on
+  /// Android/iOS, obtaining an ID token and authenticating with Supabase via
+  /// [signInWithIdToken].
+  ///
+  /// This pops up the native Android bottom sheet account picker directly in-app
+  /// ("Choose an account to continue to TigerBay") without opening Chrome or an
+  /// external browser window.
+  ///
+  /// Seamlessly falls back to an in-app browser view if native services are
+  /// not available.
   Future<void> signInWithGoogle() async {
     final appScheme = EnvConfig.appScheme; // io.tigerbay.app
+    final webClientId = EnvConfig.googleWebClientId;
+
+    if (!kIsWeb) {
+      try {
+        debugPrint('[TigerBay Auth] Starting native Google Sign-In with serverClientId: $webClientId');
+        final GoogleSignIn googleSignIn = GoogleSignIn(
+          serverClientId: webClientId.isNotEmpty ? webClientId : null,
+          scopes: const ['email', 'profile'],
+        );
+
+        // Sign out cached account to guarantee account picker is shown
+        try {
+          await googleSignIn.signOut();
+        } catch (_) {}
+
+        final googleUser = await googleSignIn.signIn();
+        if (googleUser == null) {
+          debugPrint('[TigerBay Auth] User dismissed Google account picker.');
+          return;
+        }
+
+        final googleAuth = await googleUser.authentication;
+        final idToken = googleAuth.idToken;
+        final accessToken = googleAuth.accessToken;
+
+        if (idToken != null && idToken.isNotEmpty) {
+          debugPrint('[TigerBay Auth] Native Google ID token obtained. Signing into Supabase...');
+          final response = await _client.auth.signInWithIdToken(
+            provider: OAuthProvider.google,
+            idToken: idToken,
+            accessToken: accessToken,
+          );
+          debugPrint('[TigerBay Auth] Supabase native session confirmed: ${response.user?.id}');
+          return;
+        }
+        debugPrint('[TigerBay Auth] No ID token from GoogleSignIn; falling back to in-app OAuth...');
+      } catch (nativeErr) {
+        debugPrint('[TigerBay Auth] Native Google Sign-In error ($nativeErr). Falling back to in-app OAuth...');
+      }
+    }
+
+    // In-app fallback (NEVER LaunchMode.externalApplication to keep flow strictly inside app)
     await _client.auth.signInWithOAuth(
       OAuthProvider.google,
       redirectTo: '$appScheme://login-callback',
-      authScreenLaunchMode: LaunchMode.externalApplication,
+      authScreenLaunchMode: LaunchMode.inAppBrowserView,
     );
-    // Note: this method returns immediately after launching the browser.
-    // The session is established asynchronously via the deep link callback
-    // and picked up by the onAuthStateChange listener in AuthProvider.
   }
+
   // ── Apple ───────────────────────────────────────────────────────────────────
 
   Future<void> signInWithApple() async {
@@ -296,6 +368,7 @@ class AuthRepository {
     await _client.auth.signInWithOAuth(
       OAuthProvider.apple,
       redirectTo: '$appScheme://login-callback',
+      authScreenLaunchMode: LaunchMode.inAppBrowserView,
     );
   }
 
@@ -306,6 +379,7 @@ class AuthRepository {
     await _client.auth.signInWithOAuth(
       OAuthProvider.facebook,
       redirectTo: '$appScheme://login-callback',
+      authScreenLaunchMode: LaunchMode.inAppBrowserView,
     );
   }
 
