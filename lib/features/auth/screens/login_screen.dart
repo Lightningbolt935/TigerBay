@@ -2,6 +2,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:tigerbay_app/core/constants/app_routes.dart';
 import 'package:tigerbay_app/data/models/branch_model.dart';
 import 'package:tigerbay_app/core/constants/app_colors.dart';
 import 'package:tigerbay_app/core/theme/app_typography.dart';
@@ -94,9 +96,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       return;
     }
 
-    // Navigation is handled automatically by GoRouter's redirect in app.dart,
-    // which watches authStatusProvider and routes to /home (or /membership-paywall)
-    // once AuthStatus changes to authenticated.
+    context.go(AppRoutes.home);
   }
 
   Future<void> _submitRegister() async {
@@ -121,9 +121,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       return;
     }
 
-    // Navigation is handled automatically by GoRouter's redirect in app.dart.
-    // After successful sign-up, AuthStatus is set to pendingEmailVerification,
-    // which routes the user to the /pending-verification screen.
+    context.go(AppRoutes.pendingVerification);
   }
 
   Future<void> _socialSignIn(SocialProvider provider) async {
@@ -161,6 +159,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AuthState>(authProvider, (previous, next) {
+      if (next.status == AuthStatus.authenticated && mounted) {
+        context.go(AppRoutes.home);
+      } else if (next.status == AuthStatus.pendingEmailVerification && mounted) {
+        context.go(AppRoutes.pendingVerification);
+      } else if (next.error != null && mounted) {
+        _showErrorSnack(next.error!);
+      }
+    });
+
     final authState = ref.watch(authProvider);
 
     return Scaffold(

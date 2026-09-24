@@ -81,18 +81,29 @@ final routerProvider = Provider<GoRouter>((ref) {
     Supabase.instance.client.auth.onAuthStateChange,
   );
 
+  // ── Auth Status Listener ───────────────────────────────────────────────
+  ref.listen<AuthStatus>(authStatusProvider, (previous, next) {
+    if (previous != next) {
+      debugPrint(
+        '[TigerBay Router] Auth status changed: $previous → $next — refreshing router.',
+      );
+      refreshNotifier.refresh();
+    }
+  });
+
   // ── Profile State Listener ─────────────────────────────────────────────
   ref.listen<ProfileState>(profileStateProvider, (previous, next) {
+    final prevReady = previous?.isReady ?? false;
+    final nextReady = next.isReady;
     final prevStatus = previous?.profile?.membershipStatus;
     final nextStatus = next.profile?.membershipStatus;
     final prevTierId = previous?.profile?.membershipTierId;
     final nextTierId = next.profile?.membershipTierId;
-    final prevReady = previous?.isReady ?? false;
-    final nextReady = next.isReady;
 
-    if (prevStatus != nextStatus ||
+    if (prevReady != nextReady ||
+        prevStatus != nextStatus ||
         prevTierId != nextTierId ||
-        prevReady != nextReady) {
+        previous?.loadStatus != next.loadStatus) {
       debugPrint(
         '[TigerBay Router] Profile state changed — '
         'ready: $prevReady → $nextReady, '
@@ -158,8 +169,16 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // ── Gate 3: Authenticated — Profile Loading Guard ─────────────────
       if (!profileState.isReady) {
+        if (profileState.loadStatus == ProfileLoadStatus.error) {
+          debugPrint(
+              '[TigerBay Router] Profile error — allowing navigation to home fallback.');
+          return loc == AppRoutes.login ? AppRoutes.home : null;
+        }
         debugPrint(
             '[TigerBay Router] Profile not ready yet — holding route until profile loads.');
+        if (loc == AppRoutes.login || loc == AppRoutes.register || loc == AppRoutes.otp) {
+          return AppRoutes.splash;
+        }
         return null;
       }
 
