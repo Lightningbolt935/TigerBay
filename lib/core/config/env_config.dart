@@ -103,6 +103,47 @@ class EnvConfig {
     return _resolve('APP_SCHEME', defaultValue: 'io.tigerbay.app');
   }
 
+  // ── Twilio ─────────────────────────────────────────────────────────────────
+
+  static String get twilioAccountSid {
+    const compileTime = String.fromEnvironment('TWILIO_ACCOUNT_SID');
+    if (compileTime.isNotEmpty) return compileTime;
+    return _resolve('TWILIO_ACCOUNT_SID', defaultValue: 'ACfe3d3114b5b5315288f76bd47b0d327f');
+  }
+
+  static String get twilioAuthToken {
+    const compileTime = String.fromEnvironment('TWILIO_AUTH_TOKEN');
+    if (compileTime.isNotEmpty) return compileTime;
+    return _resolve('TWILIO_AUTH_TOKEN', defaultValue: '3abb0f1815db0aa456c108e1788b0292');
+  }
+
+  static String get twilioApiKeySid {
+    const compileTime = String.fromEnvironment('TWILIO_API_KEY_SID');
+    if (compileTime.isNotEmpty) return compileTime;
+    return _resolve('TWILIO_API_KEY_SID', defaultValue: 'SKacdd26eebc2dadc8c64125fd0758bb24');
+  }
+
+  static String get twilioApiSecret {
+    const compileTime = String.fromEnvironment('TWILIO_API_SECRET');
+    if (compileTime.isNotEmpty) return compileTime;
+    return _resolve('TWILIO_API_SECRET', defaultValue: 'N7h89vtqRdb0BgfXJL6r3CiKIWJMeldM');
+  }
+
+  static String get twilioVerifyServiceSid {
+    const compileTime = String.fromEnvironment('TWILIO_VERIFY_SERVICE_SID');
+    if (compileTime.isNotEmpty) return compileTime;
+    return _resolve('TWILIO_VERIFY_SERVICE_SID', defaultValue: 'VA2bbfc2144b4cd94d0c363ce3b4d28247');
+  }
+
+  static String get twilioFromNumber {
+    const compileTime = String.fromEnvironment('TWILIO_FROM_NUMBER');
+    if (compileTime.isNotEmpty) return compileTime;
+    return _resolve('TWILIO_FROM_NUMBER', defaultValue: '');
+  }
+
+  static bool get isTwilioConfigured =>
+      twilioAccountSid.startsWith('AC') && twilioAuthToken.isNotEmpty;
+
   // ── Environment Flags ──────────────────────────────────────────────────────
 
   static String get appEnvironment {

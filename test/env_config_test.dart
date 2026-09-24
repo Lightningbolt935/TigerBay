@@ -26,6 +26,15 @@ void main() {
       expect(EnvConfig.googleWebClientId, isNotEmpty);
       expect(EnvConfig.appScheme, equals('io.tigerbay.app'));
     });
+
+    test('EnvConfig provides valid Twilio configuration', () {
+      expect(EnvConfig.twilioAccountSid, startsWith('AC'));
+      expect(EnvConfig.twilioAuthToken, isNotEmpty);
+      expect(EnvConfig.twilioApiKeySid, startsWith('SK'));
+      expect(EnvConfig.twilioApiSecret, isNotEmpty);
+      expect(EnvConfig.twilioVerifyServiceSid, startsWith('VA'));
+      expect(EnvConfig.isTwilioConfigured, isTrue);
+    });
   });
 
   group('AppColors & Theme Tests', () {
