@@ -33,7 +33,7 @@ Future<void> main() async {
   // ── Init Supabase (works on all platforms: Web, Android, iOS, Windows) ─────
   await Supabase.initialize(
     url: EnvConfig.supabaseUrl,
-    publishableKey: EnvConfig.supabaseAnonKey,
+    anonKey: EnvConfig.supabaseAnonKey,
   );
 
   // ── Init Stripe ────────────────────────────────────────────────────────────
