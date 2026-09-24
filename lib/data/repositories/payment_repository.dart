@@ -33,6 +33,8 @@ class PaymentRepository {
           merchantDisplayName: merchantName.isNotEmpty
               ? merchantName
               : StripeConfig.merchantDisplayName,
+          returnURL: StripeConfig.returnURL,
+          paymentMethodOrder: const ['card'],
           style: ThemeMode.dark,
         ),
       );

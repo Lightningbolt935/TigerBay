@@ -41,6 +41,8 @@ Future<void> main() async {
   if (stripeKey.startsWith('pk_')) {
     Stripe.publishableKey = stripeKey;
     Stripe.merchantIdentifier = 'merchant.io.tigerbay.app';
+    Stripe.urlScheme = EnvConfig.appScheme;
+    Stripe.setReturnUrlSchemeOnAndroid = true;
     if (!kIsWeb) {
       await Stripe.instance.applySettings();
     }

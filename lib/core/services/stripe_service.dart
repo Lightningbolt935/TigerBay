@@ -71,6 +71,8 @@ class StripeService {
         paymentSheetParameters: SetupPaymentSheetParameters(
           paymentIntentClientSecret: clientSecret,
           merchantDisplayName: StripeConfig.merchantDisplayName,
+          returnURL: StripeConfig.returnURL,
+          paymentMethodOrder: const ['card'],
           applePay: const PaymentSheetApplePay(
             merchantCountryCode: StripeConfig.merchantCountryCode,
           ),
@@ -188,6 +190,8 @@ class StripeService {
         paymentSheetParameters: SetupPaymentSheetParameters(
           paymentIntentClientSecret: clientSecret,
           merchantDisplayName: StripeConfig.merchantDisplayName,
+          returnURL: StripeConfig.returnURL,
+          paymentMethodOrder: const ['card'],
           applePay: const PaymentSheetApplePay(
             merchantCountryCode: StripeConfig.merchantCountryCode,
           ),

@@ -18,4 +18,7 @@ class StripeConfig {
   static const String merchantDisplayName = 'TigerBay International';
   static const String merchantCountryCode = 'GB';
   static const String defaultCurrency = 'gbp';
+
+  /// Custom URL scheme used by Stripe for automatic redirects (Link, 3DS, etc.)
+  static String get returnURL => '${EnvConfig.appScheme}://stripe-redirect';
 }

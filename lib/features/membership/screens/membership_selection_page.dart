@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:tigerbay_app/core/constants/app_colors.dart';
+import 'package:tigerbay_app/core/constants/app_routes.dart';
 import 'package:tigerbay_app/core/services/stripe_service.dart';
 import 'package:tigerbay_app/data/models/membership_tier_model.dart';
 import 'package:tigerbay_app/features/auth/providers/profile_state_provider.dart';
@@ -115,9 +117,11 @@ class _MembershipSelectionPageState
                 borderRadius: BorderRadius.circular(10)),
           ),
         );
-        // No Navigator.pop() or context.go() needed:
-        // profileStateProvider refresh → ref.listen in app.dart fires
-        // → GoRouter re-evaluates redirect → auto-pushes to /home.
+        // Auto return home after brief delay
+        await Future.delayed(const Duration(milliseconds: 600));
+        if (mounted) {
+          context.go(AppRoutes.home);
+        }
       } else {
         final error = ref.read(profileStateProvider).error;
         ScaffoldMessenger.of(context).showSnackBar(
