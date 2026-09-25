@@ -252,7 +252,6 @@ class _RegistrationVerificationScreenState
       await Supabase.instance.client.auth.resend(
         type: OtpType.signup,
         email: widget.email,
-        emailRedirectTo: 'io.tigerbay.app://login-callback',
       );
       setState(() => _isLoading = false);
       _startCooldown();
@@ -295,6 +294,7 @@ class _RegistrationVerificationScreenState
               .maybeSingle();
           if (existing != null && existing['id'] != null) {
             await Supabase.instance.client.from('profiles').update({
+              'email': widget.email,
               'phone': widget.phone,
               'full_name': widget.fullName,
               'updated_at': DateTime.now().toIso8601String(),
@@ -319,9 +319,10 @@ class _RegistrationVerificationScreenState
           );
 
       if (authRes.user != null) {
-        // Sync phone & name into public.profiles
+        // Sync email, phone & name into public.profiles
         try {
           await Supabase.instance.client.from('profiles').update({
+            'email': widget.email,
             'phone': widget.phone,
             'full_name': widget.fullName,
             'updated_at': DateTime.now().toIso8601String(),

@@ -153,11 +153,19 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
 
   // ── Step 1: Lookup Account by Email ─────────────────────────────────────────
   Future<void> _handleFindAccount() async {
-    final email = _emailController.text.trim().toLowerCase();
-    if (email.isEmpty || !email.contains('@')) {
+    final input = _emailController.text.trim();
+    if (input.isEmpty) {
+      setState(() => _errorMessage = 'Please enter your registered email address.');
+      return;
+    }
+
+    final isEmail = input.contains('@');
+    if (!isEmail) {
       setState(() => _errorMessage = 'Please enter a valid email address.');
       return;
     }
+
+    final email = input.toLowerCase();
 
     setState(() {
       _isLoading = true;
@@ -173,12 +181,12 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
           .limit(1);
 
       if (rows.isEmpty) {
-        // Soft fallback: Do not block users who exist in Supabase Auth but
-        // whose profiles row is not indexed by email. Proceed with email recovery directly.
-        _resolvedEmail = email;
-        _resolvedPhone = null;
-        _selectedChannel = _OtpChannel.email;
-        _sendOtp();
+        // Account does not exist in TigerBay records!
+        setState(() {
+          _isLoading = false;
+          _errorMessage =
+              'No account found with "$email". Please check the spelling or sign up for a new account.';
+        });
         return;
       }
 
@@ -216,10 +224,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
         await ref
             .read(supabaseClientProvider)
             .auth
-            .resetPasswordForEmail(
-              email,
-              redirectTo: 'io.tigerbay.app://reset-password',
-            );
+            .resetPasswordForEmail(email);
       } else {
         final phone = _resolvedPhone!;
         final twilio = TwilioNotificationService();

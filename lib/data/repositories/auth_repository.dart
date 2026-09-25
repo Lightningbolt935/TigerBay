@@ -249,7 +249,6 @@ class AuthRepository {
           if (phone != null && phone.trim().isNotEmpty)
             'phone': phone.trim(),
         },
-        emailRedirectTo: 'io.tigerbay.app://login-callback',
       );
 
       if (response.user == null) {
