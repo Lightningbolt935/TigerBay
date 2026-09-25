@@ -1,19 +1,23 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:tigerbay_app/core/constants/app_colors.dart';
-import 'package:tigerbay_app/core/constants/app_routes.dart';
-import 'package:tigerbay_app/core/services/stripe_service.dart';
-import 'package:tigerbay_app/data/models/booking_model.dart';
-import 'package:tigerbay_app/features/bookings/providers/booking_provider.dart';
+import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_routes.dart';
+import '../../../core/services/stripe_service.dart';
+import '../../../core/theme/app_typography.dart';
+import '../../../shared/widgets/apple_touch_feedback.dart';
+import '../providers/booking_provider.dart';
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// BookingConfirmScreen
-// ═══════════════════════════════════════════════════════════════════════════════
-// Handles the final deposit payment step before a booking is confirmed.
-// Uses Stripe Payment Sheet (Credit/Debit Card, Apple Pay, Google Pay)
-// and updates the booking status to 'upcoming' upon successful completion.
+// Re-export BookingDetailScreen so any consumer importing from here keeps working
+export 'booking_detail_screen.dart' show BookingDetailScreen;
+
+/// ═══════════════════════════════════════════════════════════════════════════
+/// TigerBay International — Luxury Booking Confirm Screen (Tier-1 Benchmark)
+/// ═══════════════════════════════════════════════════════════════════════════
+/// Handles the secure deposit payment step before a reservation is confirmed.
+/// Uses Stripe Payment Sheet (Apple Pay, Google Pay, Debit/Credit cards).
 class BookingConfirmScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic> bookingData;
 
@@ -27,13 +31,8 @@ class BookingConfirmScreen extends ConsumerStatefulWidget {
 class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
   bool _isProcessing = false;
 
-  @override
-  void initState() {
-    super.initState();
-  }
-
-  // ── Stripe payment flow ───────────────────────────────────────────────────
   Future<void> _handleStripePayment() async {
+    HapticFeedback.mediumImpact();
     final bookingId = widget.bookingData['bookingId'] as String? ?? '';
     final branchId = widget.bookingData['branchId'] as String? ?? '';
     final depositAmount =
@@ -53,13 +52,13 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
       if (!mounted) return;
 
       if (result.success) {
-        // ── Confirm booking status in Supabase ──────────────────────────────
+        HapticFeedback.heavyImpact();
         try {
           final repo = ref.read(bookingRepositoryProvider);
           await repo.confirmBookingPayment(
             bookingId: bookingId,
-            stripePaymentIntentId:
-                result.paymentIntentId ?? 'pi_${DateTime.now().millisecondsSinceEpoch}',
+            stripePaymentIntentId: result.paymentIntentId ??
+                'pi_${DateTime.now().millisecondsSinceEpoch}',
           );
         } catch (e) {
           debugPrint('[TigerBay] confirmBookingPayment DB update failed: $e');
@@ -68,24 +67,38 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
         if (!mounted) return;
         _showSuccess();
       } else if (result.cancelled) {
+        HapticFeedback.lightImpact();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Payment cancelled. No charge was made.'),
-            backgroundColor: Colors.black87,
+          SnackBar(
+            content: const Text(
+              'Payment cancelled. No charge was made.',
+              style: TextStyle(color: Colors.white),
+            ),
+            backgroundColor: AppColors.surface,
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
         );
       } else {
+        HapticFeedback.vibrate();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(result.error ?? 'Payment failed. Please try again.'),
             backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Payment error: $e')),
+          SnackBar(
+            content: Text('Payment error: $e'),
+            backgroundColor: AppColors.error,
+          ),
         );
       }
     } finally {
@@ -99,227 +112,310 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
         (widget.bookingData['depositAmount'] as num?)?.toDouble() ?? 20.0;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.brandBlack,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: AppColors.surface,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(CupertinoIcons.chevron_back,
-              size: 22, color: Colors.black87),
-          onPressed: () {
+        scrolledUnderElevation: 0,
+        leading: AppleTouchFeedback(
+          onTap: () {
+            HapticFeedback.lightImpact();
             if (context.canPop()) {
               context.pop();
             } else {
               context.go(AppRoutes.home);
             }
           },
+          child: const Padding(
+            padding: EdgeInsets.only(left: 12),
+            child: Icon(
+              CupertinoIcons.chevron_back,
+              size: 22,
+              color: AppColors.textPrimary,
+            ),
+          ),
         ),
-        title: const Text(
-          'Confirm Booking',
-          style: TextStyle(
-              fontSize: 17, fontWeight: FontWeight.w600, color: Colors.black87),
+        title: Text(
+          'Confirm Reservation',
+          style: AppTypography.headline.copyWith(
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+          ),
         ),
         centerTitle: true,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Deposit info banner ─────────────────────────────────────────
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppColors.gold.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.gold.withValues(alpha: 0.2)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.lock_outline_rounded,
-                      color: AppColors.gold, size: 22),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Secure Deposit Required',
-                          style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black87),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'A £${depositAmount.toStringAsFixed(2)} deposit secures your table. Fully refundable if cancelled 24h in advance.',
-                          style: TextStyle(
-                              color: Colors.grey.shade600,
-                              fontSize: 12,
-                              height: 1.4),
-                        ),
-                      ],
-                    ),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Deposit info banner ─────────────────────────────────────────
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: AppColors.gold.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: AppColors.gold.withValues(alpha: 0.28),
                   ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 28),
-
-            // ── Payment summary ─────────────────────────────────────────────
-            const Text(
-              'PAYMENT SUMMARY',
-              style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.2,
-                  color: Colors.black45),
-            ),
-            const SizedBox(height: 14),
-            _SummaryRow(
-                label: 'Deposit',
-                value: '£${depositAmount.toStringAsFixed(2)}'),
-            const SizedBox(height: 8),
-            const _SummaryRow(label: 'Processing fee', value: '£0.00'),
-            Divider(color: Colors.grey.shade200, height: 28),
-            _SummaryRow(
-              label: 'Total due today',
-              value: '£${depositAmount.toStringAsFixed(2)}',
-              isBold: true,
-            ),
-
-            const SizedBox(height: 28),
-
-            // ── Payment method selector ─────────────────────────────────────
-            const Text(
-              'PAYMENT METHOD',
-              style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.2,
-                  color: Colors.black45),
-            ),
-            const SizedBox(height: 14),
-
-            // Stripe Payment Card (Apple Pay, Google Pay, Cards)
-            _PaymentMethodTile(
-              id: 'stripe_tile',
-              icon: Icons.credit_card_rounded,
-              iconColor: AppColors.gold,
-              title: 'Card & Digital Wallet (Stripe)',
-              subtitle: 'Apple Pay, Google Pay, Visa, Mastercard, Amex',
-              selected: true,
-              disabled: false,
-              badge: 'Instant',
-              onTap: () {},
-            ),
-
-            const Spacer(),
-
-            // ── Pay button ──────────────────────────────────────────────────
-            SizedBox(
-              width: double.infinity,
-              height: 54,
-              child: ElevatedButton(
-                onPressed: _isProcessing ? null : _handleStripePayment,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.gold,
-                  disabledBackgroundColor:
-                      AppColors.gold.withValues(alpha: 0.5),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30)),
-                  elevation: 0,
                 ),
-                child: _isProcessing
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(
-                            color: Colors.white, strokeWidth: 2),
-                      )
-                    : Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      CupertinoIcons.shield_fill,
+                      color: AppColors.champagneGold,
+                      size: 22,
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.lock_rounded,
-                              color: Colors.white, size: 16),
-                          const SizedBox(width: 8),
+                          const Text(
+                            'Table Deposit Guarantee',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.champagneGold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
                           Text(
-                            'Pay £${depositAmount.toStringAsFixed(2)} Deposit',
-                            style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white),
+                            'A £${depositAmount.toStringAsFixed(2)} deposit secures your table. 100% refundable if cancelled 24 hours prior.',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.75),
+                              fontSize: 12,
+                              height: 1.4,
+                            ),
                           ),
                         ],
                       ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-          ],
+
+              const SizedBox(height: 24),
+
+              // ── Payment summary ─────────────────────────────────────────────
+              const Text(
+                'PAYMENT SUMMARY',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.08),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    _SummaryRow(
+                      label: 'Table Deposit',
+                      value: '£${depositAmount.toStringAsFixed(2)}',
+                    ),
+                    const SizedBox(height: 10),
+                    const _SummaryRow(
+                      label: 'Processing Fee',
+                      value: '£0.00',
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Divider(
+                        color: Colors.white.withValues(alpha: 0.08),
+                        height: 1,
+                      ),
+                    ),
+                    _SummaryRow(
+                      label: 'Total Due Today',
+                      value: '£${depositAmount.toStringAsFixed(2)}',
+                      isBold: true,
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // ── Payment method selector ─────────────────────────────────────
+              const Text(
+                'PAYMENT METHOD',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              const _PaymentMethodTile(
+                icon: CupertinoIcons.creditcard_fill,
+                iconColor: AppColors.champagneGold,
+                title: 'Stripe Secure Checkout',
+                subtitle: 'Apple Pay, Google Pay, Visa, Mastercard, Amex',
+                selected: true,
+                badge: 'INSTANT',
+              ),
+
+              const Spacer(),
+
+              // ── Pay button ──────────────────────────────────────────────────
+              AppleTouchFeedback(
+                onTap: _isProcessing ? null : _handleStripePayment,
+                child: Container(
+                  width: double.infinity,
+                  height: 54,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [AppColors.gold, AppColors.champagneGold],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(27),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.gold.withValues(alpha: 0.35),
+                        blurRadius: 16,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  alignment: Alignment.center,
+                  child: _isProcessing
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            color: Colors.black,
+                            strokeWidth: 2.2,
+                          ),
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              CupertinoIcons.lock_fill,
+                              color: Colors.black,
+                              size: 17,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Pay £${depositAmount.toStringAsFixed(2)} Deposit',
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.black,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
+          ),
         ),
       ),
     );
   }
 
   void _showSuccess() {
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        content: Column(
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: Colors.transparent,
+      builder: (dialogContext) => Container(
+        padding: const EdgeInsets.fromLTRB(24, 28, 24, 34),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+          border: Border.all(
+            color: AppColors.gold.withValues(alpha: 0.3),
+            width: 1.2,
+          ),
+        ),
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(height: 8),
             Container(
-              width: 64,
-              height: 64,
+              width: 70,
+              height: 70,
               decoration: BoxDecoration(
-                color: AppColors.success.withValues(alpha: 0.1),
+                color: AppColors.success.withValues(alpha: 0.14),
                 shape: BoxShape.circle,
+                border: Border.all(
+                  color: AppColors.success.withValues(alpha: 0.4),
+                  width: 1.5,
+                ),
               ),
-              child: const Icon(Icons.check_rounded,
-                  color: AppColors.success, size: 36),
+              child: const Icon(
+                CupertinoIcons.check_mark_circled_solid,
+                color: AppColors.success,
+                size: 40,
+              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 18),
             const Text(
-              'Booking Confirmed!',
+              'Reservation Confirmed!',
               style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.black87),
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+                letterSpacing: 0.2,
+              ),
             ),
             const SizedBox(height: 8),
             const Text(
-              'A confirmation email and calendar invite have been sent to you.',
+              'Your table is reserved. A confirmation receipt and calendar invite have been sent to your email.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: Colors.black45, height: 1.4),
+              style: TextStyle(
+                fontSize: 13,
+                color: AppColors.textSecondary,
+                height: 1.45,
+              ),
             ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {
-                  // Refresh bookings provider to show the newly confirmed booking
-                  ref.invalidate(userBookingsStreamProvider);
-                  Navigator.pop(dialogContext);
-                  if (context.mounted) {
-                    context.go(AppRoutes.myBookings);
-                  }
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.gold,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(24)),
-                  elevation: 0,
+            const SizedBox(height: 24),
+            AppleTouchFeedback(
+              onTap: () {
+                HapticFeedback.lightImpact();
+                ref.invalidate(userBookingsStreamProvider);
+                Navigator.pop(dialogContext);
+                if (context.mounted) {
+                  context.go(AppRoutes.myBookings);
+                }
+              },
+              child: Container(
+                width: double.infinity,
+                height: 50,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [AppColors.gold, AppColors.champagneGold],
+                  ),
+                  borderRadius: BorderRadius.circular(25),
                 ),
+                alignment: Alignment.center,
                 child: const Text(
-                  'View My Bookings',
+                  'View My Reservations',
                   style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black,
+                  ),
                 ),
               ),
             ),
@@ -333,330 +429,114 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
 // ── Payment method tile ───────────────────────────────────────────────────────
 
 class _PaymentMethodTile extends StatelessWidget {
-  final String id;
   final IconData icon;
   final Color iconColor;
   final String title;
   final String subtitle;
   final bool selected;
-  final bool disabled;
   final String? badge;
-  final VoidCallback? onTap;
 
   const _PaymentMethodTile({
-    required this.id,
     required this.icon,
     required this.iconColor,
     required this.title,
     required this.subtitle,
     required this.selected,
-    this.disabled = false,
     this.badge,
-    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Opacity(
-      opacity: disabled ? 0.5 : 1.0,
-      child: GestureDetector(
-        onTap: disabled ? null : onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: selected
-                ? AppColors.gold.withValues(alpha: 0.05)
-                : Colors.grey.shade50,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: selected ? AppColors.gold : Colors.grey.shade200,
-              width: selected ? 1.5 : 1.0,
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: selected ? AppColors.gold : Colors.white.withValues(alpha: 0.08),
+          width: selected ? 1.5 : 1.0,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
             ),
+            child: Icon(icon, color: iconColor, size: 20),
           ),
-          child: Row(
-            children: [
-              // Icon container
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: iconColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, color: iconColor, size: 20),
-              ),
-              const SizedBox(width: 14),
-
-              // Title + subtitle
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    Row(
-                      children: [
-                        Text(
-                          title,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: disabled ? Colors.black54 : Colors.black87,
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    if (badge != null) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.gold.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: AppColors.gold.withValues(alpha: 0.4),
                           ),
                         ),
-                        if (badge != null) ...[
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade300,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              badge!,
-                              style: const TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.black54,
-                                  letterSpacing: 0.4),
-                            ),
+                        child: Text(
+                          badge!,
+                          style: const TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.champagneGold,
+                            letterSpacing: 0.5,
                           ),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Text(subtitle,
-                        style: TextStyle(
-                            fontSize: 12, color: Colors.grey.shade500)),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
-              ),
-
-              // Radio indicator (only for enabled tiles)
-              if (!disabled)
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: 20,
-                  height: 20,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color:
-                          selected ? AppColors.gold : Colors.grey.shade300,
-                      width: 2,
-                    ),
-                    color: selected ? AppColors.gold : Colors.transparent,
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
                   ),
-                  child: selected
-                      ? const Icon(Icons.check_rounded,
-                          size: 12, color: Colors.white)
-                      : null,
                 ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Booking Detail Screen ─────────────────────────────────────────────────────
-
-class BookingDetailScreen extends ConsumerWidget {
-  final String bookingId;
-  const BookingDetailScreen({super.key, required this.bookingId});
-
-  static const _months = [
-    '',
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec'
-  ];
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final bookingsAsync = ref.watch(userBookingsStreamProvider);
-
-    return bookingsAsync.when(
-      data: (bookings) {
-        final booking =
-            bookings.where((b) => b.id.toString() == bookingId).firstOrNull;
-        if (booking == null) {
-          return const Scaffold(
-            body: Center(child: Text('Booking not found')),
-          );
-        }
-        return _buildDetail(context, ref, booking);
-      },
-      loading: () => const Scaffold(
-        body: Center(
-            child: CircularProgressIndicator(
-                color: AppColors.gold, strokeWidth: 2)),
-      ),
-      error: (_, __) => const Scaffold(
-        body: Center(child: Text('Error loading booking')),
-      ),
-    );
-  }
-
-  Widget _buildDetail(
-      BuildContext context, WidgetRef ref, BookingModel booking) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(CupertinoIcons.chevron_back,
-              size: 22, color: Colors.black87),
-          onPressed: () {
-            if (context.canPop()) {
-              context.pop();
-            } else {
-              context.go(AppRoutes.home);
-            }
-          },
-        ),
-        title: const Text(
-          'Booking Details',
-          style: TextStyle(
-              fontSize: 17, fontWeight: FontWeight.w600, color: Colors.black87),
-        ),
-        centerTitle: true,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: Colors.grey.shade200),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 12,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(booking.branchName,
-                      style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.black87)),
-                  const SizedBox(height: 4),
-                  Divider(color: Colors.grey.shade100, height: 24),
-                  _DetailRow(
-                      icon: Icons.calendar_today_outlined,
-                      label: 'Date',
-                      value:
-                          '${_months[booking.bookingDate.month]} ${booking.bookingDate.day}, ${booking.bookingDate.year}'),
-                  const SizedBox(height: 12),
-                  _DetailRow(
-                      icon: Icons.access_time_rounded,
-                      label: 'Time',
-                      value: booking.bookingTime),
-                  const SizedBox(height: 12),
-                  _DetailRow(
-                      icon: Icons.group_outlined,
-                      label: 'Guests',
-                      value: '${booking.guestCount} people'),
-                ],
-              ),
+              ],
             ),
-            const SizedBox(height: 28),
-            if (booking.status == BookingStatus.upcoming) ...[
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: OutlinedButton(
-                  onPressed: () =>
-                      context.push('${AppRoutes.myBookings}/new'),
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Colors.black87),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(28)),
-                  ),
-                  child: const Text(
-                    'Modify Booking',
-                    style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: TextButton(
-                  onPressed: () => _confirmCancel(context, ref, booking.id),
-                  style: TextButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(28))),
-                  child: const Text(
-                    'Cancel Booking',
-                    style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.error),
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _confirmCancel(BuildContext context, WidgetRef ref, int id) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: const Text('Cancel Booking?',
-            style: TextStyle(fontWeight: FontWeight.w700)),
-        content: const Text(
-          'Your deposit will be refunded within 3-5 business days if cancelled more than 24 hours before.',
-          style: TextStyle(fontSize: 13, height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Keep It',
-                style: TextStyle(
-                    color: Colors.black54, fontWeight: FontWeight.w500)),
           ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await ref
-                  .read(bookingNotifierProvider.notifier)
-                  .cancelBooking(id);
-              if (context.mounted) context.go(AppRoutes.myBookings);
-            },
-            child: const Text('Cancel',
-                style: TextStyle(
-                    color: AppColors.error, fontWeight: FontWeight.w600)),
+          Container(
+            width: 20,
+            height: 20,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: selected ? AppColors.gold : Colors.white24,
+                width: 2,
+              ),
+              color: selected ? AppColors.gold : Colors.transparent,
+            ),
+            child: selected
+                ? const Icon(
+                    CupertinoIcons.checkmark,
+                    size: 12,
+                    color: Colors.black,
+                  )
+                : null,
           ),
         ],
       ),
@@ -664,56 +544,40 @@ class BookingDetailScreen extends ConsumerWidget {
   }
 }
 
-// ── Shared sub-widgets ────────────────────────────────────────────────────────
+// ── Summary row ───────────────────────────────────────────────────────────────
 
 class _SummaryRow extends StatelessWidget {
-  final String label, value;
+  final String label;
+  final String value;
   final bool isBold;
-  const _SummaryRow(
-      {required this.label, required this.value, this.isBold = false});
+
+  const _SummaryRow({
+    required this.label,
+    required this.value,
+    this.isBold = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Text(label,
-            style: TextStyle(
-              fontSize: isBold ? 15 : 13,
-              fontWeight: isBold ? FontWeight.w600 : FontWeight.w400,
-              color: isBold ? Colors.black87 : Colors.grey.shade500,
-            )),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: isBold ? 14 : 13,
+            fontWeight: isBold ? FontWeight.w700 : FontWeight.w400,
+            color: isBold ? AppColors.textPrimary : AppColors.textSecondary,
+          ),
+        ),
         const Spacer(),
-        Text(value,
-            style: TextStyle(
-              fontSize: isBold ? 15 : 13,
-              fontWeight: isBold ? FontWeight.w700 : FontWeight.w500,
-              color: Colors.black87,
-            )),
-      ],
-    );
-  }
-}
-
-class _DetailRow extends StatelessWidget {
-  final IconData icon;
-  final String label, value;
-  const _DetailRow(
-      {required this.icon, required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: Colors.grey.shade400),
-        const SizedBox(width: 10),
-        Text(label,
-            style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
-        const Spacer(),
-        Text(value,
-            style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87)),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: isBold ? 15 : 13,
+            fontWeight: isBold ? FontWeight.w700 : FontWeight.w500,
+            color: isBold ? AppColors.champagneGold : AppColors.textPrimary,
+          ),
+        ),
       ],
     );
   }

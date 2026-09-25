@@ -30,12 +30,15 @@ class RedeemState {
   final bool isSuccess;
   final String? error;
   final RewardItem? redeemedItem;
+  /// Server-generated redemption token / code — used as QR data in dialog.
+  final String? redemptionCode;
 
   const RedeemState({
     this.isProcessing = false,
     this.isSuccess = false,
     this.error,
     this.redeemedItem,
+    this.redemptionCode,
   });
 
   RedeemState copyWith({
@@ -43,6 +46,7 @@ class RedeemState {
     bool? isSuccess,
     String? error,
     RewardItem? redeemedItem,
+    String? redemptionCode,
     bool clearError = false,
     bool clearRedeemed = false,
   }) {
@@ -52,6 +56,7 @@ class RedeemState {
       error: clearError ? null : (error ?? this.error),
       redeemedItem:
           clearRedeemed ? null : (redeemedItem ?? this.redeemedItem),
+      redemptionCode: clearRedeemed ? null : (redemptionCode ?? this.redemptionCode),
     );
   }
 }
@@ -77,7 +82,9 @@ class RedeemNotifier extends StateNotifier<RedeemState> {
       if (user == null) throw Exception('Not authenticated.');
 
       final repo = _ref.read(supabaseRepositoryProvider);
-      await repo.redeemReward(
+      // redeemReward returns the server-generated redemption code/token
+      // (e.g. a UUID or short code). Use it as the QR data in the dialog.
+      final redemptionCode = await repo.redeemReward(
         userId: user.id,
         rewardId: reward.id,
         stripsCost: reward.stripsCost,
@@ -93,6 +100,10 @@ class RedeemNotifier extends StateNotifier<RedeemState> {
         isProcessing: false,
         isSuccess: true,
         redeemedItem: reward,
+        // Use the server code if available, otherwise fall back to reward ID
+        redemptionCode: (redemptionCode?.isNotEmpty == true)
+            ? redemptionCode
+            : 'TB-REDEEM-${reward.id}',
       );
       return true;
     } catch (e) {

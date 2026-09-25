@@ -14,6 +14,9 @@ import '../../../shared/widgets/apple_touch_feedback.dart';
 import '../../../shared/widgets/safe_network_image.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../home/providers/home_provider.dart';
+import '../../../services/biometric_service.dart';
+import '../../bookings/providers/booking_provider.dart';
+import '../../../data/models/booking_model.dart';
 import '../providers/profile_provider.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -33,6 +36,11 @@ class ProfileScreen extends ConsumerWidget {
     final profileState = ref.watch(profileProvider);
     final branches = ref.watch(branchesProvider);
     final selectedBranch = ref.watch(selectedBranchProvider);
+    final bookingsAsync = ref.watch(userBookingsStreamProvider);
+    final upcomingCount = bookingsAsync.valueOrNull
+            ?.where((b) => b.status == BookingStatus.upcoming)
+            .length ??
+        0;
 
     if (profileState.isLoading) {
       return const Scaffold(
@@ -84,10 +92,57 @@ class ProfileScreen extends ConsumerWidget {
                   onTap: () => context.push(AppRoutes.editProfile),
                 ),
                 _SettingsTile(
+                  icon: CupertinoIcons.calendar_badge_plus,
+                  label: 'My Reservations',
+                  subtitle: upcomingCount > 0
+                      ? '$upcomingCount Upcoming ${upcomingCount == 1 ? 'Booking' : 'Bookings'}'
+                      : 'View past & upcoming tables',
+                  trailing: upcomingCount > 0
+                      ? Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppColors.success.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: AppColors.success.withValues(alpha: 0.4),
+                              width: 0.8,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                '$upcomingCount Active',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.success,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              const Icon(
+                                Icons.chevron_right_rounded,
+                                size: 14,
+                                color: AppColors.success,
+                              ),
+                            ],
+                          ),
+                        )
+                      : null,
+                  onTap: () => context.push(AppRoutes.myBookings),
+                ),
+                _SettingsTile(
                   icon: CupertinoIcons.bell_fill,
                   label: 'Notifications',
                   subtitle: 'Manage alerts & preferences',
                   onTap: () => context.push(AppRoutes.notificationPrefs),
+                ),
+                const _SettingsTile(
+                  icon: CupertinoIcons.viewfinder,
+                  label: 'Face ID & Biometrics',
+                  subtitle: 'Quick unlock & VIP security',
+                  trailing: _BiometricSwitch(),
                 ),
               ],
             ),
@@ -163,6 +218,26 @@ class ProfileScreen extends ConsumerWidget {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: _SignOutButton(onTap: () => _confirmSignOut(context, ref)),
+            ),
+          ),
+
+          // Delete Account (Apple Guideline 5.1.1(v) Compliant)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Center(
+                child: TextButton(
+                  onPressed: () => _confirmDeleteAccount(context, ref),
+                  child: Text(
+                    'Delete Account',
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      color: AppColors.error.withValues(alpha: 0.75),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
 
@@ -308,6 +383,95 @@ class ProfileScreen extends ConsumerWidget {
             child: Text('Sign Out',
                 style: GoogleFonts.poppins(
                     color: AppColors.brandRed, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteAccount(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(CupertinoIcons.exclamationmark_triangle_fill,
+                color: AppColors.error, size: 22),
+            const SizedBox(width: 10),
+            Text(
+              'Delete Account?',
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+                fontSize: 17,
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'This action is permanent and cannot be undone. All your membership privileges, VIP tier, active bookings, and loyalty strips will be permanently erased.',
+          style: GoogleFonts.poppins(
+            fontSize: 13,
+            color: AppColors.textSecondary,
+            height: 1.4,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: Text('Cancel',
+                style: GoogleFonts.poppins(color: AppColors.textSecondary)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: () async {
+              Navigator.of(dialogCtx, rootNavigator: true).pop();
+              final scaffoldMessenger = ScaffoldMessenger.of(context);
+              scaffoldMessenger.showSnackBar(
+                const SnackBar(
+                  content: Text('Deleting your account...'),
+                  backgroundColor: Color(0xFF1E1E22),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+
+              final success =
+                  await ref.read(profileProvider.notifier).deleteAccount();
+
+              if (success) {
+                scaffoldMessenger.showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                        'Your account and data have been permanently deleted.'),
+                    backgroundColor: AppColors.error,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              } else {
+                scaffoldMessenger.showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                        'Failed to delete account. Please contact TigerBay concierge.'),
+                    backgroundColor: AppColors.error,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            },
+            child: Text(
+              'Delete Permanently',
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
           ),
         ],
       ),
@@ -1020,6 +1184,68 @@ class _BranchTile extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _BiometricSwitch extends ConsumerStatefulWidget {
+  const _BiometricSwitch();
+
+  @override
+  ConsumerState<_BiometricSwitch> createState() => _BiometricSwitchState();
+}
+
+class _BiometricSwitchState extends ConsumerState<_BiometricSwitch> {
+  bool _isEnabled = false;
+  bool _isChecking = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkStatus();
+  }
+
+  Future<void> _checkStatus() async {
+    final bio = ref.read(biometricServiceProvider);
+    final enabled = await bio.isBiometricEnabled();
+    if (mounted) {
+      setState(() {
+        _isEnabled = enabled;
+        _isChecking = false;
+      });
+    }
+  }
+
+  Future<void> _toggle(bool val) async {
+    final bio = ref.read(biometricServiceProvider);
+    if (val) {
+      final success = await bio.authenticate(
+        reason: 'Confirm Face ID / Touch ID to enable biometric unlock.',
+      );
+      if (success) {
+        await bio.setBiometricEnabled(true);
+        if (mounted) setState(() => _isEnabled = true);
+      }
+    } else {
+      await bio.setBiometricEnabled(false);
+      if (mounted) setState(() => _isEnabled = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isChecking) {
+      return const SizedBox(
+        width: 32,
+        height: 20,
+        child: CupertinoActivityIndicator(radius: 8),
+      );
+    }
+
+    return CupertinoSwitch(
+      value: _isEnabled,
+      activeTrackColor: AppColors.gold,
+      onChanged: _toggle,
     );
   }
 }

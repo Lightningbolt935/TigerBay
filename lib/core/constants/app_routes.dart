@@ -10,6 +10,8 @@ class AppRoutes {
   static const String login = '/login';
   static const String otp = '/otp';
   static const String register = '/register';
+  static const String forgotPassword = '/forgot-password';
+  static const String registrationVerification = '/registration-verification';
   static const String pendingVerification = '/pending-verification';
 
   // Paywall Gate

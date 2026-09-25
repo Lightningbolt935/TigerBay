@@ -1,5 +1,5 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -7,6 +7,7 @@ import 'package:tigerbay_app/core/constants/app_colors.dart';
 import 'package:tigerbay_app/core/constants/app_routes.dart';
 import 'package:tigerbay_app/core/services/stripe_service.dart';
 import 'package:tigerbay_app/data/models/membership_tier_model.dart';
+import 'package:tigerbay_app/features/auth/providers/auth_provider.dart';
 import 'package:tigerbay_app/features/auth/providers/profile_state_provider.dart';
 import 'package:tigerbay_app/features/profile/providers/membership_provider.dart';
 import 'package:tigerbay_app/shared/widgets/apple_touch_feedback.dart';
@@ -37,11 +38,19 @@ class _MembershipPaywallScreenState
     super.dispose();
   }
 
-  void _handleBack() {
-    if (context.canPop()) {
+  Future<void> _handleBack() async {
+    HapticFeedback.lightImpact();
+    final profile = ref.read(profileStateProvider).profile;
+    final bool isMembershipActive = profile?.isMembershipActive ?? false;
+
+    if (isMembershipActive && context.canPop()) {
       context.pop();
     } else {
-      context.go(AppRoutes.home);
+      // Unpaid or expired member tapping back -> sign out and return to Login page
+      await ref.read(authProvider.notifier).signOut();
+      if (mounted) {
+        context.go(AppRoutes.login);
+      }
     }
   }
 
@@ -137,7 +146,7 @@ class _MembershipPaywallScreenState
       // Auto return home after brief delay
       await Future.delayed(const Duration(milliseconds: 600));
       if (mounted) {
-        _handleBack();
+        context.go(AppRoutes.home);
       }
     } else {
       final error = ref.read(membershipActivationNotifierProvider).error;
@@ -172,10 +181,7 @@ class _MembershipPaywallScreenState
       child: Scaffold(
         backgroundColor: AppColors.brandBlack,
         body: SafeArea(
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: tiersAsync.when(
+          child: tiersAsync.when(
           loading: () => const Center(
             child: CircularProgressIndicator(
               color: AppColors.gold,
@@ -253,11 +259,19 @@ class _MembershipPaywallScreenState
 
             final bool isCurrentSelected =
                 selectedTier.id == currentTier?.id;
+            // Downgrade guard: user cannot switch to a lower tier level.
+            final bool isDowngrade = isActive &&
+                currentTier != null &&
+                !isCurrentSelected &&
+                selectedTier.tierLevel < currentTier.tierLevel;
+
             final String ctaLabel = isCurrentSelected
                 ? 'RENEW ${selectedTier.name.toUpperCase()}'
-                : isActive
-                    ? 'SWITCH TO ${selectedTier.name.toUpperCase()}'
-                    : 'ACTIVATE ${selectedTier.name.toUpperCase()}';
+                : isDowngrade
+                    ? 'CANNOT DOWNGRADE PLAN'
+                    : isActive
+                        ? 'UPGRADE TO ${selectedTier.name.toUpperCase()}'
+                        : 'ACTIVATE ${selectedTier.name.toUpperCase()}';
 
             return Column(
               children: [
@@ -286,7 +300,7 @@ class _MembershipPaywallScreenState
                 const SizedBox(height: 6),
                 Text(
                   isActive
-                      ? 'Renew your plan or switch tiers any time'
+                      ? 'Renew your current plan or upgrade to a higher tier'
                       : 'Unlock exclusive rewards across every TigerBay venue',
                   style: GoogleFonts.poppins(
                     fontSize: 13,
@@ -301,7 +315,10 @@ class _MembershipPaywallScreenState
                   child: PageView.builder(
                     controller: _pageController,
                     itemCount: tiers.length,
-                    onPageChanged: (i) => setState(() => _currentPage = i),
+                    onPageChanged: (i) {
+                      HapticFeedback.selectionClick();
+                      setState(() => _currentPage = i);
+                    },
                     itemBuilder: (_, index) {
                       final isSelected = index == safeIndex;
                       return _TierCard(
@@ -344,13 +361,15 @@ class _MembershipPaywallScreenState
                     width: double.infinity,
                     height: 54,
                     child: ElevatedButton(
-                      onPressed: activationState.isProcessing
+                      onPressed: activationState.isProcessing || isDowngrade
                           ? null
                           : () => _activateMembership(selectedTier),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.gold,
-                        disabledBackgroundColor:
-                            AppColors.gold.withValues(alpha: 0.4),
+                        backgroundColor:
+                            isDowngrade ? AppColors.surfaceLight : AppColors.gold,
+                        disabledBackgroundColor: isDowngrade
+                            ? AppColors.surfaceLight
+                            : AppColors.gold.withValues(alpha: 0.4),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(30),
                         ),
@@ -365,14 +384,26 @@ class _MembershipPaywallScreenState
                                 strokeWidth: 2,
                               ),
                             )
-                          : Text(
-                              ctaLabel,
-                              style: GoogleFonts.poppins(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
-                                letterSpacing: 1,
-                              ),
+                          : Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                if (isDowngrade) ...[
+                                  const Icon(Icons.lock_outline_rounded,
+                                      size: 16, color: AppColors.textHint),
+                                  const SizedBox(width: 8),
+                                ],
+                                Text(
+                                  ctaLabel,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    color: isDowngrade
+                                        ? AppColors.textHint
+                                        : Colors.white,
+                                    letterSpacing: 1,
+                                  ),
+                                ),
+                              ],
                             ),
                     ),
                   ),
@@ -382,44 +413,40 @@ class _MembershipPaywallScreenState
               ],
             );
           },
-            ),
-          ),
-          Positioned(
-            top: 12,
-            left: 14,
-            child: AppleTouchFeedback(
-              onTap: _handleBack,
-              child: Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: AppColors.glassSurface,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: AppColors.glassBorder,
-                    width: 0.8,
-                  ),
-                ),
-                child: const Icon(
-                  CupertinoIcons.chevron_back,
-                  color: Colors.white,
-                  size: 20,
-                ),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     ),
-  ),
-);
+  );
 }
 
   Widget _buildBrandHeader() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
         children: [
+          // ── Visible Luxury Back Button ────────────────────────────────────
+          AppleTouchFeedback(
+            onTap: _handleBack,
+            child: Container(
+              key: const ValueKey('paywall_back_button'),
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.12),
+                  width: 1,
+                ),
+              ),
+              child: const Icon(
+                Icons.arrow_back_ios_new_rounded,
+                color: Colors.white,
+                size: 18,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
           Container(
             width: 40,
             height: 40,

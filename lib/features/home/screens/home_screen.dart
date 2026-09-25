@@ -11,6 +11,8 @@ import 'package:tigerbay_app/data/models/branch_model.dart';
 import 'package:tigerbay_app/features/home/screens/news_feed_component.dart';
 import 'package:tigerbay_app/features/home/providers/home_provider.dart';
 import 'package:tigerbay_app/features/notifications/providers/user_notifications_provider.dart';
+import 'package:tigerbay_app/features/bookings/providers/booking_provider.dart';
+import 'package:tigerbay_app/data/models/booking_model.dart';
 import 'package:tigerbay_app/shared/widgets/apple_touch_feedback.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -23,6 +25,10 @@ class HomeScreen extends ConsumerWidget {
 
     // ── Realtime app_configs stream ─────────────────────────────────────────
     final appConfig = ref.watch(appConfigStreamProvider);
+    final bookingsAsync = ref.watch(userBookingsStreamProvider);
+    final upcomingBooking = bookingsAsync.valueOrNull
+        ?.where((b) => b.status == BookingStatus.upcoming)
+        .firstOrNull;
 
     return Scaffold(
       backgroundColor: AppColors.brandBlack,
@@ -185,6 +191,22 @@ class HomeScreen extends ConsumerWidget {
                 ),
               ),
             ),
+
+            if (upcomingBooking != null) ...[
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: _UpcomingBookingPass(
+                    booking: upcomingBooking,
+                    onTap: () => context.push(
+                      '${AppRoutes.bookingDetail}/${upcomingBooking.id}',
+                      extra: upcomingBooking,
+                    ),
+                  ),
+                ),
+              ),
+            ],
 
             const SliverToBoxAdapter(child: SizedBox(height: 28)),
 
@@ -822,6 +844,124 @@ class _ShimmerBox extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surfaceLight,
         borderRadius: BorderRadius.circular(radius),
+      ),
+    );
+  }
+}
+
+class _UpcomingBookingPass extends StatelessWidget {
+  final BookingModel booking;
+  final VoidCallback onTap;
+
+  const _UpcomingBookingPass({
+    required this.booking,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AppleTouchFeedback(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: AppColors.gold.withValues(alpha: 0.35),
+            width: 1.0,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.gold.withValues(alpha: 0.10),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppColors.gold.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: AppColors.gold.withValues(alpha: 0.25),
+                ),
+              ),
+              child: const Icon(
+                CupertinoIcons.calendar_today,
+                color: AppColors.champagneGold,
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.success.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          'CONFIRMED TABLE',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.6,
+                            color: AppColors.success,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          booking.branchName,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.champagneGold,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${booking.formattedDate} at ${booking.bookingTime}',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${booking.guestCount} Guests • Tap for Pass & Details',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              CupertinoIcons.chevron_forward,
+              color: AppColors.champagneGold,
+              size: 16,
+            ),
+          ],
+        ),
       ),
     );
   }

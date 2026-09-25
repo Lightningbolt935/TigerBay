@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_routes.dart';
 import '../providers/auth_provider.dart';
+import '../providers/profile_state_provider.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TigerBay International — Email Verification Pending Screen
@@ -13,14 +15,8 @@ import '../providers/auth_provider.dart';
 //   AuthStatus == pendingEmailVerification
 //   (i.e. email_confirmed_at IS NULL on the current user)
 //
-// This screen blocks ALL navigation to the home shell and membership paywall
-// until the user clicks the verification link in their inbox.
-//
-// On receiving the deep link (io.tigerbay.app://login-callback) the OS
-// routes the user back here, Supabase refreshes the session, the
-// onAuthStateChange stream emits a SIGNED_IN event with emailConfirmedAt
-// populated, and GoRouter's redirect automatically gates the user forward
-// to the home screen without any manual navigation call needed.
+// Automatically refreshes when the user switches back from their email app,
+// polls every 3 seconds, and provides a manual "I'VE CONFIRMED MY EMAIL" button.
 // ═══════════════════════════════════════════════════════════════════════════
 
 class EmailVerificationPendingScreen extends ConsumerStatefulWidget {
@@ -33,7 +29,7 @@ class EmailVerificationPendingScreen extends ConsumerStatefulWidget {
 
 class _EmailVerificationPendingScreenState
     extends ConsumerState<EmailVerificationPendingScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   // ── Animation ──────────────────────────────────────────────────────────────
   late final AnimationController _pulseController;
   late final Animation<double> _pulseAnimation;
@@ -44,9 +40,14 @@ class _EmailVerificationPendingScreenState
   bool _resentSuccessfully = false;
   int _resendCooldownSeconds = 0;
 
+  // ── Auto-polling & Lifecycle Verification ──────────────────────────────────
+  Timer? _pollingTimer;
+  bool _isCheckingStatus = false;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
 
     _pulseController = AnimationController(
       vsync: this,
@@ -63,12 +64,59 @@ class _EmailVerificationPendingScreenState
         curve: const Interval(0.0, 0.3, curve: Curves.easeOut),
       ),
     );
+
+    _startPolling();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      debugPrint('[TigerBay EmailPending] App resumed from background. Checking email confirmation status...');
+      _checkVerificationStatus(silent: true);
+    }
+  }
+
+  void _startPolling() {
+    _pollingTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (mounted) {
+        _checkVerificationStatus(silent: true);
+      }
+    });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _pollingTimer?.cancel();
     _pulseController.dispose();
     super.dispose();
+  }
+
+  Future<void> _checkVerificationStatus({bool silent = false}) async {
+    if (_isCheckingStatus) return;
+    if (!silent) setState(() => _isCheckingStatus = true);
+
+    try {
+      final confirmed = await ref.read(authProvider.notifier).checkEmailConfirmed();
+      if (confirmed && mounted) {
+        _pollingTimer?.cancel();
+        _showSnack('Email confirmed! Welcome to TigerBay ✓', isError: false);
+        ref.invalidate(profileStateProvider);
+      } else if (!silent && mounted) {
+        _showSnack(
+          'Email not yet confirmed. Please tap the verification link in your inbox.',
+          isError: true,
+        );
+      }
+    } catch (e) {
+      if (!silent && mounted) {
+        _showSnack('Could not check confirmation status. Please try again.', isError: true);
+      }
+    } finally {
+      if (mounted && !silent) {
+        setState(() => _isCheckingStatus = false);
+      }
+    }
   }
 
   // ── Resend email ───────────────────────────────────────────────────────────
@@ -121,6 +169,7 @@ class _EmailVerificationPendingScreenState
   // ── Sign out and go back ───────────────────────────────────────────────────
 
   Future<void> _goBackToLogin() async {
+    _pollingTimer?.cancel();
     await ref.read(authProvider.notifier).signOut();
     if (mounted) context.go(AppRoutes.login);
   }
@@ -319,32 +368,76 @@ class _EmailVerificationPendingScreenState
                   ],
                 ),
 
-                const SizedBox(height: 40),
+                const SizedBox(height: 32),
+
+                // ── Primary: Check Confirmation Status Button ─────────────
+                SizedBox(
+                  width: double.infinity,
+                  height: 54,
+                  child: ElevatedButton.icon(
+                    key: const ValueKey('confirm_email_status_button'),
+                    onPressed: _isCheckingStatus
+                        ? null
+                        : () => _checkVerificationStatus(silent: false),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.gold,
+                      foregroundColor: AppColors.brandBlack,
+                      elevation: 6,
+                      shadowColor: AppColors.gold.withValues(alpha: 0.4),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                    ),
+                    icon: _isCheckingStatus
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              color: AppColors.brandBlack,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Icon(Icons.check_circle_rounded, size: 20),
+                    label: Text(
+                      _isCheckingStatus
+                          ? 'CHECKING VERIFICATION...'
+                          : 'I\'VE CONFIRMED MY EMAIL',
+                      style: const TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 14),
 
                 // ── Resend button ─────────────────────────────────────────
                 SizedBox(
                   width: double.infinity,
-                  height: 52,
-                  child: ElevatedButton(
+                  height: 50,
+                  child: OutlinedButton(
                     key: const ValueKey('resend_verification_button'),
                     onPressed: (_isSendingResend || _resendCooldownSeconds > 0)
                         ? null
                         : _resendVerificationEmail,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.gold,
-                      disabledBackgroundColor:
-                          AppColors.gold.withValues(alpha: 0.35),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(
+                        color: AppColors.gold.withValues(alpha: 0.45),
+                        width: 1,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(30),
                       ),
-                      elevation: 0,
                     ),
                     child: _isSendingResend
                         ? const SizedBox(
                             width: 20,
                             height: 20,
                             child: CircularProgressIndicator(
-                              color: AppColors.brandBlack,
+                              color: AppColors.gold,
                               strokeWidth: 2,
                             ),
                           )
@@ -356,37 +449,28 @@ class _EmailVerificationPendingScreenState
                                     : 'Resend Verification Email',
                             style: const TextStyle(
                               fontFamily: 'Poppins',
-                              fontSize: 14,
+                              fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: AppColors.brandBlack,
+                              color: AppColors.gold,
                             ),
                           ),
                   ),
                 ),
 
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
 
                 // ── Back to login ─────────────────────────────────────────
                 SizedBox(
                   width: double.infinity,
-                  height: 52,
-                  child: OutlinedButton(
+                  height: 48,
+                  child: TextButton(
                     key: const ValueKey('back_to_login_button'),
                     onPressed: _goBackToLogin,
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        width: 1,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
-                      ),
-                    ),
                     child: const Text(
                       'Use a different account',
                       style: TextStyle(
                         fontFamily: 'Poppins',
-                        fontSize: 14,
+                        fontSize: 13,
                         fontWeight: FontWeight.w500,
                         color: AppColors.textSecondary,
                       ),

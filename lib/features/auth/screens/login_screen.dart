@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -9,6 +11,7 @@ import 'package:tigerbay_app/data/models/branch_model.dart';
 import 'package:tigerbay_app/core/constants/app_colors.dart';
 import 'package:tigerbay_app/core/theme/app_typography.dart';
 import 'package:tigerbay_app/features/auth/providers/auth_provider.dart';
+import 'package:tigerbay_app/features/auth/providers/profile_state_provider.dart';
 import 'package:tigerbay_app/features/auth/widgets/branch_selector_widget.dart';
 import 'package:tigerbay_app/shared/widgets/apple_touch_feedback.dart';
 
@@ -54,6 +57,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   final _registerFormKey = GlobalKey<FormState>();
   final _registerFullNameController = TextEditingController();
   final _registerEmailController = TextEditingController();
+  final _registerPhoneController = TextEditingController();
+  String _registerCountryCode = '+44';
   final _registerPasswordController = TextEditingController();
   final _registerConfirmPasswordController = TextEditingController();
   bool _registerPasswordObscured = true;
@@ -65,6 +70,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   // ── Form submit flags ─────────────────────────────────────────────────────────
   bool _loginSubmitted = false;
   bool _registerSubmitted = false;
+
+  // ── Brute-force protection & cooldown ─────────────────────────────────────────
+  int _failedLoginAttempts = 0;
+  int _lockoutSecondsRemaining = 0;
+  Timer? _lockoutTimer;
 
   @override
   void initState() {
@@ -159,14 +169,41 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     _loginPasswordController.dispose();
     _registerFullNameController.dispose();
     _registerEmailController.dispose();
+    _registerPhoneController.dispose();
     _registerPasswordController.dispose();
     _registerConfirmPasswordController.dispose();
+    _lockoutTimer?.cancel();
     super.dispose();
+  }
+
+  void _startLockoutTimer() {
+    setState(() => _lockoutSecondsRemaining = 60);
+    _lockoutTimer?.cancel();
+    _lockoutTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_lockoutSecondsRemaining <= 1) {
+        timer.cancel();
+        setState(() {
+          _lockoutSecondsRemaining = 0;
+          _failedLoginAttempts = 0;
+        });
+      } else {
+        setState(() => _lockoutSecondsRemaining--);
+      }
+    });
   }
 
   // ── Actions ──────────────────────────────────────────────────────────────────
 
   Future<void> _submitLogin() async {
+    if (_lockoutSecondsRemaining > 0) {
+      _showErrorSnack('Security lockout: Please wait $_lockoutSecondsRemaining seconds before trying again.');
+      return;
+    }
+
     setState(() => _loginSubmitted = true);
     if (!_loginFormKey.currentState!.validate()) return;
 
@@ -178,12 +215,32 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     if (!mounted) return;
 
     if (!success) {
-      final error = ref.read(authProvider).error;
-      _showErrorSnack(error ?? 'Sign-in failed. Please try again.');
+      _failedLoginAttempts++;
+      if (_failedLoginAttempts >= 5) {
+        _startLockoutTimer();
+        _showErrorSnack('Too many failed attempts. Sign-in locked for 60 seconds.');
+      } else {
+        final remaining = 5 - _failedLoginAttempts;
+        final error = ref.read(authProvider).error;
+        _showErrorSnack(
+          remaining <= 2
+              ? '${error ?? 'Invalid email or password.'} ($remaining attempts remaining before security lock)'
+              : (error ?? 'Sign-in failed. Please try again.'),
+        );
+      }
       return;
     }
 
-    context.go(AppRoutes.home);
+    // ── Credential Save (Apple Keychain & Google Password Manager) ─────────
+    TextInput.finishAutofillContext();
+    _failedLoginAttempts = 0;
+
+    final profile = ref.read(profileStateProvider).profile;
+    if (profile?.isMembershipActive == true) {
+      context.go(AppRoutes.home);
+    } else {
+      context.go(AppRoutes.membershipPaywall);
+    }
   }
 
   Future<void> _submitRegister() async {
@@ -191,24 +248,183 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     final formValid = _registerFormKey.currentState!.validate();
     final branchValid = chosenHomeSite != null;
 
-    if (!formValid || !branchValid) return;
-
-    final success = await ref.read(authProvider.notifier).signUpWithEmail(
-          email: _registerEmailController.text.trim(),
-          password: _registerPasswordController.text,
-          fullName: _registerFullNameController.text.trim(),
-          homeSite: chosenHomeSite!,
-        );
-
-    if (!mounted) return;
-
-    if (!success) {
-      final error = ref.read(authProvider).error;
-      _showErrorSnack(error ?? 'Registration failed. Please try again.');
+    if (!formValid || !branchValid) {
+      if (!branchValid) {
+        _showErrorSnack('Please select your home TigerBay venue.');
+      }
       return;
     }
 
-    context.go(AppRoutes.pendingVerification);
+    final rawPhone = _registerPhoneController.text.trim();
+    final cleanDigits = rawPhone.replaceAll(RegExp(r'\D'), '');
+    if (cleanDigits.length < 7) {
+      _showErrorSnack('Please enter a valid mobile phone number.');
+      return;
+    }
+    final formattedPhone = '$_registerCountryCode$cleanDigits';
+    final email = _registerEmailController.text.trim().toLowerCase();
+    final fullName = _registerFullNameController.text.trim();
+    final password = _registerPasswordController.text;
+
+    // ── Pre-registration Duplicate Account Check ────────────────────────────
+    try {
+      final existing = await ref.read(authRepositoryProvider).checkUserExists(
+            email: email,
+            phone: formattedPhone,
+          );
+
+      if (existing != null) {
+        final existingEmail = (existing['email'] as String? ?? '').toLowerCase();
+        _showAccountAlreadyExistsDialog(
+          email: email,
+          phone: formattedPhone,
+          isEmailMatch: existingEmail == email,
+        );
+        return;
+      }
+    } catch (e) {
+      debugPrint('[TigerBay Auth] Duplicate check notice: $e');
+    }
+
+    // ── Proceed to Dual-Factor Verification (SMS OTP + Email OTP) ───────────
+    if (!mounted) return;
+    context.push(
+      AppRoutes.registrationVerification,
+      extra: {
+        'fullName': fullName,
+        'email': email,
+        'phone': formattedPhone,
+        'password': password,
+        'homeSite': chosenHomeSite!,
+      },
+    );
+  }
+
+  void _showAccountAlreadyExistsDialog({
+    required String email,
+    required String phone,
+    required bool isEmailMatch,
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (modalContext) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF16161A),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+            border: Border(
+              top: BorderSide(color: Color(0xFF33333D), width: 1.2),
+            ),
+          ),
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 36),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF3A3A42),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.gold.withValues(alpha: 0.15),
+                  border: Border.all(color: AppColors.gold.withValues(alpha: 0.35)),
+                ),
+                child: const Icon(
+                  CupertinoIcons.person_badge_minus_fill,
+                  color: AppColors.gold,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'Account Already Exists',
+                style: GoogleFonts.poppins(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                isEmailMatch
+                    ? 'An account is already registered with $email. Please sign in to access your profile.'
+                    : 'An account is already registered with $phone. Please sign in to access your profile.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 28),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(modalContext).pop();
+                    _tabController.animateTo(0);
+                    _loginEmailController.text = email;
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.gold,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(25),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: Text(
+                    'SIGN IN TO YOUR ACCOUNT',
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF16161A),
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: OutlinedButton(
+                  onPressed: () {
+                    Navigator.of(modalContext).pop();
+                    context.push(AppRoutes.forgotPassword, extra: email);
+                  },
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Color(0xFF33333D)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(25),
+                    ),
+                  ),
+                  child: Text(
+                    'FORGOT PASSWORD?',
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.champagneGold,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _socialSignIn(SocialProvider provider) async {
@@ -248,7 +464,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   Widget build(BuildContext context) {
     ref.listen<AuthState>(authProvider, (previous, next) {
       if (next.status == AuthStatus.authenticated && mounted) {
-        context.go(AppRoutes.home);
+        final profile = ref.read(profileStateProvider).profile;
+        if (profile?.isMembershipActive == true) {
+          context.go(AppRoutes.home);
+        } else {
+          context.go(AppRoutes.membershipPaywall);
+        }
       } else if (next.status == AuthStatus.pendingEmailVerification && mounted) {
         context.go(AppRoutes.pendingVerification);
       } else if (next.error != null && mounted) {
@@ -287,7 +508,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             },
           ),
 
-          SafeArea(
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => FocusScope.of(context).unfocus(),
+            child: SafeArea(
             child: Column(
               children: [
                 const SizedBox(height: 24),
@@ -350,7 +574,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               ],
             ),
           ),
-        ],
+        ),
+      ],
       ),
     );
   }
@@ -521,122 +746,132 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         autovalidateMode: _loginSubmitted
             ? AutovalidateMode.onUserInteraction
             : AutovalidateMode.disabled,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Email ───────────────────────────────────────────────────────────
-            _buildFieldLabel('EMAIL ADDRESS'),
-            const SizedBox(height: 8),
-            _buildTextField(
-              controller: _loginEmailController,
-              hint: 'your@email.com',
-              inputType: TextInputType.emailAddress,
-              prefixIcon: CupertinoIcons.mail,
-              validator: (v) {
-                if (v == null || v.trim().isEmpty) return 'Email is required';
-                if (!v.contains('@')) return 'Enter a valid email address';
-                return null;
-              },
-            ),
-
-            const SizedBox(height: 18),
-
-            // ── Password ────────────────────────────────────────────────────────
-            _buildFieldLabel('PASSWORD'),
-            const SizedBox(height: 8),
-            _buildTextField(
-              controller: _loginPasswordController,
-              hint: 'Enter your password',
-              obscure: _loginPasswordObscured,
-              prefixIcon: CupertinoIcons.lock,
-              suffixIcon: IconButton(
-                icon: Icon(
-                  _loginPasswordObscured
-                      ? CupertinoIcons.eye
-                      : CupertinoIcons.eye_slash,
-                  size: 20,
-                  color: AppColors.textHint,
-                ),
-                onPressed: () => setState(
-                    () => _loginPasswordObscured = !_loginPasswordObscured),
+        child: AutofillGroup(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Email ───────────────────────────────────────────────────────────
+              _buildFieldLabel('EMAIL ADDRESS'),
+              const SizedBox(height: 8),
+              _buildTextField(
+                controller: _loginEmailController,
+                hint: 'your@email.com',
+                inputType: TextInputType.emailAddress,
+                autofillHints: const [AutofillHints.email, AutofillHints.username],
+                prefixIcon: CupertinoIcons.mail,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'Email is required';
+                  if (!v.contains('@')) return 'Enter a valid email address';
+                  return null;
+                },
               ),
-              validator: (v) {
-                if (v == null || v.isEmpty) return 'Password is required';
-                return null;
-              },
-            ),
 
-            const SizedBox(height: 8),
+              const SizedBox(height: 18),
 
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: () => _sendPasswordReset(),
-                style: TextButton.styleFrom(
-                  padding: EdgeInsets.zero,
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              // ── Password ────────────────────────────────────────────────────────
+              _buildFieldLabel('PASSWORD'),
+              const SizedBox(height: 8),
+              _buildTextField(
+                controller: _loginPasswordController,
+                hint: 'Enter your password',
+                obscure: _loginPasswordObscured,
+                autofillHints: const [AutofillHints.password],
+                prefixIcon: CupertinoIcons.lock,
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _loginPasswordObscured
+                        ? CupertinoIcons.eye
+                        : CupertinoIcons.eye_slash,
+                    size: 20,
+                    color: AppColors.textHint,
+                  ),
+                  onPressed: () => setState(
+                      () => _loginPasswordObscured = !_loginPasswordObscured),
                 ),
-                child: Text(
-                  'Forgot password?',
-                  style: AppTypography.caption1.copyWith(
-                    color: AppColors.champagneGold,
-                    fontWeight: FontWeight.w600,
+                validator: (v) {
+                  if (v == null || v.isEmpty) return 'Password is required';
+                  return null;
+                },
+              ),
+
+              const SizedBox(height: 8),
+
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: _openForgotPassword,
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: Text(
+                    'Forgot password?',
+                    style: AppTypography.caption1.copyWith(
+                      color: AppColors.champagneGold,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ),
-            ),
 
-            const SizedBox(height: 24),
+              const SizedBox(height: 24),
 
-            // ── Sign In button ──────────────────────────────────────────────────
-            _buildPrimaryButton(
-              label: 'Sign In',
-              isLoading: authState.isLoading,
-              onTap: _submitLogin,
-            ),
+              // ── Security Lockout Banner (Brute-Force Protection) ─────────────
+              if (_lockoutSecondsRemaining > 0) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.error.withValues(alpha: 0.4)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(CupertinoIcons.lock_shield_fill, color: AppColors.error, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Security lockout active. Try again in ${_lockoutSecondsRemaining}s',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.error,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
 
-            const SizedBox(height: 24),
-            _buildSocialDivider(),
-            const SizedBox(height: 16),
-            _buildSocialButtons(authState),
+              // ── Sign In button ──────────────────────────────────────────────────
+              _buildPrimaryButton(
+                label: _lockoutSecondsRemaining > 0
+                    ? 'LOCKED (${_lockoutSecondsRemaining}s)'
+                    : 'Sign In',
+                isLoading: authState.isLoading,
+                onTap: _lockoutSecondsRemaining > 0 ? () {} : _submitLogin,
+              ),
 
-            const SizedBox(height: 24),
-            _buildTermsFooter(),
-          ],
+              const SizedBox(height: 24),
+              _buildSocialDivider(),
+              const SizedBox(height: 16),
+              _buildSocialButtons(authState),
+
+              const SizedBox(height: 24),
+              _buildTermsFooter(),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Future<void> _sendPasswordReset() async {
+  void _openForgotPassword() {
     final email = _loginEmailController.text.trim();
-    if (email.isEmpty) {
-      _showErrorSnack('Enter your email address first to reset password.');
-      return;
-    }
-    try {
-      await ref
-          .read(supabaseClientProvider)
-          .auth
-          .resetPasswordForEmail(email);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text(
-            'Password reset email sent.',
-            style: TextStyle(fontFamily: 'Poppins', fontSize: 13),
-          ),
-          backgroundColor: AppColors.success,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        ),
-      );
-    } catch (e) {
-      _showErrorSnack(e.toString());
-    }
+    context.push(AppRoutes.forgotPassword, extra: email.isNotEmpty ? email : null);
   }
 
   // ── Register form ─────────────────────────────────────────────────────────────
@@ -650,39 +885,114 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         autovalidateMode: _registerSubmitted
             ? AutovalidateMode.onUserInteraction
             : AutovalidateMode.disabled,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Full Name ───────────────────────────────────────────────────────
-            _buildFieldLabel('FULL NAME'),
-            const SizedBox(height: 8),
-            _buildTextField(
-              controller: _registerFullNameController,
-              hint: 'Your full name',
-              inputType: TextInputType.name,
-              prefixIcon: CupertinoIcons.person,
-              validator: (v) {
-                if (v == null || v.trim().isEmpty) return 'Full name is required';
-                if (v.trim().length < 2) return 'Enter at least 2 characters';
-                return null;
-              },
-            ),
+        child: AutofillGroup(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Full Name ───────────────────────────────────────────────────────
+              _buildFieldLabel('FULL NAME'),
+              const SizedBox(height: 8),
+              _buildTextField(
+                controller: _registerFullNameController,
+                hint: 'Your full name',
+                inputType: TextInputType.name,
+                autofillHints: const [AutofillHints.name],
+                prefixIcon: CupertinoIcons.person,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'Full name is required';
+                  if (v.trim().length < 2) return 'Enter at least 2 characters';
+                  return null;
+                },
+              ),
+
+              const SizedBox(height: 18),
+
+              // ── Email ───────────────────────────────────────────────────────────
+              _buildFieldLabel('EMAIL ADDRESS'),
+              const SizedBox(height: 8),
+              _buildTextField(
+                controller: _registerEmailController,
+                hint: 'your@email.com',
+                inputType: TextInputType.emailAddress,
+                autofillHints: const [AutofillHints.email, AutofillHints.username],
+                prefixIcon: CupertinoIcons.mail,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'Email is required';
+                  if (!v.contains('@')) return 'Enter a valid email address';
+                  return null;
+                },
+              ),
 
             const SizedBox(height: 18),
 
-            // ── Email ───────────────────────────────────────────────────────────
-            _buildFieldLabel('EMAIL ADDRESS'),
+            // ── Phone Number ────────────────────────────────────────────────────
+            _buildFieldLabel('MOBILE PHONE NUMBER'),
             const SizedBox(height: 8),
-            _buildTextField(
-              controller: _registerEmailController,
-              hint: 'your@email.com',
-              inputType: TextInputType.emailAddress,
-              prefixIcon: CupertinoIcons.mail,
-              validator: (v) {
-                if (v == null || v.trim().isEmpty) return 'Email is required';
-                if (!v.contains('@')) return 'Enter a valid email address';
-                return null;
-              },
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF16161A),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: _registerSubmitted &&
+                          _registerPhoneController.text.trim().length < 7
+                      ? AppColors.error
+                      : const Color(0xFF2C2C35),
+                ),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Row(
+                children: [
+                  DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _registerCountryCode,
+                      dropdownColor: const Color(0xFF222228),
+                      icon: const Icon(CupertinoIcons.chevron_down,
+                          size: 14, color: AppColors.champagneGold),
+                      style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: '+44', child: Text('🇬🇧 +44')),
+                        DropdownMenuItem(value: '+971', child: Text('🇦🇪 +971')),
+                        DropdownMenuItem(value: '+1', child: Text('🇺🇸 +1')),
+                        DropdownMenuItem(value: '+91', child: Text('🇮🇳 +91')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) setState(() => _registerCountryCode = val);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(width: 1, height: 24, color: const Color(0xFF33333D)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _registerPhoneController,
+                      keyboardType: TextInputType.phone,
+                      autofillHints: const [AutofillHints.telephoneNumber],
+                      style: GoogleFonts.poppins(color: Colors.white, fontSize: 14),
+                      decoration: const InputDecoration(
+                        hintText: '7123 456789',
+                        hintStyle: TextStyle(color: Color(0xFF6E6E78)),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) {
+                          return 'Phone number is required';
+                        }
+                        final digits = v.replaceAll(RegExp(r'\D'), '');
+                        if (digits.length < 7) {
+                          return 'Enter a valid phone number';
+                        }
+                        return null;
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
 
             const SizedBox(height: 18),
@@ -694,7 +1004,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               controller: _registerPasswordController,
               hint: 'Create a password',
               obscure: _registerPasswordObscured,
+              autofillHints: const [AutofillHints.newPassword],
               prefixIcon: CupertinoIcons.lock,
+              onChanged: (_) => setState(() {}),
               suffixIcon: IconButton(
                 icon: Icon(
                   _registerPasswordObscured
@@ -712,6 +1024,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 return null;
               },
             ),
+            _buildPasswordStrengthMeter(_registerPasswordController.text),
 
             const SizedBox(height: 18),
 
@@ -722,6 +1035,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               controller: _registerConfirmPasswordController,
               hint: 'Re-enter your password',
               obscure: _registerConfirmObscured,
+              autofillHints: const [AutofillHints.newPassword],
               prefixIcon: CupertinoIcons.lock,
               suffixIcon: IconButton(
                 icon: Icon(
@@ -770,6 +1084,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           ],
         ),
       ),
+    ),
     );
   }
 
@@ -794,11 +1109,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     IconData? prefixIcon,
     Widget? suffixIcon,
     String? Function(String?)? validator,
+    ValueChanged<String>? onChanged,
+    Iterable<String>? autofillHints,
   }) {
     return TextFormField(
       controller: controller,
       keyboardType: inputType,
       obscureText: obscure,
+      onChanged: onChanged,
+      autofillHints: autofillHints,
       style: AppTypography.body.copyWith(
         color: AppColors.textPrimary,
       ),
@@ -843,6 +1162,119 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           color: AppColors.error,
         ),
       ),
+    );
+  }
+
+  Widget _buildPasswordStrengthMeter(String password) {
+    if (password.isEmpty) return const SizedBox.shrink();
+
+    final bool hasMinLength = password.length >= 8;
+    final bool hasUpper = RegExp(r'[A-Z]').hasMatch(password);
+    final bool hasLower = RegExp(r'[a-z]').hasMatch(password);
+    final bool hasNumberOrSpecial =
+        RegExp(r'[0-9!@#\$&*~%^()_+=<>?]').hasMatch(password);
+
+    final int score = (hasMinLength ? 1 : 0) +
+        (hasUpper ? 1 : 0) +
+        (hasLower ? 1 : 0) +
+        (hasNumberOrSpecial ? 1 : 0);
+
+    Color strengthColor;
+    String strengthLabel;
+    switch (score) {
+      case 1:
+        strengthColor = const Color(0xFFE53935);
+        strengthLabel = 'Weak';
+        break;
+      case 2:
+        strengthColor = const Color(0xFFFB8C00);
+        strengthLabel = 'Fair';
+        break;
+      case 3:
+        strengthColor = AppColors.gold;
+        strengthLabel = 'Good';
+        break;
+      case 4:
+        strengthColor = const Color(0xFF43A047);
+        strengthLabel = 'Strong';
+        break;
+      default:
+        strengthColor = Colors.white24;
+        strengthLabel = '';
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Row(
+                  children: List.generate(4, (index) {
+                    final isFilled = index < score;
+                    return Expanded(
+                      child: Container(
+                        height: 3.5,
+                        margin: EdgeInsets.only(right: index < 3 ? 4 : 0),
+                        decoration: BoxDecoration(
+                          color: isFilled ? strengthColor : const Color(0xFF28282E),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                strengthLabel,
+                style: GoogleFonts.poppins(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: strengthColor,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 12,
+            runSpacing: 4,
+            children: [
+              _buildRuleChip('8+ chars', hasMinLength),
+              _buildRuleChip('Uppercase', hasUpper),
+              _buildRuleChip('Lowercase', hasLower),
+              _buildRuleChip('Number/Symbol', hasNumberOrSpecial),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRuleChip(String text, bool isMet) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          isMet
+              ? CupertinoIcons.checkmark_circle_fill
+              : CupertinoIcons.circle,
+          size: 12,
+          color: isMet ? const Color(0xFF43A047) : Colors.white30,
+        ),
+        const SizedBox(width: 4),
+        Text(
+          text,
+          style: GoogleFonts.poppins(
+            fontSize: 10.5,
+            color: isMet ? Colors.white70 : Colors.white38,
+            fontWeight: isMet ? FontWeight.w500 : FontWeight.w400,
+          ),
+        ),
+      ],
     );
   }
 

@@ -78,9 +78,9 @@ class StripeService {
           applePay: const PaymentSheetApplePay(
             merchantCountryCode: StripeConfig.merchantCountryCode,
           ),
-          googlePay: const PaymentSheetGooglePay(
+          googlePay: PaymentSheetGooglePay(
             merchantCountryCode: StripeConfig.merchantCountryCode,
-            testEnv: true,
+            testEnv: StripeConfig.isTestMode,
           ),
           style: ThemeMode.dark,
           appearance: const PaymentSheetAppearance(
@@ -219,9 +219,9 @@ class StripeService {
           applePay: const PaymentSheetApplePay(
             merchantCountryCode: StripeConfig.merchantCountryCode,
           ),
-          googlePay: const PaymentSheetGooglePay(
+          googlePay: PaymentSheetGooglePay(
             merchantCountryCode: StripeConfig.merchantCountryCode,
-            testEnv: true,
+            testEnv: StripeConfig.isTestMode,
           ),
           style: ThemeMode.dark,
           appearance: const PaymentSheetAppearance(
@@ -388,35 +388,55 @@ class StripeService {
     };
   }
 
-  /// Verifies with Stripe API whether a PaymentIntent has actually been paid
-  /// (status == 'succeeded' or 'processing').
+  /// Verifies with Stripe API whether a PaymentIntent has actually been paid.
   ///
-  /// Prevents false cancellations when a user completes payment on Link
-  /// (checkout.link.com) and then uses the Android back button or closes
-  /// the custom tab.
+  /// Uses retry-with-backoff because Stripe Link completes payment in an
+  /// external browser tab. When the deep-link returns the app to foreground,
+  /// the Flutter SDK immediately throws StripeException(Cancelled) — but
+  /// Stripe's servers may not yet have propagated the 'succeeded' status.
+  /// We poll up to [_maxVerifyAttempts] times to handle this race condition.
+  static const int _maxVerifyAttempts = 4;
+  static const List<int> _verifyDelaysMs = [0, 1000, 2000, 3000];
+
   static Future<bool> _verifyPaymentIntentSucceeded(String intentId) async {
     if (intentId.isEmpty || StripeConfig.secretKey.isEmpty) return false;
-    final client = HttpClient();
-    try {
-      final request = await client.getUrl(
-        Uri.parse('https://api.stripe.com/v1/payment_intents/$intentId'),
-      );
-      request.headers.set('Authorization', 'Bearer ${StripeConfig.secretKey}');
-      final response = await request.close();
-      if (response.statusCode == 200) {
-        final body = await response.transform(utf8.decoder).join();
-        final json = jsonDecode(body) as Map<String, dynamic>;
-        final status = json['status'] as String?;
-        debugPrint('[Stripe] Server verification for $intentId: status=$status');
-        if (status == 'succeeded' || status == 'processing' || status == 'requires_capture') {
-          return true;
-        }
+
+    for (int attempt = 0; attempt < _maxVerifyAttempts; attempt++) {
+      // Wait before each attempt (first attempt is immediate).
+      if (_verifyDelaysMs[attempt] > 0) {
+        await Future.delayed(Duration(milliseconds: _verifyDelaysMs[attempt]));
       }
-    } catch (e) {
-      debugPrint('[Stripe] Server verification error: $e');
-    } finally {
-      client.close();
+
+      final client = HttpClient();
+      try {
+        final request = await client.getUrl(
+          Uri.parse('https://api.stripe.com/v1/payment_intents/$intentId'),
+        );
+        request.headers.set('Authorization', 'Bearer ${StripeConfig.secretKey}');
+        final response = await request.close();
+        if (response.statusCode == 200) {
+          final body = await response.transform(utf8.decoder).join();
+          final json = jsonDecode(body) as Map<String, dynamic>;
+          final status = json['status'] as String?;
+          debugPrint('[Stripe] Verify attempt ${attempt + 1}/$_maxVerifyAttempts '
+              'for $intentId: status=$status');
+          if (status == 'succeeded' ||
+              status == 'processing' ||
+              status == 'requires_capture') {
+            return true;
+          }
+          // If still requires_payment_method or requires_action → not paid yet,
+          // keep retrying.
+        }
+      } catch (e) {
+        debugPrint('[Stripe] Server verification error (attempt ${attempt + 1}): $e');
+      } finally {
+        client.close();
+      }
     }
+
+    debugPrint('[Stripe] ❌ PaymentIntent $intentId not confirmed '
+        'after $_maxVerifyAttempts attempts.');
     return false;
   }
 }

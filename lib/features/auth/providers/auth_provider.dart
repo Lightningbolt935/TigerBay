@@ -197,6 +197,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     required String password,
     required String fullName,
     required Branch homeSite,
+    String? phone,
   }) async {
     state = state.copyWith(isLoading: true, clearError: true);
 
@@ -206,6 +207,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         password: password,
         homeSiteId: homeSite.id,
         fullName: fullName,
+        phone: phone,
       );
 
       if (user == null) {
@@ -352,10 +354,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
       await _repo.signInWithGoogle();
-      // NOTE: Google OAuth uses signInWithOAuth which opens a browser redirect.
-      // The register-first guard for Google is enforced in the
-      // onAuthStateChange stream handler when the SIGNED_IN event arrives
-      // after the redirect completes. See _handleAuthEvent → authenticated.
+      // Google sign-in uses native signInWithIdToken (no browser redirect).
+      // On success, the Supabase session fires onAuthStateChange(SIGNED_IN)
+      // which routes the user through the register-first guard automatically.
+      // If the user cancels the picker, signInWithGoogle returns silently.
     } on AuthException catch (e) {
       state = state.copyWith(error: _localizeAuthError(e.message));
     } catch (e) {
@@ -439,6 +441,60 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return 'No internet connection. Please check your network.';
     }
     return rawMessage;
+  }
+
+  /// Checks whether the user has confirmed their email address.
+  /// Refreshes the session and if confirmed, transitions state to authenticated.
+  Future<bool> checkEmailConfirmed() async {
+    state = state.copyWith(isLoading: true);
+    try {
+      final confirmed = await _repo.refreshSession();
+      if (confirmed) {
+        final user = _repo.currentUser;
+        if (user != null && user.emailConfirmedAt != null) {
+          state = state.copyWith(
+            status: AuthStatus.authenticated,
+            user: user,
+            isLoading: false,
+            clearPendingEmail: true,
+            clearError: true,
+          );
+          return true;
+        }
+      }
+    } catch (e) {
+      debugPrint('[TigerBay AuthNotifier] checkEmailConfirmed error: $e');
+    } finally {
+      state = state.copyWith(isLoading: false);
+    }
+    return false;
+  }
+
+  /// Triggers a session refresh and updates current auth state.
+  Future<void> refreshAuthState() async {
+    try {
+      await _repo.refreshSession();
+      final user = _repo.currentUser;
+      if (user != null) {
+        if (user.emailConfirmedAt != null) {
+          state = state.copyWith(
+            status: AuthStatus.authenticated,
+            user: user,
+            clearPendingEmail: true,
+          );
+        } else {
+          state = state.copyWith(
+            status: AuthStatus.pendingEmailVerification,
+            user: user,
+            pendingEmail: user.email,
+          );
+        }
+      } else {
+        state = const AuthState(status: AuthStatus.unauthenticated);
+      }
+    } catch (e) {
+      debugPrint('[TigerBay AuthNotifier] refreshAuthState error: $e');
+    }
   }
 
   void clearError() => state = state.copyWith(clearError: true);

@@ -219,8 +219,9 @@ class SupabaseRepository {
   }
 
   /// Redeem a reward: deducts strips_cost from the user's balance and inserts
-  /// a ledger entry. Returns true on success, throws on failure.
-  Future<bool> redeemReward({
+  /// a ledger entry. Returns a redemption code string on success (used as QR
+  /// data in the success dialog), throws on failure.
+  Future<String?> redeemReward({
     required String userId,
     required int rewardId,
     required int stripsCost,
@@ -240,16 +241,30 @@ class SupabaseRepository {
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', userId);
 
-      // Insert ledger entry
-      await _client.from('strips_ledger').insert({
+      // Insert ledger entry and get back the row ID to use as redemption code
+      final ledgerRows = await _client.from('strips_ledger').insert({
         'user_id': userId,
         'amount': stripsCost,
         'transaction_type': 'redeem',
         'description': 'Redeemed: $rewardTitle',
         'created_at': DateTime.now().toIso8601String(),
-      });
+      }).select('id');
 
-      return true;
+      // Build a human-readable redemption code from the ledger row ID
+      String redemptionCode;
+      try {
+        final ledgerId = (ledgerRows as List?)?.isNotEmpty == true
+            ? ledgerRows.first['id']?.toString() ?? ''
+            : '';
+        final uShort = userId.length >= 8 ? userId.substring(0, 8) : userId;
+        redemptionCode = ledgerId.isNotEmpty
+            ? 'TB-R:$rewardId:U:$uShort:L:$ledgerId'
+            : 'TB-REDEEM-$rewardId-${DateTime.now().millisecondsSinceEpoch}';
+      } catch (_) {
+        redemptionCode = 'TB-REDEEM-$rewardId-${DateTime.now().millisecondsSinceEpoch}';
+      }
+
+      return redemptionCode;
     } catch (e) {
       debugPrint('❌ redeemReward error: $e');
       rethrow;

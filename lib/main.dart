@@ -22,11 +22,11 @@ Future<void> main() async {
       DeviceOrientation.portraitDown,
     ]);
 
-    // Transparent status bar (dark icons for white/light background)
+    // Transparent status bar (light icons for dark luxury background)
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark, // Android: dark icons
-      statusBarBrightness: Brightness.light, // iOS: dark icons
+      statusBarIconBrightness: Brightness.light, // Android: light icons
+      statusBarBrightness: Brightness.dark, // iOS: light icons
     ));
   }
 

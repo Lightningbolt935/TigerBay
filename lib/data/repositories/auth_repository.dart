@@ -7,6 +7,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:tigerbay_app/core/config/env_config.dart';
 import 'package:tigerbay_app/data/models/user_model.dart';
 import 'package:tigerbay_app/core/utils/device_binding.dart';
+import 'package:tigerbay_app/services/twilio_notification_service.dart';
 
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -198,24 +199,54 @@ class AuthRepository {
   /// Returns the [User] object if GoTrue accepted the request. The returned
   /// user will be in an unconfirmed state until they click the verification
   /// link. The caller must NOT navigate to home until isEmailConfirmed is true.
+  /// Returns null if neither email nor phone is registered.
+  /// If registered, returns the matching profile row.
+  Future<Map<String, dynamic>?> checkUserExists({
+    required String email,
+    String? phone,
+  }) async {
+    try {
+      final cleanEmail = email.trim().toLowerCase();
+      final cleanPhone = phone?.trim() ?? '';
+
+      String orFilter = 'email.ilike.$cleanEmail';
+      if (cleanPhone.isNotEmpty) {
+        orFilter += ',phone.eq.$cleanPhone';
+      }
+
+      final rows = await _client
+          .from('profiles')
+          .select('id, email, phone, full_name')
+          .or(orFilter)
+          .limit(1);
+
+      if (rows.isNotEmpty) {
+        return Map<String, dynamic>.from(rows.first);
+      }
+      return null;
+    } catch (e) {
+      debugPrint('[TigerBay Auth] checkUserExists notice: $e');
+      return null;
+    }
+  }
+
   Future<User?> registerNewUser({
     required String email,
     required String password,
     required int homeSiteId,
     String? fullName,
+    String? phone,
   }) async {
     try {
       final response = await _client.auth.signUp(
         email: email,
         password: password,
         data: {
-          // home_site_id is the sole mechanism for passing the branch FK to the
-          // database trigger. The trigger reads NEW.raw_user_meta_data->>'home_site_id'
-          // and casts it to integer, writing it to public.profiles.home_site_id.
           'home_site_id': homeSiteId,
-          // full_name is parsed by the trigger if present; stored on profiles.
           if (fullName != null && fullName.trim().isNotEmpty)
             'full_name': fullName.trim(),
+          if (phone != null && phone.trim().isNotEmpty)
+            'phone': phone.trim(),
         },
         emailRedirectTo: 'io.tigerbay.app://login-callback',
       );
@@ -227,22 +258,61 @@ class AuthRepository {
         );
       }
 
+      // If user already existed, GoTrue returns user with empty identities list
+      if (response.user!.identities != null && response.user!.identities!.isEmpty) {
+        throw const AuthException(
+          'An account with this email address already exists. Please sign in instead.',
+        );
+      }
+
       debugPrint(
         '[TigerBay Auth] signUp accepted — email: ${response.user!.email} '
         'confirmed: ${response.user!.emailConfirmedAt != null} '
         'session: ${response.session != null}',
       );
 
-      // IMPORTANT: Do NOT read or write public.profiles here.
-      // The database trigger has already fired (or is firing) on auth.users
-      // INSERT. Any Dart-side upsert here would race the FK commit and cause
-      // the exact PostgrestException(code: 23503) this fix addresses.
       return response.user;
     } on AuthException {
       rethrow;
     } catch (e) {
       throw Exception('Registration pipeline failed: $e');
     }
+  }
+
+  /// Verifies the 6-digit OTP code sent to user email during signup.
+  Future<AuthResponse> verifyEmailOtp({
+    required String email,
+    required String token,
+  }) async {
+    final response = await _client.auth.verifyOTP(
+      email: email.trim().toLowerCase(),
+      token: token.trim(),
+      type: OtpType.signup,
+    );
+    if (response.user != null) {
+      unawaited(_bindDevice(response.user!.id));
+    }
+    return response;
+  }
+
+  /// Verifies the 6-digit recovery code sent to user email for password reset.
+  Future<AuthResponse> verifyRecoveryOtp({
+    required String email,
+    required String token,
+  }) async {
+    final response = await _client.auth.verifyOTP(
+      email: email.trim().toLowerCase(),
+      token: token.trim(),
+      type: OtpType.recovery,
+    );
+    return response;
+  }
+
+  /// Updates the password for the currently authenticated recovery session.
+  Future<void> updatePassword(String newPassword) async {
+    await _client.auth.updateUser(
+      UserAttributes(password: newPassword),
+    );
   }
 
   // ── Sign In ────────────────────────────────────────────────────────────────
@@ -270,102 +340,126 @@ class AuthRepository {
   // ── OTP / Phone ─────────────────────────────────────────────────────────────
 
   Future<void> sendOtp(String phone) async {
-    await _client.auth.signInWithOtp(phone: phone);
+    try {
+      await _client.auth.signInWithOtp(phone: phone);
+    } catch (e) {
+      debugPrint('[TigerBay Auth] Supabase signInWithOtp notice ($e). Attempting Twilio Verify API...');
+      final twilio = TwilioNotificationService();
+      final res = await twilio.sendVerificationCode(to: phone);
+      if (res['status'] == 'error') {
+        final errText = res['error']?.toString() ?? e.toString();
+        debugPrint('[TigerBay Auth] Twilio send verification error: $errText');
+        throw AuthException(errText);
+      }
+    }
   }
 
   Future<AuthResponse> verifyOtp({
     required String phone,
     required String token,
   }) async {
-    final response = await _client.auth.verifyOTP(
-      phone: phone,
-      token: token,
-      type: OtpType.sms,
-    );
-    if (response.user != null) {
-      unawaited(_bindDevice(response.user!.id));
+    final cleanDigits = phone.replaceAll(RegExp(r'[^0-9]'), '');
+    final syntheticEmail = 'phone_$cleanDigits@phone.tigerbay.vip';
+    final syntheticPassword = 'TB_Phone_${cleanDigits}_Secure2026!';
+
+    try {
+      final response = await _client.auth.verifyOTP(
+        phone: phone,
+        token: token,
+        type: OtpType.sms,
+      );
+      if (response.user != null) {
+        unawaited(_bindDevice(response.user!.id));
+        try {
+          await _client.from('profiles').update({
+            'phone': phone,
+            'updated_at': DateTime.now().toIso8601String(),
+          }).eq('id', response.user!.id);
+        } catch (_) {}
+      }
+      return response;
+    } catch (e) {
+      debugPrint('[TigerBay Auth] Supabase verifyOTP notice ($e). Checking Twilio Verify directly...');
+      final twilio = TwilioNotificationService();
+      final approved = await twilio.verifyCode(to: phone, code: token);
+      if (!approved) {
+        throw const AuthException('Invalid or expired verification code. Please try again.');
+      }
+
+      // Code approved by Twilio! Ensure active Supabase session
+      AuthResponse authRes;
+      try {
+        authRes = await _client.auth.signInWithPassword(
+          email: syntheticEmail,
+          password: syntheticPassword,
+        );
+      } catch (_) {
+        // First-time phone user: register them automatically
+        authRes = await _client.auth.signUp(
+          email: syntheticEmail,
+          password: syntheticPassword,
+          data: {
+            'phone': phone,
+            'full_name': 'Member $cleanDigits',
+          },
+        );
+      }
+
+      if (authRes.user != null) {
+        unawaited(_bindDevice(authRes.user!.id));
+        try {
+          await _client.from('profiles').upsert({
+            'id': authRes.user!.id,
+            'phone': phone,
+            'membership_status': 'inactive',
+            'updated_at': DateTime.now().toIso8601String(),
+          });
+        } catch (_) {}
+      }
+
+      return authRes;
     }
-    return response;
+  }
+
+  /// Refreshes the Supabase session and returns true if email is confirmed.
+  Future<bool> refreshSession() async {
+    try {
+      final res = await _client.auth.refreshSession();
+      final user = res.user ?? _client.auth.currentUser;
+      if (user != null && user.emailConfirmedAt != null) {
+        return true;
+      }
+      final userRes = await _client.auth.getUser();
+      if (userRes.user?.emailConfirmedAt != null) {
+        await _client.auth.refreshSession();
+        return true;
+      }
+    } catch (e) {
+      debugPrint('[TigerBay Auth] refreshSession notice: $e');
+      try {
+        final userRes = await _client.auth.getUser();
+        if (userRes.user?.emailConfirmedAt != null) {
+          await _client.auth.refreshSession();
+          return true;
+        }
+      } catch (_) {}
+    }
+    return false;
   }
 
   // ── Google ──────────────────────────────────────────────────────────────────
 
-  /// Signs in with Google using Supabase's built-in OAuth provider.
-  ///
-  /// This uses the Supabase redirect flow (no Firebase / google-services.json
-  /// required). The user is sent to Google via the system browser, then
-  /// redirected back to the app via the [appScheme]://login-callback deep link.
-  ///
-  /// The Supabase auth state listener (in [AuthProvider]) picks up the session
-  /// automatically once the deep link returns.
-  // ── Google ──────────────────────────────────────────────────────────────────
-
-  /// Signs in with Google using native Google Play Services account picker on
-  /// Android/iOS, obtaining an ID token and authenticating with Supabase via
-  /// [signInWithIdToken].
-  ///
-  /// This pops up the native Android bottom sheet account picker directly in-app
-  /// ("Choose an account to continue to TigerBay") without opening Chrome or an
-  /// external browser window.
-  ///
-  /// Seamlessly falls back to an in-app browser view if native services are
-  /// not available.
+  /// Signs in with Google using Supabase OAuth with an in-app browser sheet
+  /// (Chrome Custom Tab on Android). This avoids the native GoogleSignIn
+  /// SHA-1 dependency and the PlatformException(sign_in_failed, v8.b:10)
+  /// error. The flow stays visually in-app and redirects back automatically
+  /// via the deep link scheme [io.tigerbay.app://login-callback].
   Future<void> signInWithGoogle() async {
-    final appScheme = EnvConfig.appScheme; // io.tigerbay.app
-    final webClientId = EnvConfig.googleWebClientId;
-
-    String? selectedEmail;
-
-    if (!kIsWeb) {
-      try {
-        debugPrint('[TigerBay Auth] Starting native Google Sign-In with serverClientId: $webClientId');
-        final GoogleSignIn googleSignIn = GoogleSignIn(
-          serverClientId: webClientId.isNotEmpty ? webClientId : null,
-          scopes: const ['email', 'profile', 'openid'],
-        );
-
-        // Sign out cached account to guarantee account picker is shown
-        try {
-          await googleSignIn.signOut();
-        } catch (_) {}
-
-        final googleUser = await googleSignIn.signIn();
-        if (googleUser == null) {
-          debugPrint('[TigerBay Auth] User dismissed Google account picker.');
-          return;
-        }
-
-        selectedEmail = googleUser.email;
-
-        final googleAuth = await googleUser.authentication;
-        final idToken = googleAuth.idToken;
-        final accessToken = googleAuth.accessToken;
-
-        if (idToken != null && idToken.isNotEmpty) {
-          debugPrint('[TigerBay Auth] Native Google ID token obtained. Signing into Supabase...');
-          final response = await _client.auth.signInWithIdToken(
-            provider: OAuthProvider.google,
-            idToken: idToken,
-            accessToken: accessToken,
-          );
-          debugPrint('[TigerBay Auth] Supabase native session confirmed: ${response.user?.id}');
-          return;
-        }
-        debugPrint('[TigerBay Auth] No ID token from GoogleSignIn; falling back to in-app OAuth with login_hint...');
-      } catch (nativeErr) {
-        debugPrint('[TigerBay Auth] Native Google Sign-In error ($nativeErr). Falling back to in-app OAuth...');
-      }
-    }
-
-    // In-app fallback: pass login_hint so Google NEVER asks user to choose an account again!
+    final appScheme = EnvConfig.appScheme;
     await _client.auth.signInWithOAuth(
       OAuthProvider.google,
       redirectTo: '$appScheme://login-callback',
       authScreenLaunchMode: LaunchMode.inAppBrowserView,
-      queryParams: {
-        if (selectedEmail != null && selectedEmail.isNotEmpty)
-          'login_hint': selectedEmail,
-      },
     );
   }
 

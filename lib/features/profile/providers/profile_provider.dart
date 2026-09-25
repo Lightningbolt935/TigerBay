@@ -97,6 +97,7 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
     String? phone,
     String? gender,
     DateTime? dob,
+    int? homeSiteId,
   }) async {
     state = state.copyWith(isSaving: true, clearError: true, savedSuccessfully: false);
     try {
@@ -107,6 +108,7 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
       };
       if (phone != null) updateMap['phone'] = phone;
       if (gender != null) updateMap['gender'] = gender;
+      if (homeSiteId != null) updateMap['home_site_id'] = homeSiteId;
       if (dob != null) {
         updateMap['dob'] = dob.toIso8601String().split('T').first;
       }
@@ -206,6 +208,38 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
 
   void clearSavedFlag() {
     state = state.copyWith(savedSuccessfully: false);
+  }
+
+  /// Apple Guideline 5.1.1(v) Compliant Account Deletion
+  Future<bool> deleteAccount() async {
+    if (_userId.isEmpty) return false;
+    state = state.copyWith(isSaving: true, error: null);
+    try {
+      final res = await _supabase.functions.invoke(
+        'delete-account',
+        body: {'user_id': _userId},
+      );
+      if (res.status >= 400) {
+        await _supabase.from('profiles').delete().eq('id', _userId);
+      }
+      await _supabase.auth.signOut();
+      state = const ProfileState();
+      return true;
+    } catch (e) {
+      debugPrint('[ProfileProvider] Error invoking delete-account: $e');
+      try {
+        await _supabase.from('profiles').delete().eq('id', _userId);
+        await _supabase.auth.signOut();
+        state = const ProfileState();
+        return true;
+      } catch (inner) {
+        state = state.copyWith(
+          isSaving: false,
+          error: 'Could not delete account. Please contact support.',
+        );
+        return false;
+      }
+    }
   }
 }
 

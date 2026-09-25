@@ -117,18 +117,9 @@ class BookingNotifier extends StateNotifier<NewBookingState> {
       state = state.copyWith(isLoading: false);
       return result;
     } catch (e) {
-      // 💡 Crucial logging infrastructure works seamlessly now
-      debugPrint('⚠️ Intercepted Booking Repository Exception: $e');
-
+      debugPrint('❌ Intercepted Booking Repository Exception: $e');
       state = state.copyWith(isLoading: false, error: e.toString());
-
-      // AUTOMATED RECOVERY BYPASS FOR DEMOS
-      // Ensures the presentation checkout workflow does not freeze if an RLS policy blocks database writes
-      return {
-        'bookingId': 'demo-bk-${DateTime.now().millisecondsSinceEpoch}',
-        'branchId': state.branchId,
-        'depositAmount': 20.0,
-      };
+      return null;
     }
   }
 

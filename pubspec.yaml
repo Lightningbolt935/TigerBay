@@ -24,9 +24,10 @@ dependencies:
   flutter_inappwebview: ^6.1.5
   dio: ^5.4.0
 
-  # Auth (Social)
+  # Auth (Social & Biometrics)
   google_sign_in: ^6.2.1
   sign_in_with_apple: ^6.1.0
+  local_auth: ^2.3.0
 
   # QR Code
   qr_flutter: ^4.1.0

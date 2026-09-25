@@ -141,6 +141,28 @@ class TwilioNotificationService {
     required String to,
     String channel = 'sms',
   }) async {
+    // 1. Try Supabase Edge Function first (send-twilio-notification)
+    try {
+      final res = await _supabase?.functions.invoke(
+        'send-twilio-notification',
+        body: {'to': to, 'action': 'send_otp', 'channel': channel},
+      );
+      if (res != null && res.data != null) {
+        final data = res.data;
+        if (data is Map && (data['status'] == 'pending' || data['sid'] != null)) {
+          debugPrint('[Twilio] OTP sent via edge function: ${data['sid']}');
+          return {
+            'status': 'pending',
+            'sid': data['sid'],
+            'to': to,
+          };
+        }
+      }
+    } catch (e) {
+      debugPrint('[Twilio] Edge function invoke failed for send_otp ($e), falling back to direct API.');
+    }
+
+    // 2. Direct Twilio Verify API fallback
     final accountSid = EnvConfig.twilioAccountSid;
     final authToken = EnvConfig.twilioAuthToken;
     final serviceSid = EnvConfig.twilioVerifyServiceSid;
@@ -185,6 +207,24 @@ class TwilioNotificationService {
     required String to,
     required String code,
   }) async {
+    // 1. Try Supabase Edge Function first
+    try {
+      final res = await _supabase?.functions.invoke(
+        'send-twilio-notification',
+        body: {'to': to, 'code': code, 'action': 'verify_otp'},
+      );
+      if (res != null && res.data != null) {
+        final data = res.data;
+        if (data is Map && data['status'] == 'approved') {
+          debugPrint('[Twilio] OTP verified via edge function: approved');
+          return true;
+        }
+      }
+    } catch (e) {
+      debugPrint('[Twilio] Edge function invoke failed for verify_otp ($e), falling back to direct API.');
+    }
+
+    // 2. Direct Twilio Verify API fallback
     final accountSid = EnvConfig.twilioAccountSid;
     final authToken = EnvConfig.twilioAuthToken;
     final serviceSid = EnvConfig.twilioVerifyServiceSid;

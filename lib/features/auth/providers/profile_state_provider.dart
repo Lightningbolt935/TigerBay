@@ -6,6 +6,8 @@ import '../../../data/repositories/auth_repository.dart';
 import '../../../data/repositories/supabase_repository.dart';
 import 'auth_provider.dart';
 
+export 'auth_provider.dart' show supabaseClientProvider;
+
 // ═══════════════════════════════════════════════════════════════════════════
 // TigerBay International — Profile State Provider (Auth-Safe Edition)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -18,12 +20,6 @@ import 'auth_provider.dart';
 //     _guardEmailConfirmed() which throws UnconfirmedEmailException.
 
 // ── Singleton providers ───────────────────────────────────────────────────
-
-/// Singleton Supabase client. Defined here for files that don't import
-/// auth_provider.dart directly, but the canonical source is auth_provider.dart.
-final supabaseClientProvider = Provider<SupabaseClient>(
-  (_) => Supabase.instance.client,
-);
 
 /// Singleton SupabaseRepository provider.
 final supabaseRepositoryProvider = Provider<SupabaseRepository>((ref) {
@@ -290,7 +286,14 @@ final membershipStatusProvider = Provider<String>((ref) {
 
 /// Whether the user has an active paid membership.
 final isMembershipActiveProvider = Provider<bool>((ref) {
-  return ref.watch(membershipStatusProvider) == 'active';
+  final profile = ref.watch(profileStateProvider).profile;
+  return profile?.isMembershipActive ?? false;
+});
+
+/// Whether the user's membership has expired.
+final isMembershipExpiredProvider = Provider<bool>((ref) {
+  final profile = ref.watch(profileStateProvider).profile;
+  return profile?.isMembershipExpired ?? false;
 });
 
 /// The user's current Strips balance.

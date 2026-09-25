@@ -4,6 +4,9 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_routes.dart';
+import '../../../services/biometric_service.dart';
+import '../providers/auth_provider.dart';
+import '../providers/profile_state_provider.dart';
 
 /// Ultra-premium luxury splash screen for TigerBay International.
 /// Features atmospheric ambient radial glow, an elastic breathing emblem,
@@ -100,7 +103,32 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     // 2.3 seconds display time for a cinematic luxury feel
     await Future.delayed(const Duration(milliseconds: 2400));
     if (!mounted) return;
-    context.go(AppRoutes.home);
+
+    final authStatus = ref.read(authStatusProvider);
+    if (authStatus != AuthStatus.authenticated) {
+      context.go(AppRoutes.login);
+      return;
+    }
+
+    final bio = ref.read(biometricServiceProvider);
+    final isBioEnabled = await bio.isBiometricEnabled();
+    if (isBioEnabled) {
+      final authenticated = await bio.authenticate(
+        reason: 'Authenticate with Face ID / Biometrics to access TigerBay.',
+      );
+      if (!authenticated) {
+        if (mounted) context.go(AppRoutes.login);
+        return;
+      }
+    }
+
+    if (!mounted) return;
+    final profile = ref.read(profileStateProvider).profile;
+    if (profile?.isMembershipActive == true) {
+      context.go(AppRoutes.home);
+    } else {
+      context.go(AppRoutes.membershipPaywall);
+    }
   }
 
   @override

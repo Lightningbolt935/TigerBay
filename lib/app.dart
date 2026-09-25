@@ -19,6 +19,9 @@ import 'package:tigerbay_app/features/auth/screens/splash_screen.dart';
 import 'package:tigerbay_app/features/auth/screens/login_screen.dart';
 import 'package:tigerbay_app/features/auth/screens/otp_screen.dart';
 import 'package:tigerbay_app/features/auth/screens/email_verification_pending_screen.dart';
+import 'package:tigerbay_app/features/auth/screens/forgot_password_screen.dart';
+import 'package:tigerbay_app/features/auth/screens/registration_verification_screen.dart';
+import 'package:tigerbay_app/data/models/branch_model.dart';
 import 'package:tigerbay_app/features/membership/screens/membership_paywall_screen.dart';
 
 // ── 5. Core Application Screens ──────────────────────────────────────────────
@@ -39,6 +42,7 @@ import 'package:tigerbay_app/features/loyalty/screens/reward_store_screen.dart';
 import 'package:tigerbay_app/features/bookings/screens/my_bookings_screen.dart';
 import 'package:tigerbay_app/features/bookings/screens/booking_screen.dart';
 import 'package:tigerbay_app/features/bookings/screens/booking_confirm_screen.dart';
+import 'package:tigerbay_app/data/models/booking_model.dart';
 
 // ── 8. Profile & Settings Screens ────────────────────────────────────────────
 import 'package:tigerbay_app/features/profile/screens/profile_screen.dart';
@@ -126,18 +130,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       final loc = state.matchedLocation;
 
       final profileState = ref.read(profileStateProvider);
-      final membershipStatus =
-          profileState.profile?.membershipStatus ?? 'inactive';
-      final membershipTierId = profileState.profile?.membershipTierId;
-
-      // Active only if status is NOT 'inactive' AND a valid tier ID exists
-      final isMembershipActive =
-          membershipStatus != 'inactive' && membershipTierId != null;
+      final profile = profileState.profile;
+      final isMembershipActive = profile?.isMembershipActive ?? false;
+      final isMembershipExpired = profile?.isMembershipExpired ?? false;
 
       debugPrint(
         '[TigerBay Router] Redirect check — '
         'loc=$loc, auth=$authStatus, '
-        'membership=$membershipStatus, tierId=$membershipTierId, '
+        'active=$isMembershipActive, expired=$isMembershipExpired, '
         'profileReady=${profileState.isReady}',
       );
 
@@ -167,27 +167,45 @@ final routerProvider = Provider<GoRouter>((ref) {
         return isOnAuthRoute ? null : AppRoutes.login;
       }
 
+      // ── Plan Expiration Auto-Logout Guard ─────────────────────────────
+      // When the plan expires, perform an auto log out from the user's end.
+      // If the user tries to login again, they will land on the membership wall.
+      if (isAuthenticated &&
+          isMembershipExpired &&
+          loc != AppRoutes.login &&
+          loc != AppRoutes.membershipPaywall) {
+        debugPrint(
+          '[TigerBay Router] Plan expired on protected route $loc → performing auto log out.',
+        );
+        Future.microtask(() async {
+          await ref.read(authProvider.notifier).signOut();
+        });
+        return AppRoutes.login;
+      }
+
       // ── Gate 3: Authenticated — Profile Loading Guard ─────────────────
+      // Hold route on splash while profile is loading so unverified / unpaid
+      // users can NEVER slip through to /home or /dashboard.
       if (!profileState.isReady) {
         if (profileState.loadStatus == ProfileLoadStatus.error) {
           debugPrint(
-              '[TigerBay Router] Profile error — allowing navigation to home fallback.');
-          return loc == AppRoutes.login ? AppRoutes.home : null;
+              '[TigerBay Router] Profile error — redirecting to paywall fallback.');
+          return loc == AppRoutes.membershipPaywall
+              ? null
+              : AppRoutes.membershipPaywall;
         }
         debugPrint(
-            '[TigerBay Router] Profile not ready yet — holding route until profile loads.');
-        if (loc == AppRoutes.login || loc == AppRoutes.register || loc == AppRoutes.otp) {
-          return AppRoutes.splash;
-        }
-        return null;
+            '[TigerBay Router] Profile loading — holding on splash until verified.');
+        return loc == AppRoutes.splash ? null : AppRoutes.splash;
       }
 
       // ── Gate 4: Hard Membership Gate (Paywall Enforcement) ─────────────
-      // If user is authenticated but membership is NOT active/selected,
-      // force them to the paywall regardless of where they were trying to go.
+      // Applicable to ALL logins (Email, Google, Facebook, Phone, Apple):
+      // If user does not have an active paid membership, they MUST see the
+      // membership wall only, and cannot pass through to the dashboard.
       if (!isMembershipActive) {
         debugPrint(
-            '[TigerBay Router] User inactive/no tier selected → Enforcing /membership-paywall');
+            '[TigerBay Router] Membership NOT active → Enforcing /membership-paywall (loc=$loc)');
         return loc == AppRoutes.membershipPaywall
             ? null
             : AppRoutes.membershipPaywall;
@@ -195,9 +213,6 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // ── Gate 5: Active Member Route Cleanup ────────────────────────────
       // If active member is sitting on auth or onboarding screens, send them Home.
-      // NOTE: /membership-paywall is intentionally NOT in this list — active
-      // members can open it from the Profile page to view / renew / switch
-      // their membership. Gate 4 still forces INACTIVE users onto the paywall.
       final isOnOnboardingOrAuthRoute = loc == AppRoutes.login ||
           loc == AppRoutes.register ||
           loc == AppRoutes.splash ||
@@ -237,6 +252,26 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.pendingVerification,
         builder: (_, __) => const EmailVerificationPendingScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.forgotPassword,
+        builder: (context, state) {
+          final email = state.extra as String?;
+          return ForgotPasswordScreen(initialEmail: email);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.registrationVerification,
+        builder: (context, state) {
+          final data = state.extra as Map<String, dynamic>? ?? {};
+          return RegistrationVerificationScreen(
+            fullName: data['fullName'] as String? ?? '',
+            email: data['email'] as String? ?? '',
+            phone: data['phone'] as String? ?? '',
+            password: data['password'] as String? ?? '',
+            homeSite: data['homeSite'] as Branch,
+          );
+        },
       ),
 
       // ── Membership Paywall (onboarding gate) ────────────────────────
@@ -294,6 +329,15 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final data = state.extra as Map<String, dynamic>? ?? {};
           return BookingConfirmScreen(bookingData: data);
+        },
+      ),
+      GoRoute(
+        path: '${AppRoutes.bookingDetail}/:id',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) {
+          final id = state.pathParameters['id'] ?? '';
+          final booking = state.extra as BookingModel?;
+          return BookingDetailScreen(bookingId: id, initialBooking: booking);
         },
       ),
 

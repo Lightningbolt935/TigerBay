@@ -40,7 +40,25 @@ class UserProfile {
   });
 
   /// Whether this user has an active paid membership and can access the app.
-  bool get isMembershipActive => membershipStatus == 'active';
+  bool get isMembershipActive {
+    if (membershipStatus != 'active') return false;
+    if (membershipTierId == null) return false;
+    if (membershipExpiresAt != null &&
+        DateTime.now().isAfter(membershipExpiresAt!)) {
+      return false;
+    }
+    return true;
+  }
+
+  /// Whether this user's membership has expired.
+  bool get isMembershipExpired {
+    if (membershipStatus == 'expired') return true;
+    if (membershipExpiresAt != null &&
+        DateTime.now().isAfter(membershipExpiresAt!)) {
+      return true;
+    }
+    return false;
+  }
 
   /// Returns the 6-digit member ID. Uses the database `member_code` if present,
   /// or falls back to a deterministic 6-digit hash computed from the UUID so it

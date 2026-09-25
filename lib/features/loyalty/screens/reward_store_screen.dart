@@ -1,6 +1,7 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:tigerbay_app/core/constants/app_colors.dart';
 import 'package:tigerbay_app/data/models/reward_item_model.dart';
@@ -236,169 +237,65 @@ class _RewardPlaceholder extends StatelessWidget {
 }
 
 // -- Reward Card --------------------------------------------------------------
+//
+// FIX: Uses a StatefulWidget with LOCAL _isProcessing flag instead of the
+// shared global RedeemState.isProcessing. This ensures that only the tapped
+// card shows a loading spinner, not every card in the list simultaneously.
 
-class _RewardCard extends ConsumerWidget {
+class _RewardCard extends ConsumerStatefulWidget {
   final RewardItem reward;
   final int userBalance;
 
   const _RewardCard({required this.reward, required this.userBalance});
 
-  bool get canAfford => userBalance >= reward.stripsCost;
-
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final redeemState = ref.watch(redeemNotifierProvider);
+  ConsumerState<_RewardCard> createState() => _RewardCardState();
+}
 
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Reward image from Supabase Storage
-          _RewardImageWidget(imageUrl: reward.imageUrl, height: 150),
+class _RewardCardState extends ConsumerState<_RewardCard> {
+  // Per-card local loading flag — prevents global spinner bleeding to all cards.
+  bool _isProcessing = false;
 
-          Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Title + Strips badge
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        reward.title,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFD4AF37).withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                            color: const Color(0xFFD4AF37).withValues(alpha: 0.4)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.local_fire_department_rounded,
-                              color: Color(0xFFD4AF37), size: 13),
-                          const SizedBox(width: 3),
-                          Text(
-                            '${reward.stripsCost} Strips',
-                            style: const TextStyle(
-                              color: Color(0xFFD4AF37),
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+  bool get canAfford => widget.userBalance >= widget.reward.stripsCost;
 
-                // Description
-                if (reward.description.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    reward.description,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.6),
-                      fontSize: 12,
-                      height: 1.3,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
+  Future<void> _handleRedeem() async {
+    if (_isProcessing) return;
+    setState(() => _isProcessing = true);
 
-                const SizedBox(height: 12),
-
-                // Redeem Button (full width)
-                SizedBox(
-                  width: double.infinity,
-                  height: 40,
-                  child: ElevatedButton(
-                    onPressed: canAfford && !redeemState.isProcessing
-                        ? () => _handleRedeem(context, ref)
-                        : null,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor:
-                          canAfford ? AppColors.gold : AppColors.surfaceLight,
-                      foregroundColor:
-                          canAfford ? const Color(0xFF1C1C1E) : AppColors.textHint,
-                      disabledBackgroundColor: AppColors.surfaceLight,
-                      disabledForegroundColor: AppColors.textHint,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(22)),
-                      elevation: 0,
-                    ),
-                    child: redeemState.isProcessing
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                                color: Color(0xFF1C1C1E), strokeWidth: 2))
-                        : Text(
-                            canAfford ? 'REDEEM' : 'NOT ENOUGH STRIPS',
-                            style: GoogleFonts.poppins(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 0.8,
-                            ),
-                          ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _handleRedeem(BuildContext context, WidgetRef ref) async {
     final notifier = ref.read(redeemNotifierProvider.notifier);
-    final success = await notifier.redeem(reward);
+    final success = await notifier.redeem(widget.reward);
 
-    if (!context.mounted) return;
+    if (!mounted) return;
+    setState(() => _isProcessing = false);
 
     if (success) {
-      _showSuccessDialog(context, ref);
+      // Use the redemption code returned from the DB; fall back to reward ID string.
+      final redeemState = ref.read(redeemNotifierProvider);
+      final String qrData = redeemState.redemptionCode ?? 'TB-REDEEM-${widget.reward.id}';
+      _showSuccessDialog(qrData);
     } else {
       final error = ref.read(redeemNotifierProvider).error;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            error ?? 'Redemption failed. Please try again.',
-            style: GoogleFonts.poppins(fontSize: 14, color: Colors.white),
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              error ?? 'Redemption failed. Please try again.',
+              style: GoogleFonts.poppins(fontSize: 14, color: Colors.white),
+            ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+        );
+      }
     }
   }
 
-  void _showSuccessDialog(BuildContext context, WidgetRef ref) {
-    showDialog(
+  void _showSuccessDialog(String qrCodeData) {
+    showDialog<void>(
       context: context,
-      builder: (_) => Dialog(
+      barrierDismissible: false,
+      builder: (dialogContext) => Dialog(
         backgroundColor: AppColors.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         child: Padding(
@@ -428,7 +325,7 @@ class _RewardCard extends ConsumerWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                reward.title,
+                widget.reward.title,
                 style: GoogleFonts.poppins(
                     fontSize: 15,
                     fontWeight: FontWeight.w500,
@@ -436,32 +333,50 @@ class _RewardCard extends ConsumerWidget {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 20),
+
+              // ── Real QR Code — show to staff at venue ──────────────────
               Container(
-                width: double.infinity,
-                height: 80,
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                    color: AppColors.surfaceLight,
-                    borderRadius: BorderRadius.circular(12)),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.qr_code_2_rounded,
-                        size: 36, color: AppColors.textHint),
-                    const SizedBox(height: 4),
-                    Text('Show to staff at venue',
-                        style: GoogleFonts.poppins(
-                            fontSize: 11, color: AppColors.textHint)),
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.15),
+                      blurRadius: 12,
+                    ),
                   ],
                 ),
+                child: QrImageView(
+                  data: qrCodeData,
+                  version: QrVersions.auto,
+                  size: 180,
+                  backgroundColor: Colors.white,
+                ),
               ),
+              const SizedBox(height: 10),
+              Text(
+                'Show this QR code to staff at the venue',
+                style: GoogleFonts.poppins(
+                  fontSize: 11,
+                  color: AppColors.textHint,
+                ),
+                textAlign: TextAlign.center,
+              ),
+
               const SizedBox(height: 20),
               SizedBox(
                 width: double.infinity,
                 height: 48,
                 child: ElevatedButton(
                   onPressed: () {
-                    Navigator.of(context).pop();
-                    ref.read(redeemNotifierProvider.notifier).reset();
+                    // FIX: Pop using dialog's own context first.
+                    // Reset state in microtask AFTER frame completes —
+                    // prevents Riverpod rebuild from black-screening the route.
+                    Navigator.of(dialogContext).pop();
+                    Future.microtask(() {
+                      ref.read(redeemNotifierProvider.notifier).reset();
+                    });
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.gold,
@@ -483,6 +398,128 @@ class _RewardCard extends ConsumerWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Reward image from Supabase Storage
+          _RewardImageWidget(imageUrl: widget.reward.imageUrl, height: 150),
+
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Title + Strips badge
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        widget.reward.title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD4AF37).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                            color: const Color(0xFFD4AF37).withValues(alpha: 0.4)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.local_fire_department_rounded,
+                              color: Color(0xFFD4AF37), size: 13),
+                          const SizedBox(width: 3),
+                          Text(
+                            '${widget.reward.stripsCost} Strips',
+                            style: const TextStyle(
+                              color: Color(0xFFD4AF37),
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+
+                // Description
+                if (widget.reward.description.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    widget.reward.description,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.6),
+                      fontSize: 12,
+                      height: 1.3,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+
+                const SizedBox(height: 12),
+
+                // Redeem Button — per-card local loading, not global
+                SizedBox(
+                  width: double.infinity,
+                  height: 40,
+                  child: ElevatedButton(
+                    onPressed: canAfford && !_isProcessing ? _handleRedeem : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor:
+                          canAfford ? AppColors.gold : AppColors.surfaceLight,
+                      foregroundColor:
+                          canAfford ? const Color(0xFF1C1C1E) : AppColors.textHint,
+                      disabledBackgroundColor: AppColors.surfaceLight,
+                      disabledForegroundColor: AppColors.textHint,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(22)),
+                      elevation: 0,
+                    ),
+                    child: _isProcessing
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                                color: Color(0xFF1C1C1E), strokeWidth: 2))
+                        : Text(
+                            canAfford ? 'REDEEM' : 'NOT ENOUGH STRIPS',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
