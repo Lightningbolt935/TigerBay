@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -236,7 +235,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     TextInput.finishAutofillContext();
     _failedLoginAttempts = 0;
 
-    context.go(AppRoutes.home);
+    // Explicitly load profile to ensure membership status is known
+    await ref.read(profileStateProvider.notifier).loadProfile();
+    if (!mounted) return;
+
+    final profile = ref.read(profileStateProvider).profile;
+    if (profile?.isMembershipActive == true) {
+      context.go(AppRoutes.home);
+    } else {
+      context.go(AppRoutes.membershipPaywall);
+    }
   }
 
   Future<void> _submitRegister() async {
@@ -459,14 +467,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   @override
   Widget build(BuildContext context) {
     ref.listen<AuthState>(authProvider, (previous, next) {
-      if (next.status == AuthStatus.authenticated && mounted) {
-        final profile = ref.read(profileStateProvider).profile;
-        if (profile?.isMembershipActive == true) {
-          context.go(AppRoutes.home);
-        } else {
-          context.go(AppRoutes.membershipPaywall);
-        }
-      } else if (next.status == AuthStatus.pendingEmailVerification && mounted) {
+      if (next.status == AuthStatus.pendingEmailVerification && mounted) {
         context.go(AppRoutes.pendingVerification);
       } else if (next.error != null && mounted) {
         _showErrorSnack(next.error!);
@@ -1441,40 +1442,118 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   Widget _buildTermsFooter() {
-    return RichText(
-      textAlign: TextAlign.center,
-      text: TextSpan(
-        style: AppTypography.caption1.copyWith(
-          color: AppColors.textHint,
-        ),
-        children: [
-          const TextSpan(text: 'By continuing, you agree to our '),
-          TextSpan(
-            text: 'Terms & Conditions',
-            style: AppTypography.caption1.copyWith(
+    Future<void> launchLegalUrl(String url) async {
+      try {
+        final uri = Uri.parse(url);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+      } catch (_) {}
+    }
+
+    Widget buildLegalLink(String title, String url) {
+      return AppleTouchFeedback(
+        onTap: () => launchLegalUrl(url),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          child: Text(
+            title,
+            style: GoogleFonts.poppins(
+              fontSize: 11,
               fontWeight: FontWeight.w600,
               color: AppColors.champagneGold,
-              decoration: TextDecoration.underline,
+              letterSpacing: 0.1,
             ),
-            recognizer: TapGestureRecognizer()
-              ..onTap = () async {
-                final uri = Uri.parse('https://www.tigerbayshisha.co.uk/terms-conditions.html');
-                if (await canLaunchUrl(uri)) await launchUrl(uri);
-              },
           ),
-          const TextSpan(text: ' & '),
-          TextSpan(
-            text: 'Privacy Policy',
-            style: AppTypography.caption1.copyWith(
-              fontWeight: FontWeight.w600,
-              color: AppColors.champagneGold,
-              decoration: TextDecoration.underline,
+        ),
+      );
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(top: 8, bottom: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF131316),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.champagneGold.withValues(alpha: 0.18),
+          width: 0.8,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.4),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                CupertinoIcons.lock_shield_fill,
+                size: 13,
+                color: AppColors.champagneGold.withValues(alpha: 0.85),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'TIGERBAY MEMBERSHIP & COMPLIANCE',
+                style: GoogleFonts.poppins(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2,
+                  color: AppColors.champagneGold.withValues(alpha: 0.9),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'By continuing, you agree to our club policies & terms:',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.poppins(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w400,
+              color: AppColors.textHint,
             ),
-            recognizer: TapGestureRecognizer()
-              ..onTap = () async {
-                final uri = Uri.parse('https://www.tigerbayshisha.co.uk/privacy-policy.html');
-                if (await canLaunchUrl(uri)) await launchUrl(uri);
-              },
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            alignment: WrapAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 2,
+            runSpacing: 2,
+            children: [
+              buildLegalLink(
+                'Terms & Conditions',
+                'https://www.tigerbayshisha.co.uk/terms-conditions.html',
+              ),
+              Text(
+                '•',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: AppColors.textHint.withValues(alpha: 0.6),
+                ),
+              ),
+              buildLegalLink(
+                'Privacy Policy',
+                'https://www.tigerbayshisha.co.uk/privacy-policy.html',
+              ),
+              Text(
+                '•',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: AppColors.textHint.withValues(alpha: 0.6),
+                ),
+              ),
+              buildLegalLink(
+                'House Rules',
+                'https://www.tigerbayshisha.co.uk/house-rules.html',
+              ),
+            ],
           ),
         ],
       ),

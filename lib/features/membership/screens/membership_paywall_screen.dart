@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +8,7 @@ import 'package:tigerbay_app/core/constants/app_colors.dart';
 import 'package:tigerbay_app/core/constants/app_routes.dart';
 import 'package:tigerbay_app/core/services/stripe_service.dart';
 import 'package:tigerbay_app/data/models/membership_tier_model.dart';
+import 'package:tigerbay_app/features/auth/providers/auth_provider.dart';
 import 'package:tigerbay_app/features/auth/providers/profile_state_provider.dart';
 import 'package:tigerbay_app/features/profile/providers/membership_provider.dart';
 import 'package:tigerbay_app/shared/widgets/apple_touch_feedback.dart';
@@ -39,10 +41,16 @@ class _MembershipPaywallScreenState
 
   Future<void> _handleBack() async {
     HapticFeedback.lightImpact();
-    if (context.canPop()) {
-      context.pop();
+    final profile = ref.read(profileStateProvider).profile;
+    if (profile?.isMembershipActive == true) {
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go(AppRoutes.home);
+      }
     } else {
-      context.go(AppRoutes.home);
+      await ref.read(authProvider.notifier).signOut();
+      if (mounted) context.go(AppRoutes.login);
     }
   }
 
@@ -486,6 +494,43 @@ class _MembershipPaywallScreenState
                 ),
               ),
             ],
+          ),
+          const Spacer(),
+          AppleTouchFeedback(
+            onTap: () async {
+              await ref.read(authProvider.notifier).signOut();
+              if (mounted) context.go(AppRoutes.login);
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.12),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    CupertinoIcons.square_arrow_right,
+                    color: AppColors.brandRed,
+                    size: 14,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Sign Out',
+                    style: GoogleFonts.poppins(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),

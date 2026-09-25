@@ -356,33 +356,54 @@ class ProfileScreen extends ConsumerWidget {
   void _confirmSignOut(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Sign Out?',
-            style: GoogleFonts.poppins(
-                fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(
+            color: AppColors.gold.withValues(alpha: 0.25),
+            width: 1,
+          ),
+        ),
+        title: Text(
+          'Sign Out?',
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+          ),
+        ),
         content: Text(
           'You will be returned to the login screen.',
           style: GoogleFonts.poppins(
-              fontSize: 13, color: AppColors.textSecondary),
+            fontSize: 13,
+            color: AppColors.textSecondary,
+          ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancel',
-                style: GoogleFonts.poppins(color: AppColors.textSecondary)),
+            onPressed: () => Navigator.of(dialogCtx).pop(),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.poppins(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ),
           TextButton(
             onPressed: () {
-              Navigator.of(context, rootNavigator: true).pop();
+              Navigator.of(dialogCtx).pop();
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 ref.read(authProvider.notifier).signOut();
               });
             },
-            child: Text('Sign Out',
-                style: GoogleFonts.poppins(
-                    color: AppColors.brandRed, fontWeight: FontWeight.w600)),
+            child: Text(
+              'Sign Out',
+              style: GoogleFonts.poppins(
+                color: AppColors.brandRed,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),

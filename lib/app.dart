@@ -174,37 +174,39 @@ final routerProvider = Provider<GoRouter>((ref) {
         return isOnAuthRoute ? null : AppRoutes.login;
       }
 
-      // ── Plan Expiration Auto-Logout Guard ─────────────────────────────
-      // When the plan expires, perform an auto log out from the user's end.
-      // If the user tries to login again, they will land on the membership wall.
-      if (isAuthenticated &&
-          isMembershipExpired &&
-          loc != AppRoutes.login &&
-          loc != AppRoutes.membershipPaywall) {
-        debugPrint(
-          '[TigerBay Router] Plan expired on protected route $loc → performing auto log out.',
-        );
-        Future.microtask(() async {
-          await ref.read(authProvider.notifier).signOut();
-        });
-        return AppRoutes.login;
-      }
-
       // ── Gate 3: Authenticated — Profile Loading Guard ─────────────────
-      // Hold route on splash while profile is loading
+      // If profile is not ready yet:
+      // - If cold-starting on splash, wait on splash until ready.
+      // - If signing in on login/register, wait on login/register until ready.
       if (!profileState.isReady) {
+        if (loc == AppRoutes.splash) return null;
+        if (loc == AppRoutes.login || loc == AppRoutes.register) return null;
         if (profileState.loadStatus == ProfileLoadStatus.error) {
           debugPrint(
               '[TigerBay Router] Profile error — allowing home with fallback.');
           return loc == AppRoutes.home ? null : AppRoutes.home;
         }
-        debugPrint(
-            '[TigerBay Router] Profile loading — holding on splash until verified.');
         return loc == AppRoutes.splash ? null : AppRoutes.splash;
       }
 
-      // ── Gate 4: Active Member Route Cleanup ────────────────────────────
-      // If authenticated member is sitting on auth or onboarding screens, send them Home.
+      // ── Gate 4: Membership Wall Guard ─────────────────────────────────
+      // TigerBay requires an active membership to access club features (/home, /booking, etc.).
+      // If the user's membership is inactive or expired:
+      // They MUST land on the membership paywall (/membership-paywall).
+      // They are NEVER automatically logged out while trying to access or stay on the paywall!
+      if (!isMembershipActive || isMembershipExpired) {
+        if (loc == AppRoutes.membershipPaywall) {
+          return null; // Stay on paywall to choose tier or pay
+        }
+        debugPrint(
+          '[TigerBay Router] Inactive/expired member (active=$isMembershipActive, expired=$isMembershipExpired) '
+          'attempted to visit $loc → routing to membership paywall.',
+        );
+        return AppRoutes.membershipPaywall;
+      }
+
+      // ── Gate 5: Active Member Route Cleanup ────────────────────────────
+      // If authenticated member with active plan is on auth/onboarding screens, send them Home.
       final isOnOnboardingOrAuthRoute = loc == AppRoutes.login ||
           loc == AppRoutes.register ||
           loc == AppRoutes.splash ||
@@ -214,7 +216,7 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       if (isOnOnboardingOrAuthRoute) {
         debugPrint(
-            '[TigerBay Router] Authenticated member on onboarding route → Redirecting to /home');
+            '[TigerBay Router] Active authenticated member on onboarding route → Redirecting to /home');
         return AppRoutes.home;
       }
 

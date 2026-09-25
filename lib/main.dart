@@ -33,6 +33,7 @@ Future<void> main() async {
   // ── Init Supabase (works on all platforms: Web, Android, iOS, Windows) ─────
   await Supabase.initialize(
     url: EnvConfig.supabaseUrl,
+    // ignore: deprecated_member_use
     anonKey: EnvConfig.supabaseAnonKey,
   );
 
