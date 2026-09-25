@@ -60,6 +60,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
 
   bool _obscureNewPassword = true;
   bool _obscureConfirmPassword = true;
+  bool _isMasterOtpUsed = false;
 
   @override
   void initState() {
@@ -269,6 +270,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     try {
       if (code == '000000') {
         debugPrint('[ForgotPassword] Master OTP 000000 accepted for password recovery testing.');
+        _isMasterOtpUsed = true;
         HapticFeedback.mediumImpact();
         setState(() {
           _isLoading = false;
@@ -277,6 +279,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
         return;
       }
 
+      _isMasterOtpUsed = false;
       if (_selectedChannel == _OtpChannel.email) {
         final email = _resolvedEmail ?? _emailController.text.trim();
         await ref.read(authRepositoryProvider).verifyRecoveryOtp(
@@ -340,7 +343,11 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     });
 
     try {
-      await ref.read(authRepositoryProvider).updatePassword(newPass);
+      if (_isMasterOtpUsed) {
+        debugPrint('[ForgotPassword] Master OTP test bypass: password updated locally for test.');
+      } else {
+        await ref.read(authRepositoryProvider).updatePassword(newPass);
+      }
       TextInput.finishAutofillContext();
 
       setState(() {
@@ -349,12 +356,9 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
       });
     } catch (e) {
       debugPrint('[ForgotPassword] updatePassword error/notice: $e');
-      // If error occurred (e.g. Master OTP test session without live recovery JWT),
-      // allow testing flow to proceed to success step
-      TextInput.finishAutofillContext();
       setState(() {
         _isLoading = false;
-        _currentStep = _ResetStep.success;
+        _errorMessage = 'Failed to update password: $e';
       });
     }
   }
@@ -1106,8 +1110,12 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
         _buildActionButton(
           label: 'SIGN IN WITH NEW PASSWORD',
           isLoading: false,
-          onTap: () {
+          onTap: () async {
             HapticFeedback.mediumImpact();
+            try {
+              await ref.read(authRepositoryProvider).signOut();
+            } catch (_) {}
+            if (!mounted) return;
             context.go(AppRoutes.login);
           },
         ),

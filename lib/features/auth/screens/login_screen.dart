@@ -292,7 +292,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
     // ── Proceed to Dual-Factor Verification (SMS OTP + Email OTP) ───────────
     if (!mounted) return;
-    context.push(
+    context.go(
       AppRoutes.registrationVerification,
       extra: {
         'fullName': fullName,
@@ -405,7 +405,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 child: OutlinedButton(
                   onPressed: () {
                     Navigator.of(modalContext).pop();
-                    context.push(AppRoutes.forgotPassword, extra: email);
+                    context.go(AppRoutes.forgotPassword, extra: email);
                   },
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: Color(0xFF33333D)),
@@ -467,9 +467,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   @override
   Widget build(BuildContext context) {
     ref.listen<AuthState>(authProvider, (previous, next) {
-      if (next.status == AuthStatus.pendingEmailVerification && mounted) {
-        context.go(AppRoutes.pendingVerification);
-      } else if (next.error != null && mounted) {
+      if (next.error != null && mounted) {
         _showErrorSnack(next.error!);
       }
     });
@@ -868,7 +866,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   void _openForgotPassword() {
     final email = _loginEmailController.text.trim();
-    context.push(AppRoutes.forgotPassword, extra: email.isNotEmpty ? email : null);
+    context.go(AppRoutes.forgotPassword, extra: email.isNotEmpty ? email : null);
   }
 
   // ── Register form ─────────────────────────────────────────────────────────────

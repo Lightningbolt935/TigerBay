@@ -146,15 +146,26 @@ final routerProvider = Provider<GoRouter>((ref) {
         return loc == AppRoutes.splash ? null : AppRoutes.splash;
       }
 
+      // ── Sanctuary Route: Forgot Password Flow ─────────────────────────
+      // If the user is on the forgot-password screen, NEVER redirect them away.
+      // Even if authStatus switches to authenticated (upon recovery OTP verification)
+      // or pending, they MUST remain on this screen to set their new password.
+      if (loc == AppRoutes.forgotPassword) {
+        return null;
+      }
+
       final isAuthenticated = authStatus == AuthStatus.authenticated;
       final isPendingEmail = authStatus == AuthStatus.pendingEmailVerification;
 
       // ── Gate 1: Email Verification Pending ─────────────────────────────
+      // TigerBay uses 2-step OTP verification on RegistrationVerificationScreen.
+      // NEVER redirect to the old link-based pendingVerification screen!
       if (isPendingEmail) {
-        if (loc == AppRoutes.registrationVerification) return null;
-        return loc == AppRoutes.pendingVerification
-            ? null
-            : AppRoutes.pendingVerification;
+        if (loc == AppRoutes.registrationVerification ||
+            loc == AppRoutes.forgotPassword) {
+          return null;
+        }
+        return AppRoutes.registrationVerification;
       }
 
       // ── Gate 1.5: Password Recovery Event ─────────────────────────────
@@ -178,11 +189,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       // ── Gate 3: Authenticated — Profile Loading Guard ─────────────────
       // If profile is not ready yet:
       // - If cold-starting on splash, wait on splash until ready.
-      // - If signing in on login/register/registrationVerification, wait there until ready.
+      // - If on login/register/forgotPassword/registrationVerification, wait there until ready.
       if (!profileState.isReady) {
         if (loc == AppRoutes.splash) return null;
         if (loc == AppRoutes.login ||
             loc == AppRoutes.register ||
+            loc == AppRoutes.forgotPassword ||
             loc == AppRoutes.registrationVerification) {
           return null;
         }
@@ -201,8 +213,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       // They can NEVER access their dashboard or club tabs until membership is active.
       if (!isMembershipActive || isMembershipExpired) {
         if (loc == AppRoutes.membershipPaywall ||
+            loc == AppRoutes.forgotPassword ||
             loc == AppRoutes.registrationVerification) {
-          return null; // Stay on paywall to choose tier or pay, or finish registration verification
+          return null; // Stay on paywall, forgot password, or registration verification
         }
         debugPrint(
           '[TigerBay Router] Inactive/expired member (active=$isMembershipActive, expired=$isMembershipExpired) '
@@ -212,11 +225,15 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
 
       // ── Gate 5: Active Member Route Cleanup ────────────────────────────
+      // If user is currently resetting password on forgotPassword, NEVER kick them out!
+      if (loc == AppRoutes.forgotPassword) {
+        return null;
+      }
+
       // If authenticated member with active plan is on auth/onboarding screens, send them Home.
       final isOnOnboardingOrAuthRoute = loc == AppRoutes.login ||
           loc == AppRoutes.register ||
           loc == AppRoutes.splash ||
-          loc == AppRoutes.pendingVerification ||
           loc == AppRoutes.otp ||
           loc == AppRoutes.registrationVerification;
 
