@@ -7,7 +7,6 @@ import 'package:go_router/go_router.dart';
 import 'package:tigerbay_app/core/constants/app_colors.dart';
 import 'package:tigerbay_app/core/constants/app_routes.dart';
 import 'package:tigerbay_app/core/theme/app_typography.dart';
-import 'package:tigerbay_app/features/auth/providers/auth_provider.dart';
 import 'package:tigerbay_app/features/auth/providers/profile_state_provider.dart';
 import 'apple_touch_feedback.dart';
 
@@ -61,11 +60,11 @@ class MainShell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // ── Auto Log Out when Plan Expires while inside shell ───────────────────
+    // ── Navigate to Membership Paywall when Plan Expires while inside shell ───
     ref.listen<bool>(isMembershipExpiredProvider, (previous, isExpired) {
       if (isExpired) {
-        debugPrint('[TigerBay MainShell] Plan expired while in app! Auto logging out...');
-        ref.read(authProvider.notifier).signOut();
+        debugPrint('[TigerBay MainShell] Plan expired while in app! Redirecting to membership wall...');
+        context.go(AppRoutes.membershipPaywall);
       }
     });
 

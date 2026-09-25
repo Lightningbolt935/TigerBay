@@ -171,7 +171,8 @@ class _MembershipPaywallScreenState
     final tiersAsync = ref.watch(membershipTiersProvider);
     final activationState = ref.watch(membershipActivationNotifierProvider);
     final profile = ref.watch(profileStateProvider).profile;
-    final isActive = profile?.membershipStatus == 'active';
+    final isMembershipActive = profile?.isMembershipActive ?? false;
+    final isMembershipExpired = profile?.isMembershipExpired ?? false;
 
     return PopScope(
       canPop: false,
@@ -248,19 +249,17 @@ class _MembershipPaywallScreenState
             final selectedTier = tiers[safeIndex];
 
             MembershipTier? currentTier;
-            if (isActive) {
-              for (final t in tiers) {
-                if (t.id == profile?.membershipTierId) {
-                  currentTier = t;
-                  break;
-                }
+            for (final t in tiers) {
+              if (t.id == profile?.membershipTierId) {
+                currentTier = t;
+                break;
               }
             }
 
             final bool isCurrentSelected =
                 selectedTier.id == currentTier?.id;
-            // Downgrade guard: user cannot switch to a lower tier level.
-            final bool isDowngrade = isActive &&
+            // Downgrade guard: user cannot switch to a lower tier level if active.
+            final bool isDowngrade = isMembershipActive &&
                 currentTier != null &&
                 !isCurrentSelected &&
                 selectedTier.tierLevel < currentTier.tierLevel;
@@ -269,9 +268,13 @@ class _MembershipPaywallScreenState
                 ? 'RENEW ${selectedTier.name.toUpperCase()}'
                 : isDowngrade
                     ? 'CANNOT DOWNGRADE PLAN'
-                    : isActive
+                    : isMembershipActive
                         ? 'UPGRADE TO ${selectedTier.name.toUpperCase()}'
-                        : 'ACTIVATE ${selectedTier.name.toUpperCase()}';
+                        : isMembershipExpired
+                            ? (currentTier != null && selectedTier.tierLevel > currentTier.tierLevel
+                                ? 'UPGRADE TO ${selectedTier.name.toUpperCase()}'
+                                : 'RENEW ${selectedTier.name.toUpperCase()}')
+                            : 'ACTIVATE ${selectedTier.name.toUpperCase()}';
 
             return Column(
               children: [
@@ -280,28 +283,37 @@ class _MembershipPaywallScreenState
                 // ── Brand Header ─────────────────────────────────────────
                 _buildBrandHeader(),
 
-                if (isActive && currentTier != null) ...[
+                if (currentTier != null) ...[
                   const SizedBox(height: 16),
-                  _buildCurrentPlanBanner(currentTier, profile),
+                  _buildCurrentPlanBanner(currentTier, profile, isMembershipExpired),
                 ],
 
                 const SizedBox(height: 24),
 
                 // ── Title ────────────────────────────────────────────────
                 Text(
-                  isActive ? 'MANAGE YOUR MEMBERSHIP' : 'CHOOSE YOUR MEMBERSHIP',
+                  isMembershipExpired
+                      ? 'MEMBERSHIP EXPIRED'
+                      : isMembershipActive
+                          ? 'MANAGE YOUR MEMBERSHIP'
+                          : 'CHOOSE YOUR MEMBERSHIP',
                   style: GoogleFonts.poppins(
                     fontSize: 22,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
+                    color: isMembershipExpired
+                        ? AppColors.champagneGold
+                        : AppColors.textPrimary,
                     letterSpacing: 2,
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  isActive
-                      ? 'Renew your current plan or upgrade to a higher tier'
-                      : 'Unlock exclusive rewards across every TigerBay venue',
+                  isMembershipExpired
+                      ? 'Your club membership has expired. Renew your plan below to restore access.'
+                      : isMembershipActive
+                          ? 'Renew your current plan or upgrade to a higher tier'
+                          : 'Unlock exclusive rewards across every TigerBay venue',
+                  textAlign: TextAlign.center,
                   style: GoogleFonts.poppins(
                     fontSize: 13,
                     color: AppColors.textSecondary,
@@ -537,13 +549,17 @@ class _MembershipPaywallScreenState
     );
   }
 
-  Widget _buildCurrentPlanBanner(MembershipTier tier, dynamic profile) {
+  Widget _buildCurrentPlanBanner(MembershipTier tier, dynamic profile, bool isExpired) {
     final expiresAt = profile?.membershipExpiresAt;
-    final expiryText = expiresAt != null
-        ? 'Renews ${DateTime.parse(expiresAt.toString()).toLocal().day} '
-            '${_monthName(DateTime.parse(expiresAt.toString()).toLocal().month)}'
-            ' ${DateTime.parse(expiresAt.toString()).toLocal().year}'
+    final dateStr = expiresAt != null
+        ? '${DateTime.parse(expiresAt.toString()).toLocal().day} '
+            '${_monthName(DateTime.parse(expiresAt.toString()).toLocal().month)} '
+            '${DateTime.parse(expiresAt.toString()).toLocal().year}'
         : null;
+
+    final expiryText = isExpired
+        ? (dateStr != null ? 'Expired on $dateStr' : 'Plan expired')
+        : (dateStr != null ? 'Renews $dateStr' : null);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -551,23 +567,33 @@ class _MembershipPaywallScreenState
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          gradient: AppColors.goldGradient,
-          borderRadius: BorderRadius.circular(12),
+          color: isExpired ? const Color(0xFF1E1315) : null,
+          gradient: isExpired ? null : AppColors.goldGradient,
+          borderRadius: BorderRadius.circular(14),
+          border: isExpired
+              ? Border.all(color: AppColors.brandRed.withValues(alpha: 0.5), width: 1)
+              : null,
         ),
         child: Row(
           children: [
-            const Icon(Icons.workspace_premium, color: Colors.black, size: 20),
+            Icon(
+              isExpired ? CupertinoIcons.exclamationmark_circle_fill : Icons.workspace_premium,
+              color: isExpired ? AppColors.brandRed : Colors.black,
+              size: 20,
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'CURRENT PLAN — ${tier.name.toUpperCase()}',
+                    isExpired
+                        ? 'PREVIOUS PLAN — ${tier.name.toUpperCase()}'
+                        : 'CURRENT PLAN — ${tier.name.toUpperCase()}',
                     style: GoogleFonts.poppins(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      color: Colors.black,
+                      color: isExpired ? Colors.white : Colors.black,
                       letterSpacing: 0.8,
                     ),
                   ),
@@ -576,7 +602,7 @@ class _MembershipPaywallScreenState
                       expiryText,
                       style: GoogleFonts.poppins(
                         fontSize: 11,
-                        color: Colors.black.withValues(alpha: 0.7),
+                        color: isExpired ? AppColors.textSecondary : Colors.black.withValues(alpha: 0.7),
                       ),
                     ),
                 ],
