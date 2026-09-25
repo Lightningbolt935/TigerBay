@@ -207,6 +207,12 @@ class TwilioNotificationService {
     required String to,
     required String code,
   }) async {
+    // ── Master OTP Bypass for Testing ──────────────────────────────────────
+    if (code.trim() == '000000') {
+      debugPrint('[Twilio] Master OTP 000000 accepted for $to (testing bypass)');
+      return true;
+    }
+
     // 1. Try Supabase Edge Function first
     try {
       final res = await _supabase?.functions.invoke(

@@ -151,6 +151,7 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // ── Gate 1: Email Verification Pending ─────────────────────────────
       if (isPendingEmail) {
+        if (loc == AppRoutes.registrationVerification) return null;
         return loc == AppRoutes.pendingVerification
             ? null
             : AppRoutes.pendingVerification;
@@ -177,10 +178,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       // ── Gate 3: Authenticated — Profile Loading Guard ─────────────────
       // If profile is not ready yet:
       // - If cold-starting on splash, wait on splash until ready.
-      // - If signing in on login/register, wait on login/register until ready.
+      // - If signing in on login/register/registrationVerification, wait there until ready.
       if (!profileState.isReady) {
         if (loc == AppRoutes.splash) return null;
-        if (loc == AppRoutes.login || loc == AppRoutes.register) return null;
+        if (loc == AppRoutes.login ||
+            loc == AppRoutes.register ||
+            loc == AppRoutes.registrationVerification) {
+          return null;
+        }
         if (profileState.loadStatus == ProfileLoadStatus.error) {
           debugPrint(
               '[TigerBay Router] Profile error — allowing home with fallback.');
@@ -192,11 +197,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       // ── Gate 4: Membership Wall Guard ─────────────────────────────────
       // TigerBay requires an active membership to access club features (/home, /booking, etc.).
       // If the user's membership is inactive or expired:
-      // They MUST land on the membership paywall (/membership-paywall).
-      // They are NEVER automatically logged out while trying to access or stay on the paywall!
+      // They MUST ONLY be able to view the membership wall (/membership-paywall).
+      // They can NEVER access their dashboard or club tabs until membership is active.
       if (!isMembershipActive || isMembershipExpired) {
-        if (loc == AppRoutes.membershipPaywall) {
-          return null; // Stay on paywall to choose tier or pay
+        if (loc == AppRoutes.membershipPaywall ||
+            loc == AppRoutes.registrationVerification) {
+          return null; // Stay on paywall to choose tier or pay, or finish registration verification
         }
         debugPrint(
           '[TigerBay Router] Inactive/expired member (active=$isMembershipActive, expired=$isMembershipExpired) '
