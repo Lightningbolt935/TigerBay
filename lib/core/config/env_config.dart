@@ -68,7 +68,7 @@ class EnvConfig {
     if (compileTime.isNotEmpty) return compileTime;
     return _resolve('STRIPE_PUBLISHABLE_KEY',
         defaultValue:
-            'pk_test_51UIYHUH4ehSj2yK4wdoP3TcZqezk5JTgebZ5pJnLV20ba0cr7c678OrkzMN6ZmOHxAURhp8jEKVkKheySZitDOoz00Ah20eGjx');
+            'pk_live_51UIY9kQkPVEZT8oQcrm3x2Sa3tlLgjOkE1hirdOLe8izrdSHyKQXk2yI7ApBoKPbeWatBIFIt5cU1ufwJDRsYx8Y00U9GDF9t8');
   }
 
   static bool get isStripeConfigured =>

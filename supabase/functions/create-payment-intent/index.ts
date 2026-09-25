@@ -58,7 +58,7 @@ export default {
     // ── Stripe integration ─────────────────────────────────────────────────
     const stripeKey =
       Deno.env.get("STRIPE_SECRET_KEY") ||
-      "sk_test_51UIYHUH4ehSj2yK4Fb5FB7Ri1BNiZoVjzkm9bZylP84cKjwHTNE71pQ86HeAvMJsSCTx0bsJBMy5rtbENsXkfTNN00q3KSMwIj";
+      "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";
 
     if (!stripeKey) {
       return Response.json({ error: "Stripe not configured" }, { status: 503 });
