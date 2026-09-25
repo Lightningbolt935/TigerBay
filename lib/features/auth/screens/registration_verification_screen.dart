@@ -28,7 +28,7 @@ class RegistrationVerificationScreen extends ConsumerStatefulWidget {
   final String email;
   final String phone;
   final String password;
-  final Branch homeSite;
+  final Branch? homeSite;
 
   const RegistrationVerificationScreen({
     super.key,
@@ -36,7 +36,7 @@ class RegistrationVerificationScreen extends ConsumerStatefulWidget {
     required this.email,
     required this.phone,
     required this.password,
-    required this.homeSite,
+    this.homeSite,
   });
 
   @override
@@ -216,7 +216,7 @@ class _RegistrationVerificationScreenState
             email: widget.email,
             password: widget.password,
             fullName: widget.fullName,
-            homeSite: widget.homeSite,
+            homeSite: widget.homeSite ?? Branch.defaultBranches.first,
             phone: widget.phone,
           );
 
@@ -230,9 +230,11 @@ class _RegistrationVerificationScreenState
         _stage = _RegStage.verifyEmail;
       });
       _startCooldown();
-      if (_emailFocusNodes.isNotEmpty) {
-        _emailFocusNodes[0].requestFocus();
-      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _emailFocusNodes.isNotEmpty) {
+          _emailFocusNodes[0].requestFocus();
+        }
+      });
     } catch (e) {
       setState(() {
         _isLoading = false;
@@ -881,7 +883,7 @@ class _RegistrationVerificationScreenState
               _buildSummaryRow(
                 icon: CupertinoIcons.location_solid,
                 label: 'Home Venue',
-                value: widget.homeSite.title,
+                value: (widget.homeSite ?? Branch.defaultBranches.first).title,
               ),
             ],
           ),

@@ -470,6 +470,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       if (next.error != null && mounted) {
         _showErrorSnack(next.error!);
       }
+      if (next.status == AuthStatus.authenticated && mounted) {
+        context.go(AppRoutes.home);
+      }
     });
 
     final authState = ref.watch(authProvider);

@@ -42,7 +42,8 @@ class _MembershipPaywallScreenState
   Future<void> _handleBack() async {
     HapticFeedback.lightImpact();
     final profile = ref.read(profileStateProvider).profile;
-    if (profile?.isMembershipActive == true) {
+    final isActive = profile != null && profile.isMembershipActive && !profile.isMembershipExpired;
+    if (isActive) {
       if (context.canPop()) {
         context.pop();
       } else {
@@ -506,43 +507,6 @@ class _MembershipPaywallScreenState
                 ),
               ),
             ],
-          ),
-          const Spacer(),
-          AppleTouchFeedback(
-            onTap: () async {
-              await ref.read(authProvider.notifier).signOut();
-              if (mounted) context.go(AppRoutes.login);
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.12),
-                  width: 1,
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    CupertinoIcons.square_arrow_right,
-                    color: AppColors.brandRed,
-                    size: 14,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Sign Out',
-                    style: GoogleFonts.poppins(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ),
         ],
       ),

@@ -175,6 +175,12 @@ class AuthRepository {
       debugPrint('[TigerBay Auth] OAuth profile upsert fallback notice: $e');
     }
 
+    final isOAuth = user.appMetadata['provider'] != 'email' && user.appMetadata['provider'] != null;
+    if (isOAuth) {
+      debugPrint('[TigerBay Auth] Authenticated OAuth user (${user.email}) admitted without blocking.');
+      return;
+    }
+
     debugPrint(
       '[TigerBay Auth] NO_PROFILE_EXISTS: No profiles row found for '
       'user ${user.id.substring(0, 8)}... — signing out and blocking.',
@@ -459,7 +465,7 @@ class AuthRepository {
     await _client.auth.signInWithOAuth(
       OAuthProvider.google,
       redirectTo: '$appScheme://login-callback',
-      authScreenLaunchMode: LaunchMode.inAppBrowserView,
+      authScreenLaunchMode: LaunchMode.externalApplication,
     );
   }
 
@@ -470,7 +476,7 @@ class AuthRepository {
     await _client.auth.signInWithOAuth(
       OAuthProvider.apple,
       redirectTo: '$appScheme://login-callback',
-      authScreenLaunchMode: LaunchMode.inAppBrowserView,
+      authScreenLaunchMode: LaunchMode.externalApplication,
     );
   }
 
@@ -481,7 +487,7 @@ class AuthRepository {
     await _client.auth.signInWithOAuth(
       OAuthProvider.facebook,
       redirectTo: '$appScheme://login-callback',
-      authScreenLaunchMode: LaunchMode.inAppBrowserView,
+      authScreenLaunchMode: LaunchMode.externalApplication,
     );
   }
 
@@ -499,7 +505,20 @@ class AuthRepository {
     final data =
         await _client.from('profiles').select().eq('id', user.id).maybeSingle();
 
-    if (data == null) return null;
+    if (data == null) {
+      final meta = user.userMetadata ?? {};
+      final fullName = meta['full_name'] as String? ??
+          meta['name'] as String? ??
+          user.email?.split('@').first ??
+          'Member';
+      return UserProfile(
+        id: user.id,
+        email: user.email,
+        fullName: fullName,
+        membershipStatus: 'active',
+        membershipTierId: 1,
+      );
+    }
     return UserProfile.fromMap(data);
   }
 

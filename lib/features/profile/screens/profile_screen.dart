@@ -221,26 +221,6 @@ class ProfileScreen extends ConsumerWidget {
             ),
           ),
 
-          // Delete Account (Apple Guideline 5.1.1(v) Compliant)
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Center(
-                child: TextButton(
-                  onPressed: () => _confirmDeleteAccount(context, ref),
-                  child: Text(
-                    'Delete Account',
-                    style: GoogleFonts.poppins(
-                      fontSize: 13,
-                      color: AppColors.error.withValues(alpha: 0.75),
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-
           // App version
           SliverToBoxAdapter(
             child: Padding(
@@ -402,95 +382,6 @@ class ProfileScreen extends ConsumerWidget {
               style: GoogleFonts.poppins(
                 color: AppColors.brandRed,
                 fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _confirmDeleteAccount(BuildContext context, WidgetRef ref) {
-    showDialog(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            const Icon(CupertinoIcons.exclamationmark_triangle_fill,
-                color: AppColors.error, size: 22),
-            const SizedBox(width: 10),
-            Text(
-              'Delete Account?',
-              style: GoogleFonts.poppins(
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-                fontSize: 17,
-              ),
-            ),
-          ],
-        ),
-        content: Text(
-          'This action is permanent and cannot be undone. All your membership privileges, VIP tier, active bookings, and loyalty strips will be permanently erased.',
-          style: GoogleFonts.poppins(
-            fontSize: 13,
-            color: AppColors.textSecondary,
-            height: 1.4,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx),
-            child: Text('Cancel',
-                style: GoogleFonts.poppins(color: AppColors.textSecondary)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.error,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-            ),
-            onPressed: () async {
-              Navigator.of(dialogCtx, rootNavigator: true).pop();
-              final scaffoldMessenger = ScaffoldMessenger.of(context);
-              scaffoldMessenger.showSnackBar(
-                const SnackBar(
-                  content: Text('Deleting your account...'),
-                  backgroundColor: Color(0xFF1E1E22),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-
-              final success =
-                  await ref.read(profileProvider.notifier).deleteAccount();
-
-              if (success) {
-                scaffoldMessenger.showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                        'Your account and data have been permanently deleted.'),
-                    backgroundColor: AppColors.error,
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              } else {
-                scaffoldMessenger.showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                        'Failed to delete account. Please contact TigerBay concierge.'),
-                    backgroundColor: AppColors.error,
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              }
-            },
-            child: Text(
-              'Delete Permanently',
-              style: GoogleFonts.poppins(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
               ),
             ),
           ),

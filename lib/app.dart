@@ -146,11 +146,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         return loc == AppRoutes.splash ? null : AppRoutes.splash;
       }
 
-      // ── Sanctuary Route: Forgot Password Flow ─────────────────────────
-      // If the user is on the forgot-password screen, NEVER redirect them away.
-      // Even if authStatus switches to authenticated (upon recovery OTP verification)
-      // or pending, they MUST remain on this screen to set their new password.
-      if (loc == AppRoutes.forgotPassword) {
+      // ── Sanctuary Route: In-flight Verification Flows ─────────────────
+      // If the user is on the forgot-password or registration-verification screen,
+      // NEVER redirect them away or reload it while in-flight.
+      if (loc == AppRoutes.forgotPassword ||
+          loc == AppRoutes.registrationVerification) {
         return null;
       }
 
@@ -187,16 +187,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
 
       // ── Gate 3: Authenticated — Profile Loading Guard ─────────────────
-      // If profile is not ready yet:
-      // - If cold-starting on splash, wait on splash until ready.
-      // - If on login/register/forgotPassword/registrationVerification, wait there until ready.
+      // If cold-starting on splash, wait on splash until ready.
       if (!profileState.isReady) {
         if (loc == AppRoutes.splash) return null;
-        if (loc == AppRoutes.login ||
-            loc == AppRoutes.register ||
-            loc == AppRoutes.forgotPassword ||
-            loc == AppRoutes.registrationVerification) {
-          return null;
+        if (loc == AppRoutes.login || loc == AppRoutes.register) {
+          // Authenticated user on login/register screen — immediately send to home or paywall
+          return (!isMembershipActive || isMembershipExpired)
+              ? AppRoutes.membershipPaywall
+              : AppRoutes.home;
         }
         if (profileState.loadStatus == ProfileLoadStatus.error) {
           debugPrint(
@@ -287,7 +285,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             email: data['email'] as String? ?? '',
             phone: data['phone'] as String? ?? '',
             password: data['password'] as String? ?? '',
-            homeSite: data['homeSite'] as Branch,
+            homeSite: (data['homeSite'] as Branch?) ?? Branch.defaultBranches.first,
           );
         },
       ),

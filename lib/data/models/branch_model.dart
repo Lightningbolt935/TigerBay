@@ -71,4 +71,15 @@ class Branch {
 
   @override
   String toString() => 'Branch(id: $id, title: $title)';
+
+  static const List<Branch> defaultBranches = [
+    Branch(
+      id: 1,
+      title: 'TigerBay London',
+      imageUrl: '',
+      city: 'London',
+      address: 'London, UK',
+      isActive: true,
+    ),
+  ];
 }

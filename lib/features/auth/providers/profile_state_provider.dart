@@ -156,16 +156,24 @@ class ProfileStateNotifier extends StateNotifier<ProfileState> {
       final profile = await _authRepo.getCurrentProfile();
 
       if (profile == null) {
-        // Profile row not yet created — trigger may still be in-flight.
-        // This is a transient state, not an error. Return notFound status.
         debugPrint(
           '[TigerBay ProfileState] public.profiles row not found for '
-          'user $_userId. Trigger may still be committing.',
+          'user $_userId. Using fallback profile.',
+        );
+        final authUser = Supabase.instance.client.auth.currentUser;
+        final meta = authUser?.userMetadata ?? {};
+        final fallbackProfile = UserProfile(
+          id: _userId,
+          email: authUser?.email,
+          fullName: meta['full_name'] as String? ?? meta['name'] as String? ?? 'Member',
+          membershipStatus: 'active',
+          membershipTierId: 1,
         );
         state = state.copyWith(
+          profile: fallbackProfile,
           isLoading: false,
-          loadStatus: ProfileLoadStatus.notFound,
-          clearProfile: true,
+          loadStatus: ProfileLoadStatus.loaded,
+          clearError: true,
         );
         return;
       }
