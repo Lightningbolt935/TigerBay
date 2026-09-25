@@ -314,6 +314,19 @@ class StripeService {
         final data = response.data as Map;
         final secret = data['client_secret'] as String?;
         final intentId = data['payment_intent_id'] as String?;
+        final remoteKey = data['publishable_key'] as String?;
+
+        if (remoteKey != null && remoteKey.startsWith('pk_')) {
+          if (remoteKey != StripeConfig.publishableKey) {
+            StripeConfig.updatePublishableKey(remoteKey);
+            Stripe.publishableKey = remoteKey;
+            try {
+              await Stripe.instance.applySettings();
+              debugPrint('[Stripe] 🔄 Dynamic Stripe key switched to: ${StripeConfig.isTestMode ? "TEST MODE" : "PRODUCTION LIVE MODE"} ($remoteKey)');
+            } catch (_) {}
+          }
+        }
+
         if (secret != null && secret.isNotEmpty) {
           return {
             'client_secret': secret,

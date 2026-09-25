@@ -165,7 +165,8 @@ class AuthRepository {
         'id': user.id,
         'email': user.email,
         'full_name': fullName,
-        'membership_status': 'inactive',
+        'membership_status': 'active',
+        'membership_tier_id': 1,
         'updated_at': DateTime.now().toIso8601String(),
       });
       debugPrint('[TigerBay Auth] Auto-created profile record for authenticated OAuth user: ${user.id}');

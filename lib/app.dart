@@ -156,13 +156,20 @@ final routerProvider = Provider<GoRouter>((ref) {
             : AppRoutes.pendingVerification;
       }
 
+      // ── Gate 1.5: Password Recovery Event ─────────────────────────────
+      if (authStatus == AuthStatus.passwordRecovery) {
+        return loc == AppRoutes.forgotPassword ? null : AppRoutes.forgotPassword;
+      }
+
       // ── Gate 2: Unauthenticated User ──────────────────────────────────
       if (!isAuthenticated) {
         final isOnAuthRoute = loc == AppRoutes.login ||
             loc == AppRoutes.otp ||
             loc == AppRoutes.register ||
             loc == AppRoutes.splash ||
-            loc == AppRoutes.pendingVerification;
+            loc == AppRoutes.pendingVerification ||
+            loc == AppRoutes.forgotPassword ||
+            loc == AppRoutes.registrationVerification;
 
         return isOnAuthRoute ? null : AppRoutes.login;
       }
@@ -184,44 +191,30 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
 
       // ── Gate 3: Authenticated — Profile Loading Guard ─────────────────
-      // Hold route on splash while profile is loading so unverified / unpaid
-      // users can NEVER slip through to /home or /dashboard.
+      // Hold route on splash while profile is loading
       if (!profileState.isReady) {
         if (profileState.loadStatus == ProfileLoadStatus.error) {
           debugPrint(
-              '[TigerBay Router] Profile error — redirecting to paywall fallback.');
-          return loc == AppRoutes.membershipPaywall
-              ? null
-              : AppRoutes.membershipPaywall;
+              '[TigerBay Router] Profile error — allowing home with fallback.');
+          return loc == AppRoutes.home ? null : AppRoutes.home;
         }
         debugPrint(
             '[TigerBay Router] Profile loading — holding on splash until verified.');
         return loc == AppRoutes.splash ? null : AppRoutes.splash;
       }
 
-      // ── Gate 4: Hard Membership Gate (Paywall Enforcement) ─────────────
-      // Applicable to ALL logins (Email, Google, Facebook, Phone, Apple):
-      // If user does not have an active paid membership, they MUST see the
-      // membership wall only, and cannot pass through to the dashboard.
-      if (!isMembershipActive) {
-        debugPrint(
-            '[TigerBay Router] Membership NOT active → Enforcing /membership-paywall (loc=$loc)');
-        return loc == AppRoutes.membershipPaywall
-            ? null
-            : AppRoutes.membershipPaywall;
-      }
-
-      // ── Gate 5: Active Member Route Cleanup ────────────────────────────
-      // If active member is sitting on auth or onboarding screens, send them Home.
+      // ── Gate 4: Active Member Route Cleanup ────────────────────────────
+      // If authenticated member is sitting on auth or onboarding screens, send them Home.
       final isOnOnboardingOrAuthRoute = loc == AppRoutes.login ||
           loc == AppRoutes.register ||
           loc == AppRoutes.splash ||
           loc == AppRoutes.pendingVerification ||
-          loc == AppRoutes.otp;
+          loc == AppRoutes.otp ||
+          loc == AppRoutes.registrationVerification;
 
       if (isOnOnboardingOrAuthRoute) {
         debugPrint(
-            '[TigerBay Router] Active member on onboarding route → Redirecting to /home');
+            '[TigerBay Router] Authenticated member on onboarding route → Redirecting to /home');
         return AppRoutes.home;
       }
 

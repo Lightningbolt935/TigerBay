@@ -112,10 +112,18 @@ export default {
         );
       }
 
+      const publishableKey =
+        Deno.env.get("STRIPE_PUBLISHABLE_KEY") ||
+        (intent.livemode
+          ? undefined
+          : "pk_test_51UIYHUH4ehSj2yK4wdoP3TcZqezk5JTgebZ5pJnLV20ba0cr7c678OrkzMN6ZmOHxAURhp8jEKVkKheySZitDOoz00Ah20eGjx");
+
       return Response.json(
         {
           client_secret: intent.client_secret,
           payment_intent_id: intent.id,
+          publishable_key: publishableKey,
+          livemode: intent.livemode,
         },
         {
           headers: { "Access-Control-Allow-Origin": "*" },

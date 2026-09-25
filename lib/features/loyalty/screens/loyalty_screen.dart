@@ -12,7 +12,7 @@ import '../providers/loyalty_provider.dart';
 import 'live_loyalty_card.dart';
 
 /// ═══════════════════════════════════════════════════════════════════════════
-/// TigerBay International — Loyalty / Strips Wallet Screen (Apple Dark Luxury)
+/// TigerBay International — Member Wallet & Digital Pass (Apple Luxury Grade)
 /// ═══════════════════════════════════════════════════════════════════════════
 class LoyaltyScreen extends ConsumerWidget {
   const LoyaltyScreen({super.key});
@@ -25,7 +25,7 @@ class LoyaltyScreen extends ConsumerWidget {
     // ── Resolve tier name from membership_tiers table ──────────────────────
     final tiersAsync = ref.watch(membershipTiersProvider);
 
-    // ── Live transaction ledger ────────────────────────────────────────────
+    // ── Live transaction history ───────────────────────────────────────────
     final txAsync = ref.watch(stripsTransactionsProvider);
 
     return Scaffold(
@@ -78,13 +78,13 @@ class LoyaltyScreen extends ConsumerWidget {
                 data: (profile) {
                   final String tierName = tiersAsync.whenData((tiers) {
                     final tierId = profile?.membershipTierId;
-                    if (tierId == null) return '';
+                    if (tierId == null) return 'Explorer';
                     try {
                       return tiers.firstWhere((t) => t.id == tierId).name;
                     } catch (_) {
-                      return '';
+                      return 'Explorer';
                     }
-                  }).valueOrNull ?? '';
+                  }).valueOrNull ?? 'Explorer';
 
                   return LiveLoyaltyCard(
                     tierName: tierName,
@@ -99,13 +99,13 @@ class LoyaltyScreen extends ConsumerWidget {
                   final fallback = ref.read(userProfileProvider);
                   final String tierName = tiersAsync.whenData((tiers) {
                     final tierId = fallback?.membershipTierId;
-                    if (tierId == null) return '';
+                    if (tierId == null) return 'Explorer';
                     try {
                       return tiers.firstWhere((t) => t.id == tierId).name;
                     } catch (_) {
-                      return '';
+                      return 'Explorer';
                     }
-                  }).valueOrNull ?? '';
+                  }).valueOrNull ?? 'Explorer';
                   return LiveLoyaltyCard(
                     tierName: tierName,
                     balance: fallback?.stripsBalance ?? 0,
@@ -118,60 +118,262 @@ class LoyaltyScreen extends ConsumerWidget {
             ),
           ),
 
-          // ── Apple-Style Quick Action Matrix ──────────────────────────────
+          // ── Primary VIP Action Bar ────────────────────────────────────────
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              child: GridView.count(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 2,
-                childAspectRatio: 1.45,
-                crossAxisSpacing: 14,
-                mainAxisSpacing: 14,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+              child: Column(
                 children: [
-                  _ActionCard(
-                    title: 'Live QR Pass',
-                    subtitle: 'Scan at lounge to earn & spend',
-                    icon: CupertinoIcons.qrcode_viewfinder,
-                    iconColor: AppColors.gold,
+                  // Primary Action: Scan Member Pass
+                  AppleTouchFeedback(
                     onTap: () => context.push(AppRoutes.qrDisplay),
+                    child: Container(
+                      width: double.infinity,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFE5A93C), Color(0xFFC48618)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.gold.withValues(alpha: 0.28),
+                            blurRadius: 18,
+                            spreadRadius: -2,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            CupertinoIcons.qrcode_viewfinder,
+                            color: Color(0xFF0F0F12),
+                            size: 20,
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            'PRESENT DIGITAL PASS',
+                            style: GoogleFonts.poppins(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1.2,
+                              color: const Color(0xFF0F0F12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                  _ActionCard(
-                    title: 'Redeem Perks',
-                    subtitle: 'Spend Strips on gifts & perks',
-                    icon: CupertinoIcons.gift_fill,
-                    iconColor: AppColors.brandRed,
-                    onTap: () => context.push(AppRoutes.rewardStore),
-                  ),
-                  _ActionCard(
-                    title: 'Physical Card',
-                    subtitle: 'Link membership card badge',
-                    icon: CupertinoIcons.creditcard_fill,
-                    iconColor: const Color(0xFFE5A93C),
-                    onTap: () => context.push(AppRoutes.linkPhysicalCard),
-                  ),
-                  _ActionCard(
-                    title: 'Ledger Audit',
-                    subtitle: 'View points history & logs',
-                    icon: CupertinoIcons.chart_bar_alt_fill,
-                    iconColor: const Color(0xFF38BDF8),
-                    onTap: () => context.push(AppRoutes.transactionHistory),
+
+                  const SizedBox(height: 12),
+
+                  // Secondary Twin Actions: Physical Badge & Tier Perks
+                  Row(
+                    children: [
+                      Expanded(
+                        child: AppleTouchFeedback(
+                          onTap: () => context.push(AppRoutes.linkPhysicalCard),
+                          child: Container(
+                            height: 48,
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF16161A),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: const Color(0xFF2C2C35),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  CupertinoIcons.creditcard,
+                                  color: AppColors.champagneGold,
+                                  size: 16,
+                                ),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    'Physical Card',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: AppleTouchFeedback(
+                          onTap: () => context.push(AppRoutes.membershipPaywall),
+                          child: Container(
+                            height: 48,
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF16161A),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: const Color(0xFF2C2C35),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  CupertinoIcons.sparkles,
+                                  color: AppColors.gold,
+                                  size: 16,
+                                ),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    'Tier Benefits',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
           ),
 
-          // ── Transaction Ledger Activity Header ───────────────────────────
+          // ── VIP Tier Status Hub ───────────────────────────────────────────
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: profileStream.when(
+                data: (profile) {
+                  final balance = profile?.stripsBalance ?? 0;
+                  final tierId = profile?.membershipTierId ?? 1;
+                  final multiplier = tierId == 4
+                      ? '3 pts / £1'
+                      : tierId == 3
+                          ? '2 pts / £1'
+                          : tierId == 2
+                              ? '1 pt / £1'
+                              : '0.5 pts / £1';
+
+                  return Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF141418),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: const Color(0xFF26262F),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'STRIPS BALANCE',
+                              style: GoogleFonts.poppins(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 1.2,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.baseline,
+                              textBaseline: TextBaseline.alphabetic,
+                              children: [
+                                Text(
+                                  balance.toString(),
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 26,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.gold,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'points',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    color: AppColors.textHint,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        Container(
+                          height: 42,
+                          width: 1,
+                          color: const Color(0xFF282832),
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              'EARNING RATE',
+                              style: GoogleFonts.poppins(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 1.2,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              multiplier,
+                              style: GoogleFonts.poppins(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                },
+                loading: () => const SizedBox.shrink(),
+                error: (_, __) => const SizedBox.shrink(),
+              ),
+            ),
+          ),
+
+          // ── Recent Activity Section Header ───────────────────────────────
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'RECENT LEDGER ACTIVITY',
+                    'RECENT ACTIVITY',
                     style: GoogleFonts.poppins(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
@@ -206,7 +408,7 @@ class LoyaltyScreen extends ConsumerWidget {
             ),
           ),
 
-          // ── Live Ledger Rows (Apple Pay Inset Grouped Style) ──────────────
+          // ── Live Recent Activity Rows (Apple Pay Style) ───────────────────
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             sliver: txAsync.when(
@@ -214,14 +416,14 @@ class LoyaltyScreen extends ConsumerWidget {
                 if (entries.isEmpty) {
                   return SliverToBoxAdapter(
                     child: Container(
-                      margin: const EdgeInsets.symmetric(vertical: 8),
+                      margin: const EdgeInsets.symmetric(vertical: 4),
                       padding: const EdgeInsets.symmetric(
                           vertical: 36, horizontal: 20),
                       decoration: BoxDecoration(
-                        color: AppColors.surface,
+                        color: const Color(0xFF141418),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: AppColors.glassBorder,
+                          color: const Color(0xFF26262F),
                           width: 0.8,
                         ),
                       ),
@@ -237,13 +439,13 @@ class LoyaltyScreen extends ConsumerWidget {
                               ),
                               child: const Icon(
                                 Icons.receipt_long_outlined,
-                                size: 30,
+                                size: 28,
                                 color: AppColors.textHint,
                               ),
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              'No transactions yet',
+                              'No recent activity yet',
                               style: GoogleFonts.poppins(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
@@ -252,7 +454,7 @@ class LoyaltyScreen extends ConsumerWidget {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Visit TigerBay lounges to start earning Strips!',
+                              'Present your digital pass at TigerBay lounges to earn Strips!',
                               textAlign: TextAlign.center,
                               style: GoogleFonts.poppins(
                                 fontSize: 12,
@@ -266,7 +468,7 @@ class LoyaltyScreen extends ConsumerWidget {
                   );
                 }
 
-                // Show up to 4 most recent entries
+                // Show up to 4 most recent activity entries
                 final preview = entries.take(4).toList();
                 return SliverList(
                   delegate: SliverChildBuilderDelegate(
@@ -301,7 +503,7 @@ class LoyaltyScreen extends ConsumerWidget {
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   child: Center(
                     child: Text(
-                      'Could not load transactions.',
+                      'Could not load activity.',
                       style: GoogleFonts.poppins(
                         fontSize: 12,
                         color: AppColors.textHint,
@@ -349,83 +551,6 @@ class _CardSkeleton extends StatelessWidget {
   }
 }
 
-// ── Action Navigation Node Card (Apple Squircle Style) ────────────────────────
-class _ActionCard extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final Color iconColor;
-  final VoidCallback onTap;
-
-  const _ActionCard({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.iconColor,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return AppleTouchFeedback(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: AppColors.glassBorder,
-            width: 0.8,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.25),
-              blurRadius: 14,
-              spreadRadius: -2,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: iconColor.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: iconColor, size: 20),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              title,
-              style: GoogleFonts.poppins(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              subtitle,
-              style: GoogleFonts.poppins(
-                fontSize: 10,
-                color: AppColors.textSecondary,
-                height: 1.2,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 // ── Transaction Statement Item (Apple Pay Style) ───────────────────────────────
 class _HistoryRow extends StatelessWidget {
   final String title;
@@ -445,70 +570,67 @@ class _HistoryRow extends StatelessWidget {
     final Color statusColor =
         isPositive ? AppColors.success : AppColors.brandRed;
 
-    return AppleTouchFeedback(
-      onTap: () {},
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: AppColors.glassBorder,
-            width: 0.8,
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF141418),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: const Color(0xFF26262F),
+          width: 0.8,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.14),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              isPositive ? Icons.add_rounded : Icons.remove_rounded,
+              color: statusColor,
+              size: 20,
+            ),
           ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: statusColor.withValues(alpha: 0.14),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                isPositive ? Icons.add_rounded : Icons.remove_rounded,
-                color: statusColor,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: GoogleFonts.poppins(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    date,
-                    style: GoogleFonts.poppins(
-                      fontSize: 11,
-                      color: AppColors.textHint,
-                    ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  date,
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    color: AppColors.textHint,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            Text(
-              points,
-              style: GoogleFonts.poppins(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: statusColor,
-              ),
+          ),
+          Text(
+            points,
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: statusColor,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

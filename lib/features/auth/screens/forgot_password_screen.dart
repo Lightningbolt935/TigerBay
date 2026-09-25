@@ -173,11 +173,12 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
           .limit(1);
 
       if (rows.isEmpty) {
-        setState(() {
-          _isLoading = false;
-          _errorMessage =
-              'No account found with this email. Please check your spelling or register for a new account.';
-        });
+        // Soft fallback: Do not block users who exist in Supabase Auth but
+        // whose profiles row is not indexed by email. Proceed with email recovery directly.
+        _resolvedEmail = email;
+        _resolvedPhone = null;
+        _selectedChannel = _OtpChannel.email;
+        _sendOtp();
         return;
       }
 
@@ -215,7 +216,10 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
         await ref
             .read(supabaseClientProvider)
             .auth
-            .resetPasswordForEmail(email);
+            .resetPasswordForEmail(
+              email,
+              redirectTo: 'io.tigerbay.app://reset-password',
+            );
       } else {
         final phone = _resolvedPhone!;
         final twilio = TwilioNotificationService();
@@ -367,6 +371,19 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AuthStatus>(authStatusProvider, (prev, next) {
+      if (next == AuthStatus.passwordRecovery) {
+        debugPrint('[TigerBay ForgotPassword] Recovery session active — transitioning to new password.');
+        if (mounted) {
+          setState(() {
+            _currentStep = _ResetStep.newPassword;
+            _isLoading = false;
+            _errorMessage = null;
+          });
+        }
+      }
+    });
+
     return Scaffold(
       backgroundColor: const Color(0xFF08080A),
       appBar: AppBar(
@@ -694,7 +711,9 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
         ),
         const SizedBox(height: 8),
         Text(
-          'We sent a 6-digit code to\n$target',
+          _selectedChannel == _OtpChannel.email
+              ? 'We sent a recovery email to\n$target\n\nTap the link in your email to reset your password, or enter the 6-digit code below if one was provided:'
+              : 'We sent a 6-digit SMS verification code to\n$target',
           style: GoogleFonts.poppins(
             fontSize: 13,
             color: AppColors.textSecondary,

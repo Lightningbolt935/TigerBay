@@ -14,6 +14,7 @@ import 'package:tigerbay_app/features/auth/providers/auth_provider.dart';
 import 'package:tigerbay_app/features/auth/providers/profile_state_provider.dart';
 import 'package:tigerbay_app/features/auth/widgets/branch_selector_widget.dart';
 import 'package:tigerbay_app/shared/widgets/apple_touch_feedback.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Combined Login + Registration screen for TigerBay International.
 ///
@@ -235,12 +236,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     TextInput.finishAutofillContext();
     _failedLoginAttempts = 0;
 
-    final profile = ref.read(profileStateProvider).profile;
-    if (profile?.isMembershipActive == true) {
-      context.go(AppRoutes.home);
-    } else {
-      context.go(AppRoutes.membershipPaywall);
-    }
+    context.go(AppRoutes.home);
   }
 
   Future<void> _submitRegister() async {
@@ -1454,13 +1450,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         children: [
           const TextSpan(text: 'By continuing, you agree to our '),
           TextSpan(
-            text: 'Terms of Service',
+            text: 'Terms & Conditions',
             style: AppTypography.caption1.copyWith(
               fontWeight: FontWeight.w600,
               color: AppColors.champagneGold,
               decoration: TextDecoration.underline,
             ),
-            recognizer: TapGestureRecognizer()..onTap = () {},
+            recognizer: TapGestureRecognizer()
+              ..onTap = () async {
+                final uri = Uri.parse('https://www.tigerbayshisha.co.uk/terms-conditions.html');
+                if (await canLaunchUrl(uri)) await launchUrl(uri);
+              },
           ),
           const TextSpan(text: ' & '),
           TextSpan(
@@ -1470,7 +1470,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               color: AppColors.champagneGold,
               decoration: TextDecoration.underline,
             ),
-            recognizer: TapGestureRecognizer()..onTap = () {},
+            recognizer: TapGestureRecognizer()
+              ..onTap = () async {
+                final uri = Uri.parse('https://www.tigerbayshisha.co.uk/privacy-policy.html');
+                if (await canLaunchUrl(uri)) await launchUrl(uri);
+              },
           ),
         ],
       ),

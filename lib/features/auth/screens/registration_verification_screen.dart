@@ -854,12 +854,38 @@ class _RegistrationVerificationScreenState
         const SizedBox(height: 32),
 
         _buildActionButton(
-          label: 'CHOOSE MEMBERSHIP PLAN',
+          label: 'ENTER TIGERBAY',
           isLoading: false,
           onTap: () {
             HapticFeedback.mediumImpact();
-            context.go(AppRoutes.membershipPaywall);
+            context.go(AppRoutes.home);
           },
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          height: 48,
+          child: OutlinedButton(
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              context.push(AppRoutes.membershipPaywall);
+            },
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: Color(0xFF33333D)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+            ),
+            child: Text(
+              'VIEW VIP MEMBERSHIP TIERS',
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.champagneGold,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
         ),
       ],
     );

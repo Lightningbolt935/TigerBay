@@ -7,7 +7,6 @@ import 'package:tigerbay_app/core/constants/app_colors.dart';
 import 'package:tigerbay_app/core/constants/app_routes.dart';
 import 'package:tigerbay_app/core/services/stripe_service.dart';
 import 'package:tigerbay_app/data/models/membership_tier_model.dart';
-import 'package:tigerbay_app/features/auth/providers/auth_provider.dart';
 import 'package:tigerbay_app/features/auth/providers/profile_state_provider.dart';
 import 'package:tigerbay_app/features/profile/providers/membership_provider.dart';
 import 'package:tigerbay_app/shared/widgets/apple_touch_feedback.dart';
@@ -40,17 +39,10 @@ class _MembershipPaywallScreenState
 
   Future<void> _handleBack() async {
     HapticFeedback.lightImpact();
-    final profile = ref.read(profileStateProvider).profile;
-    final bool isMembershipActive = profile?.isMembershipActive ?? false;
-
-    if (isMembershipActive && context.canPop()) {
+    if (context.canPop()) {
       context.pop();
     } else {
-      // Unpaid or expired member tapping back -> sign out and return to Login page
-      await ref.read(authProvider.notifier).signOut();
-      if (mounted) {
-        context.go(AppRoutes.login);
-      }
+      context.go(AppRoutes.home);
     }
   }
 
