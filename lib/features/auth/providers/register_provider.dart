@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tigerbay_app/data/models/branch_model.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TigerBay International — Register Provider
@@ -59,3 +60,80 @@ final registerFormProvider =
     StateNotifierProvider<RegisterFormNotifier, RegisterFormState>((ref) {
   return RegisterFormNotifier();
 });
+
+/// ═══════════════════════════════════════════════════════════════════════════
+/// Persistent Registration In-Flight Draft
+/// Keeps form data (name, email, phone, password, branch, verification stage)
+/// safe across GoRouter route rebuilds or hot updates so state is NEVER lost.
+/// ═══════════════════════════════════════════════════════════════════════════
+class RegistrationDraft {
+  final String fullName;
+  final String email;
+  final String phone;
+  final String password;
+  final Branch? homeSite;
+  final int stage; // 0: verifyPhone, 1: verifyEmail, 2: completed
+
+  const RegistrationDraft({
+    this.fullName = '',
+    this.email = '',
+    this.phone = '',
+    this.password = '',
+    this.homeSite,
+    this.stage = 0,
+  });
+
+  RegistrationDraft copyWith({
+    String? fullName,
+    String? email,
+    String? phone,
+    String? password,
+    Branch? homeSite,
+    int? stage,
+  }) {
+    return RegistrationDraft(
+      fullName: fullName ?? this.fullName,
+      email: email ?? this.email,
+      phone: phone ?? this.phone,
+      password: password ?? this.password,
+      homeSite: homeSite ?? this.homeSite,
+      stage: stage ?? this.stage,
+    );
+  }
+}
+
+class RegistrationDraftNotifier extends StateNotifier<RegistrationDraft> {
+  RegistrationDraftNotifier() : super(const RegistrationDraft());
+
+  void setDraft({
+    required String fullName,
+    required String email,
+    required String phone,
+    required String password,
+    required Branch homeSite,
+    int stage = 0,
+  }) {
+    state = RegistrationDraft(
+      fullName: fullName,
+      email: email,
+      phone: phone,
+      password: password,
+      homeSite: homeSite,
+      stage: stage,
+    );
+  }
+
+  void setStage(int stage) {
+    state = state.copyWith(stage: stage);
+  }
+
+  void clear() {
+    state = const RegistrationDraft();
+  }
+}
+
+final registrationDraftProvider =
+    StateNotifierProvider<RegistrationDraftNotifier, RegistrationDraft>((ref) {
+  return RegistrationDraftNotifier();
+});
+

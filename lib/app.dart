@@ -10,6 +10,7 @@ import 'package:tigerbay_app/core/constants/app_routes.dart';
 // ── 2. Providers & State Classes ─────────────────────────────────────────────
 import 'package:tigerbay_app/features/auth/providers/auth_provider.dart';
 import 'package:tigerbay_app/features/auth/providers/profile_state_provider.dart';
+import 'package:tigerbay_app/features/auth/providers/register_provider.dart';
 
 // ── 3. Navigation Shell ──────────────────────────────────────────────────────
 import 'package:tigerbay_app/shared/widgets/main_shell.dart';
@@ -89,8 +90,28 @@ final routerProvider = Provider<GoRouter>((ref) {
   ref.listen<AuthStatus>(authStatusProvider, (previous, next) {
     if (previous != next) {
       debugPrint(
-        '[TigerBay Router] Auth status changed: $previous → $next — refreshing router.',
+        '[TigerBay Router] Auth status changed: $previous → $next',
       );
+
+      // CRITICAL: When the user enters their phone OTP and Supabase registers the
+      // account, authStatus transitions to pendingEmailVerification.
+      // If the user is currently on registrationVerification, DO NOT trigger a
+      // GoRouter refresh! That would tear down or rebuild the active widget tree
+      // right when the screen is switching internally to Email OTP.
+      final currentCtx = rootNavigatorKey.currentContext;
+      if (currentCtx != null) {
+        try {
+          final loc = GoRouter.of(currentCtx).routeInformationProvider.value.uri.path;
+          if (loc == AppRoutes.registrationVerification &&
+              next == AuthStatus.pendingEmailVerification) {
+            debugPrint(
+              '[TigerBay Router] RegistrationVerificationScreen active; skipping router refresh.',
+            );
+            return;
+          }
+        } catch (_) {}
+      }
+
       refreshNotifier.refresh();
     }
   });
@@ -279,13 +300,40 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.registrationVerification,
         builder: (context, state) {
-          final data = state.extra as Map<String, dynamic>? ?? {};
+          final extraMap = state.extra is Map ? (state.extra as Map) : null;
+          final draft = ref.read(registrationDraftProvider);
+
+          final rawFullName = extraMap?['fullName'] as String?;
+          final fullName = (rawFullName != null && rawFullName.trim().isNotEmpty)
+              ? rawFullName.trim()
+              : draft.fullName;
+
+          final rawEmail = extraMap?['email'] as String?;
+          final email = (rawEmail != null && rawEmail.trim().isNotEmpty)
+              ? rawEmail.trim()
+              : draft.email;
+
+          final rawPhone = extraMap?['phone'] as String?;
+          final phone = (rawPhone != null && rawPhone.trim().isNotEmpty)
+              ? rawPhone.trim()
+              : draft.phone;
+
+          final rawPassword = extraMap?['password'] as String?;
+          final password = (rawPassword != null && rawPassword.isNotEmpty)
+              ? rawPassword
+              : draft.password;
+
+          final homeSite = (extraMap?['homeSite'] as Branch?) ??
+              draft.homeSite ??
+              Branch.defaultBranches.first;
+
           return RegistrationVerificationScreen(
-            fullName: data['fullName'] as String? ?? '',
-            email: data['email'] as String? ?? '',
-            phone: data['phone'] as String? ?? '',
-            password: data['password'] as String? ?? '',
-            homeSite: (data['homeSite'] as Branch?) ?? Branch.defaultBranches.first,
+            key: const ValueKey('registration_verification_screen_key'),
+            fullName: fullName,
+            email: email,
+            phone: phone,
+            password: password,
+            homeSite: homeSite,
           );
         },
       ),

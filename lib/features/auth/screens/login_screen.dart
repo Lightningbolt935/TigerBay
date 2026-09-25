@@ -11,6 +11,7 @@ import 'package:tigerbay_app/core/constants/app_colors.dart';
 import 'package:tigerbay_app/core/theme/app_typography.dart';
 import 'package:tigerbay_app/features/auth/providers/auth_provider.dart';
 import 'package:tigerbay_app/features/auth/providers/profile_state_provider.dart';
+import 'package:tigerbay_app/features/auth/providers/register_provider.dart';
 import 'package:tigerbay_app/features/auth/widgets/branch_selector_widget.dart';
 import 'package:tigerbay_app/shared/widgets/apple_touch_feedback.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -292,6 +293,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
     // ── Proceed to Dual-Factor Verification (SMS OTP + Email OTP) ───────────
     if (!mounted) return;
+    ref.read(registrationDraftProvider.notifier).setDraft(
+          fullName: fullName,
+          email: email,
+          phone: formattedPhone,
+          password: password,
+          homeSite: chosenHomeSite!,
+          stage: 0,
+        );
     context.go(
       AppRoutes.registrationVerification,
       extra: {

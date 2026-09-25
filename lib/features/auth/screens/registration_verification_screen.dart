@@ -11,6 +11,7 @@ import 'package:tigerbay_app/core/constants/app_routes.dart';
 import 'package:tigerbay_app/data/models/branch_model.dart';
 import 'package:tigerbay_app/features/auth/providers/auth_provider.dart';
 import 'package:tigerbay_app/features/auth/providers/profile_state_provider.dart';
+import 'package:tigerbay_app/features/auth/providers/register_provider.dart';
 import 'package:tigerbay_app/services/twilio_notification_service.dart';
 
 enum _RegStage {
@@ -62,27 +63,71 @@ class _RegistrationVerificationScreenState
   int _resendCooldown = 0;
   Timer? _cooldownTimer;
 
+  // ── Robust Draft Fallbacks (Guaranteed never empty across router rebuilds) ───
+  String get effectiveEmail {
+    if (widget.email.trim().isNotEmpty) return widget.email.trim();
+    return ref.read(registrationDraftProvider).email.trim();
+  }
+
+  String get effectivePhone {
+    if (widget.phone.trim().isNotEmpty) return widget.phone.trim();
+    return ref.read(registrationDraftProvider).phone.trim();
+  }
+
+  String get effectiveFullName {
+    if (widget.fullName.trim().isNotEmpty) return widget.fullName.trim();
+    return ref.read(registrationDraftProvider).fullName.trim();
+  }
+
+  String get effectivePassword {
+    if (widget.password.isNotEmpty) return widget.password;
+    return ref.read(registrationDraftProvider).password;
+  }
+
+  Branch get effectiveHomeSite {
+    return widget.homeSite ??
+        ref.read(registrationDraftProvider).homeSite ??
+        Branch.defaultBranches.first;
+  }
+
   @override
   void initState() {
     super.initState();
+
+    final draft = ref.read(registrationDraftProvider);
+    if (draft.stage == 1) {
+      _stage = _RegStage.verifyEmail;
+    } else if (draft.stage == 2) {
+      _stage = _RegStage.completed;
+    }
 
     for (int i = 0; i < 6; i++) {
       _phoneFocusNodes[i].onKeyEvent = (node, event) =>
           _handleOtpKeyEvent(event, i, _phoneOtpControllers, _phoneFocusNodes);
       _phoneFocusNodes[i].addListener(() {
-        if (mounted) setState(() {});
+        if (mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) setState(() {});
+          });
+        }
       });
 
       _emailFocusNodes[i].onKeyEvent = (node, event) =>
           _handleOtpKeyEvent(event, i, _emailOtpControllers, _emailFocusNodes);
       _emailFocusNodes[i].addListener(() {
-        if (mounted) setState(() {});
+        if (mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) setState(() {});
+          });
+        }
       });
     }
 
-    // Dispatch initial Phone SMS OTP on entry
+    // Dispatch initial Phone SMS OTP on entry only if in phone verification stage
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _sendPhoneOtp();
+      if (_stage == _RegStage.verifyPhone) {
+        _sendPhoneOtp();
+      }
     });
   }
 
@@ -143,6 +188,12 @@ class _RegistrationVerificationScreenState
 
   // ── Phase 1: Send & Verify Phone SMS OTP ────────────────────────────────────
   Future<void> _sendPhoneOtp() async {
+    final phone = effectivePhone;
+    if (phone.isEmpty) {
+      setState(() => _errorMessage = 'No mobile phone number provided for verification.');
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -150,7 +201,7 @@ class _RegistrationVerificationScreenState
 
     try {
       final twilio = TwilioNotificationService();
-      final res = await twilio.sendVerificationCode(to: widget.phone, channel: 'sms');
+      final res = await twilio.sendVerificationCode(to: phone, channel: 'sms');
       if (res['status'] == 'error') {
         throw Exception(res['error'] ?? 'Could not send SMS verification code.');
       }
@@ -187,8 +238,9 @@ class _RegistrationVerificationScreenState
         return;
       }
 
+      final phone = effectivePhone;
       final twilio = TwilioNotificationService();
-      final approved = await twilio.verifyCode(to: widget.phone, code: code);
+      final approved = await twilio.verifyCode(to: phone, code: code);
       if (!approved) {
         throw const AuthException(
             'The SMS verification code entered is incorrect. Please try again.');
@@ -212,19 +264,38 @@ class _RegistrationVerificationScreenState
   // ── Phase 2: Create Account in Supabase & Dispatch Email OTP ────────────────
   Future<void> _initiateEmailPhase() async {
     try {
+      // Persist stage 1 into registration draft
+      ref.read(registrationDraftProvider.notifier).setStage(1);
+
       final success = await ref.read(authProvider.notifier).signUpWithEmail(
-            email: widget.email,
-            password: widget.password,
-            fullName: widget.fullName,
-            homeSite: widget.homeSite ?? Branch.defaultBranches.first,
-            phone: widget.phone,
+            email: effectiveEmail,
+            password: effectivePassword,
+            fullName: effectiveFullName,
+            homeSite: effectiveHomeSite,
+            phone: effectivePhone,
           );
 
       if (!success) {
-        final error = ref.read(authProvider).error;
-        throw Exception(error ?? 'Registration failed. Please try again.');
+        final error = ref.read(authProvider).error ?? '';
+        final isAlreadyRegistered = error.toLowerCase().contains('already exists') ||
+            error.toLowerCase().contains('already registered') ||
+            error.toLowerCase().contains('user already registered');
+
+        if (isAlreadyRegistered) {
+          // Account already created in Supabase (e.g. earlier retry) — trigger OTP resend and proceed to Email stage!
+          debugPrint('[Registration] Account already created; requesting fresh email OTP code.');
+          try {
+            await Supabase.instance.client.auth.resend(
+              type: OtpType.signup,
+              email: effectiveEmail,
+            );
+          } catch (_) {}
+        } else {
+          throw Exception(error.isNotEmpty ? error : 'Registration failed. Please try again.');
+        }
       }
 
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
         _stage = _RegStage.verifyEmail;
@@ -236,6 +307,7 @@ class _RegistrationVerificationScreenState
         }
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
         _errorMessage = e.toString().replaceFirst('Exception: ', '');
@@ -253,14 +325,14 @@ class _RegistrationVerificationScreenState
     try {
       await Supabase.instance.client.auth.resend(
         type: OtpType.signup,
-        email: widget.email,
+        email: effectiveEmail,
       );
       setState(() => _isLoading = false);
       _startCooldown();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Verification code resent to ${widget.email}'),
+          content: Text('Verification code resent to $effectiveEmail'),
           backgroundColor: AppColors.success,
           behavior: SnackBarBehavior.floating,
         ),
@@ -286,19 +358,23 @@ class _RegistrationVerificationScreenState
     });
 
     try {
+      final email = effectiveEmail;
+      final phone = effectivePhone;
+      final name = effectiveFullName;
+
       if (code == '000000') {
-        debugPrint('[Registration] Master OTP 000000 accepted for email verification of ${widget.email}');
+        debugPrint('[Registration] Master OTP 000000 accepted for email verification of $email');
         try {
           final existing = await Supabase.instance.client
               .from('profiles')
               .select('id')
-              .ilike('email', widget.email)
+              .ilike('email', email)
               .maybeSingle();
           if (existing != null && existing['id'] != null) {
             await Supabase.instance.client.from('profiles').update({
-              'email': widget.email,
-              'phone': widget.phone,
-              'full_name': widget.fullName,
+              'email': email,
+              'phone': phone,
+              'full_name': name,
               'updated_at': DateTime.now().toIso8601String(),
             }).eq('id', existing['id']);
           }
@@ -306,6 +382,7 @@ class _RegistrationVerificationScreenState
           debugPrint('[Registration] Profile update notice: $e');
         }
 
+        ref.read(registrationDraftProvider.notifier).setStage(2);
         ref.invalidate(profileStateProvider);
 
         setState(() {
@@ -316,7 +393,7 @@ class _RegistrationVerificationScreenState
       }
 
       final authRes = await ref.read(authRepositoryProvider).verifyEmailOtp(
-            email: widget.email,
+            email: email,
             token: code,
           );
 
@@ -324,14 +401,15 @@ class _RegistrationVerificationScreenState
         // Sync email, phone & name into public.profiles
         try {
           await Supabase.instance.client.from('profiles').update({
-            'email': widget.email,
-            'phone': widget.phone,
-            'full_name': widget.fullName,
+            'email': email,
+            'phone': phone,
+            'full_name': name,
             'updated_at': DateTime.now().toIso8601String(),
           }).eq('id', authRes.user!.id);
         } catch (_) {}
       }
 
+      ref.read(registrationDraftProvider.notifier).setStage(2);
       ref.invalidate(profileStateProvider);
 
       setState(() {
@@ -397,7 +475,11 @@ class _RegistrationVerificationScreenState
     ref.listen<AuthState>(authProvider, (prev, next) {
       if (next.status == AuthStatus.authenticated && mounted) {
         HapticFeedback.mediumImpact();
-        setState(() => _stage = _RegStage.completed);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() => _stage = _RegStage.completed);
+          }
+        });
       }
     });
 
@@ -596,7 +678,7 @@ class _RegistrationVerificationScreenState
         ),
         const SizedBox(height: 8),
         Text(
-          'We sent a 6-digit SMS verification code to\n${widget.phone}',
+          'We sent a 6-digit SMS verification code to\n$effectivePhone',
           style: GoogleFonts.poppins(
             fontSize: 13,
             color: AppColors.textSecondary,
@@ -714,7 +796,7 @@ class _RegistrationVerificationScreenState
         ),
         const SizedBox(height: 8),
         Text(
-          'Phone verified ✓\nNow enter the 6-digit code sent to\n${widget.email}',
+          'Phone verified ✓\nNow enter the 6-digit code sent to\n$effectiveEmail',
           style: GoogleFonts.poppins(
             fontSize: 13,
             color: AppColors.textSecondary,
@@ -863,27 +945,27 @@ class _RegistrationVerificationScreenState
               _buildSummaryRow(
                 icon: CupertinoIcons.person_fill,
                 label: 'Member Name',
-                value: widget.fullName,
+                value: effectiveFullName,
               ),
               const Divider(color: Color(0xFF24242C), height: 20),
               _buildSummaryRow(
                 icon: CupertinoIcons.phone_fill,
                 label: 'Mobile Phone',
-                value: widget.phone,
+                value: effectivePhone,
                 isVerified: true,
               ),
               const Divider(color: Color(0xFF24242C), height: 20),
               _buildSummaryRow(
                 icon: CupertinoIcons.mail_solid,
                 label: 'Email Address',
-                value: widget.email,
+                value: effectiveEmail,
                 isVerified: true,
               ),
               const Divider(color: Color(0xFF24242C), height: 20),
               _buildSummaryRow(
                 icon: CupertinoIcons.location_solid,
                 label: 'Home Venue',
-                value: (widget.homeSite ?? Branch.defaultBranches.first).title,
+                value: effectiveHomeSite.title,
               ),
             ],
           ),
@@ -954,64 +1036,73 @@ class _RegistrationVerificationScreenState
   }) {
     final hasError = _errorMessage != null;
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: List.generate(6, (i) {
-        final isFocused = focusNodes[i].hasFocus;
-        final isFilled = controllers[i].text.isNotEmpty;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final totalWidth = constraints.maxWidth;
+        // 6 boxes with 5 gaps of 8px = 40px total gap
+        final boxWidth = ((totalWidth - 40) / 6).clamp(36.0, 50.0);
+        final boxHeight = (boxWidth * 1.18).clamp(46.0, 60.0);
 
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
-          width: 48,
-          height: 56,
-          decoration: BoxDecoration(
-            color: isFocused ? const Color(0xFF191920) : const Color(0xFF141418),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: isFocused
-                  ? AppColors.gold
-                  : hasError
-                      ? AppColors.error.withValues(alpha: 0.6)
-                      : isFilled
-                          ? AppColors.gold.withValues(alpha: 0.45)
-                          : const Color(0xFF282830),
-              width: isFocused ? 1.8 : 1.2,
-            ),
-            boxShadow: isFocused
-                ? [
-                    BoxShadow(
-                      color: AppColors.gold.withValues(alpha: 0.22),
-                      blurRadius: 10,
-                      spreadRadius: 1,
-                    )
-                  ]
-                : null,
-          ),
-          child: TextField(
-            controller: controllers[i],
-            focusNode: focusNodes[i],
-            keyboardType: TextInputType.number,
-            autofillHints: const [AutofillHints.oneTimeCode],
-            textAlign: TextAlign.center,
-            maxLength: i == 0 ? 6 : 1,
-            style: GoogleFonts.poppins(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-            ),
-            decoration: const InputDecoration(
-              counterText: '',
-              border: InputBorder.none,
-              focusedBorder: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              contentPadding: EdgeInsets.zero,
-            ),
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            onChanged: (val) => _onDigitChanged(i, val, isPhone),
-          ),
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: List.generate(6, (i) {
+            final isFocused = focusNodes[i].hasFocus;
+            final isFilled = controllers[i].text.isNotEmpty;
+
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut,
+              width: boxWidth,
+              height: boxHeight,
+              decoration: BoxDecoration(
+                color: isFocused ? const Color(0xFF191920) : const Color(0xFF141418),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: isFocused
+                      ? AppColors.gold
+                      : hasError
+                          ? AppColors.error.withValues(alpha: 0.6)
+                          : isFilled
+                              ? AppColors.gold.withValues(alpha: 0.45)
+                              : const Color(0xFF282830),
+                  width: isFocused ? 1.8 : 1.2,
+                ),
+                boxShadow: isFocused
+                    ? [
+                        BoxShadow(
+                          color: AppColors.gold.withValues(alpha: 0.22),
+                          blurRadius: 10,
+                          spreadRadius: 1,
+                        )
+                      ]
+                    : null,
+              ),
+              child: TextField(
+                controller: controllers[i],
+                focusNode: focusNodes[i],
+                keyboardType: TextInputType.number,
+                autofillHints: const [AutofillHints.oneTimeCode],
+                textAlign: TextAlign.center,
+                maxLength: i == 0 ? 6 : 1,
+                style: GoogleFonts.poppins(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+                decoration: const InputDecoration(
+                  counterText: '',
+                  border: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  contentPadding: EdgeInsets.zero,
+                ),
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                onChanged: (val) => _onDigitChanged(i, val, isPhone),
+              ),
+            );
+          }),
         );
-      }),
+      },
     );
   }
 
