@@ -477,16 +477,57 @@ class AuthRepository {
 
   /// Signs in with Google using Supabase OAuth with an in-app browser sheet
   /// (Chrome Custom Tab on Android). This avoids the native GoogleSignIn
-  /// SHA-1 dependency and the PlatformException(sign_in_failed, v8.b:10)
-  /// error. The flow stays visually in-app and redirects back automatically
-  /// via the deep link scheme [io.tigerbay.app://login-callback].
+  // ── Google ───────────────────────────────────────────────────────────────────
+
+  /// In-app native Google Account Chooser using google_sign_in and Supabase signInWithIdToken.
+  /// Shows the official Google Play Services account picker directly inside the app,
+  /// with seamless fallback to inAppBrowserView if needed.
   Future<void> signInWithGoogle() async {
-    final appScheme = EnvConfig.appScheme;
-    await _client.auth.signInWithOAuth(
-      OAuthProvider.google,
-      redirectTo: '$appScheme://login-callback',
-      authScreenLaunchMode: LaunchMode.externalApplication,
-    );
+    final webClientId = EnvConfig.googleWebClientId;
+    try {
+      final googleSignIn = GoogleSignIn(
+        serverClientId: webClientId.isNotEmpty ? webClientId : null,
+        scopes: ['email', 'profile'],
+      );
+
+      final googleUser = await googleSignIn.signIn();
+      if (googleUser == null) {
+        // User cancelled the native in-app account chooser dialog.
+        return;
+      }
+
+      final googleAuth = await googleUser.authentication;
+      final idToken = googleAuth.idToken;
+      final accessToken = googleAuth.accessToken;
+
+      if (idToken == null) {
+        throw const AuthException('No ID token obtained from Google Sign-In.');
+      }
+
+      final authResponse = await _client.auth.signInWithIdToken(
+        provider: OAuthProvider.google,
+        idToken: idToken,
+        accessToken: accessToken,
+      );
+
+      if (authResponse.user != null) {
+        unawaited(_bindDevice(authResponse.user!.id));
+      }
+    } catch (e) {
+      debugPrint('[TigerBay Auth] Native Google sign-in note: $e');
+      if (e is AuthException && e.message.toLowerCase().contains('cancel')) {
+        return;
+      }
+      // If native fails (e.g. SHA-1 mismatch or device without Play Services),
+      // fallback to inAppBrowserView OAuth so it stays inside an in-app sheet
+      // rather than kicking out to external Chrome.
+      final appScheme = EnvConfig.appScheme;
+      await _client.auth.signInWithOAuth(
+        OAuthProvider.google,
+        redirectTo: '$appScheme://login-callback',
+        authScreenLaunchMode: LaunchMode.inAppBrowserView,
+      );
+    }
   }
 
   // ── Apple ───────────────────────────────────────────────────────────────────
@@ -496,7 +537,7 @@ class AuthRepository {
     await _client.auth.signInWithOAuth(
       OAuthProvider.apple,
       redirectTo: '$appScheme://login-callback',
-      authScreenLaunchMode: LaunchMode.externalApplication,
+      authScreenLaunchMode: LaunchMode.inAppBrowserView,
     );
   }
 
@@ -507,7 +548,7 @@ class AuthRepository {
     await _client.auth.signInWithOAuth(
       OAuthProvider.facebook,
       redirectTo: '$appScheme://login-callback',
-      authScreenLaunchMode: LaunchMode.externalApplication,
+      authScreenLaunchMode: LaunchMode.inAppBrowserView,
     );
   }
 
