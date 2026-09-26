@@ -194,10 +194,18 @@ class TwilioNotificationService {
     } on DioException catch (e) {
       final data = e.response?.data;
       final errorMsg = data is Map ? data['message'] : e.message;
+      final errorCode = data is Map ? data['code'] : null;
+      final errStr = errorMsg?.toString().toLowerCase() ?? '';
+      final isTrial = errorCode == 21608 ||
+          errStr.contains('unverified') ||
+          errStr.contains('compliance') ||
+          errStr.contains('trusthub') ||
+          errStr.contains('caller id');
       return {
         'status': 'error',
         'error': errorMsg ?? 'Failed to send verification code',
-        'code': data is Map ? data['code'] : null,
+        'code': errorCode,
+        'isTrialRestriction': isTrial,
       };
     } catch (e) {
       return {'status': 'error', 'error': e.toString()};

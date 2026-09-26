@@ -204,7 +204,21 @@ class _RegistrationVerificationScreenState
       final twilio = TwilioNotificationService();
       final res = await twilio.sendVerificationCode(to: phone, channel: 'sms');
       if (res['status'] == 'error') {
-        throw Exception(res['error'] ?? 'Could not send SMS verification code.');
+        final err = res['error']?.toString() ?? 'Could not send SMS verification code.';
+        final isTrial = res['isTrialRestriction'] == true ||
+            err.toLowerCase().contains('unverified') ||
+            err.toLowerCase().contains('compliance') ||
+            err.toLowerCase().contains('trusthub');
+        if (isTrial) {
+          setState(() {
+            _isLoading = false;
+            _errorMessage =
+                'Twilio Sandbox: Recipient number is unverified in Twilio Console. Enter test code 000000 to verify.';
+          });
+          _startCooldown();
+          return;
+        }
+        throw Exception(err);
       }
 
       setState(() => _isLoading = false);

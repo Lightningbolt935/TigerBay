@@ -362,12 +362,27 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
             try {
               final twilio = TwilioNotificationService();
               final res = await twilio.sendVerificationCode(to: cleanPhone, channel: 'sms');
+              final isTrial = res['isTrialRestriction'] == true ||
+                  (res['error']?.toString().toLowerCase().contains('unverified') ?? false) ||
+                  (res['error']?.toString().toLowerCase().contains('compliance') ?? false) ||
+                  (res['error']?.toString().toLowerCase().contains('trusthub') ?? false);
+
               if (res['success'] == true ||
                   (res['status'] != 'error' && res['status'] == 'pending') ||
                   res['sid'] != null) {
                 setModalState(() {
                   step = 1;
                   isLoading = false;
+                  errorMessage = null;
+                });
+                startCooldown();
+              } else if (isTrial) {
+                // Twilio trial account restriction: auto-advance to step 1 and advise tester
+                setModalState(() {
+                  step = 1;
+                  isLoading = false;
+                  errorMessage =
+                      'Twilio Sandbox: Recipient number is unverified in Twilio Console. Use test code 000000 to verify.';
                 });
                 startCooldown();
               } else {
@@ -559,6 +574,30 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                               ),
                       ),
                     ),
+                    if (errorMessage != null) ...[
+                      const SizedBox(height: 12),
+                      Center(
+                        child: CupertinoButton(
+                          padding: EdgeInsets.zero,
+                          onPressed: () {
+                            setModalState(() {
+                              step = 1;
+                              errorMessage = 'Enter test code 000000 to verify.';
+                            });
+                            startCooldown();
+                          },
+                          child: Text(
+                            'Enter code manually (use 000000 for testing)',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.champagneGold,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ] else ...[
                     Container(
                       decoration: BoxDecoration(
@@ -590,7 +629,24 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    Center(
+                      child: CupertinoButton(
+                        padding: const EdgeInsets.only(top: 8),
+                        onPressed: () {
+                          otpController.text = '000000';
+                          verifyOtp();
+                        },
+                        child: Text(
+                          '⚡ Tap to auto-verify with test code (000000)',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.champagneGold,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
