@@ -499,6 +499,20 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   void clearError() => state = state.copyWith(clearError: true);
 
+  /// Explicitly marks registration verification as completed, transitioning
+  /// auth state to authenticated so GoRouter does not block navigation.
+  void markRegistrationVerified({required String email, String? userId}) {
+    final sessionUser = Supabase.instance.client.auth.currentUser;
+    final effectiveUser = sessionUser ?? state.user;
+    state = state.copyWith(
+      status: AuthStatus.authenticated,
+      user: effectiveUser,
+      isLoading: false,
+      clearError: true,
+      clearPendingEmail: true,
+    );
+  }
+
   @override
   void dispose() {
     _authEventSubscription?.cancel();

@@ -275,6 +275,26 @@ class _RegistrationVerificationScreenState
             phone: effectivePhone,
           );
 
+      // Save user ID if available
+      final user = ref.read(authProvider).user ?? Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        ref.read(registrationDraftProvider.notifier).setUserId(user.id);
+        // Guarantee profile row is written/updated immediately
+        try {
+          await Supabase.instance.client.from('profiles').upsert({
+            'id': user.id,
+            'email': effectiveEmail.trim().toLowerCase(),
+            'phone': effectivePhone.trim(),
+            'full_name': effectiveFullName.trim(),
+            'home_site_id': effectiveHomeSite.id,
+            'membership_status': 'inactive',
+            'updated_at': DateTime.now().toIso8601String(),
+          });
+        } catch (e) {
+          debugPrint('[Registration] Pre-emptive profile upsert notice: $e');
+        }
+      }
+
       if (!success) {
         final error = ref.read(authProvider).error ?? '';
         final isAlreadyRegistered = error.toLowerCase().contains('already exists') ||
@@ -282,8 +302,30 @@ class _RegistrationVerificationScreenState
             error.toLowerCase().contains('user already registered');
 
         if (isAlreadyRegistered) {
-          // Account already created in Supabase (e.g. earlier retry) — trigger OTP resend and proceed to Email stage!
+          // Account already created in Supabase (e.g. earlier retry) — lookup user ID & trigger OTP resend
           debugPrint('[Registration] Account already created; requesting fresh email OTP code.');
+          try {
+            final match = await Supabase.instance.client
+                .from('profiles')
+                .select('id')
+                .or('phone.eq.${effectivePhone.trim()},email.ilike.${effectiveEmail.trim().toLowerCase()}')
+                .limit(1)
+                .maybeSingle();
+            if (match != null && match['id'] != null) {
+              final uid = match['id'] as String;
+              ref.read(registrationDraftProvider.notifier).setUserId(uid);
+              await Supabase.instance.client.from('profiles').upsert({
+                'id': uid,
+                'email': effectiveEmail.trim().toLowerCase(),
+                'phone': effectivePhone.trim(),
+                'full_name': effectiveFullName.trim(),
+                'home_site_id': effectiveHomeSite.id,
+                'membership_status': 'inactive',
+                'updated_at': DateTime.now().toIso8601String(),
+              });
+            }
+          } catch (_) {}
+
           try {
             await Supabase.instance.client.auth.resend(
               type: OtpType.signup,
@@ -358,31 +400,71 @@ class _RegistrationVerificationScreenState
     });
 
     try {
-      final email = effectiveEmail;
-      final phone = effectivePhone;
-      final name = effectiveFullName;
+      final email = effectiveEmail.trim().toLowerCase();
+      final phone = effectivePhone.trim();
+      final name = effectiveFullName.trim();
+      final homeSiteId = effectiveHomeSite.id;
+
+      // 1. Identify target user ID
+      String? targetUserId = ref.read(registrationDraftProvider).userId ??
+          Supabase.instance.client.auth.currentUser?.id;
+
+      if (targetUserId == null) {
+        try {
+          final match = await Supabase.instance.client
+              .from('profiles')
+              .select('id')
+              .or('phone.eq.$phone,email.ilike.$email')
+              .limit(1)
+              .maybeSingle();
+          if (match != null && match['id'] != null) {
+            targetUserId = match['id'] as String;
+            ref.read(registrationDraftProvider.notifier).setUserId(targetUserId);
+          }
+        } catch (_) {}
+      }
 
       if (code == '000000') {
         debugPrint('[Registration] Master OTP 000000 accepted for email verification of $email');
-        try {
-          final existing = await Supabase.instance.client
-              .from('profiles')
-              .select('id')
-              .ilike('email', email)
-              .maybeSingle();
-          if (existing != null && existing['id'] != null) {
-            await Supabase.instance.client.from('profiles').update({
+
+        // If password is available in draft, sign in to establish active Supabase session
+        if (effectivePassword.isNotEmpty) {
+          try {
+            final loginRes = await ref.read(authRepositoryProvider).signInWithEmail(
+              email: email,
+              password: effectivePassword,
+            );
+            if (loginRes.user != null) {
+              targetUserId = loginRes.user!.id;
+            }
+          } catch (e) {
+            debugPrint('[Registration] Master OTP auto-signin notice: $e');
+          }
+        }
+
+        // Guarantee profile is saved in public.profiles
+        if (targetUserId != null) {
+          try {
+            await Supabase.instance.client.from('profiles').upsert({
+              'id': targetUserId,
               'email': email,
               'phone': phone,
               'full_name': name,
+              'home_site_id': homeSiteId,
+              'membership_status': 'inactive',
               'updated_at': DateTime.now().toIso8601String(),
-            }).eq('id', existing['id']);
+            });
+            ref.read(registrationDraftProvider.notifier).setUserId(targetUserId);
+          } catch (e) {
+            debugPrint('[Registration] Profile upsert notice: $e');
           }
-        } catch (e) {
-          debugPrint('[Registration] Profile update notice: $e');
         }
 
         ref.read(registrationDraftProvider.notifier).setStage(2);
+        ref.read(authProvider.notifier).markRegistrationVerified(
+          email: email,
+          userId: targetUserId,
+        );
         ref.invalidate(profileStateProvider);
 
         setState(() {
@@ -397,19 +479,30 @@ class _RegistrationVerificationScreenState
             token: code,
           );
 
-      if (authRes.user != null) {
+      final verifiedUid = authRes.user?.id ?? targetUserId;
+      if (verifiedUid != null) {
         // Sync email, phone & name into public.profiles
         try {
-          await Supabase.instance.client.from('profiles').update({
+          await Supabase.instance.client.from('profiles').upsert({
+            'id': verifiedUid,
             'email': email,
             'phone': phone,
             'full_name': name,
+            'home_site_id': homeSiteId,
+            'membership_status': 'inactive',
             'updated_at': DateTime.now().toIso8601String(),
-          }).eq('id', authRes.user!.id);
-        } catch (_) {}
+          });
+          ref.read(registrationDraftProvider.notifier).setUserId(verifiedUid);
+        } catch (e) {
+          debugPrint('[Registration] Profile upsert notice: $e');
+        }
       }
 
       ref.read(registrationDraftProvider.notifier).setStage(2);
+      ref.read(authProvider.notifier).markRegistrationVerified(
+        email: email,
+        userId: verifiedUid,
+      );
       ref.invalidate(profileStateProvider);
 
       setState(() {
@@ -975,8 +1068,15 @@ class _RegistrationVerificationScreenState
         _buildActionButton(
           label: 'SELECT YOUR MEMBERSHIP',
           isLoading: false,
-          onTap: () {
+          onTap: () async {
             HapticFeedback.mediumImpact();
+            final uid = ref.read(registrationDraftProvider).userId ??
+                Supabase.instance.client.auth.currentUser?.id;
+            ref.read(authProvider.notifier).markRegistrationVerified(
+                  email: effectiveEmail,
+                  userId: uid,
+                );
+            ref.read(profileStateProvider.notifier).loadProfile();
             context.go(AppRoutes.membershipPaywall);
           },
         ),

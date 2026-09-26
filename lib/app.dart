@@ -183,7 +183,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       // NEVER redirect to the old link-based pendingVerification screen!
       if (isPendingEmail) {
         if (loc == AppRoutes.registrationVerification ||
-            loc == AppRoutes.forgotPassword) {
+            loc == AppRoutes.forgotPassword ||
+            loc == AppRoutes.membershipPaywall) {
           return null;
         }
         return AppRoutes.registrationVerification;
@@ -202,7 +203,8 @@ final routerProvider = Provider<GoRouter>((ref) {
             loc == AppRoutes.splash ||
             loc == AppRoutes.pendingVerification ||
             loc == AppRoutes.forgotPassword ||
-            loc == AppRoutes.registrationVerification;
+            loc == AppRoutes.registrationVerification ||
+            loc == AppRoutes.membershipPaywall;
 
         return isOnAuthRoute ? null : AppRoutes.login;
       }
@@ -211,6 +213,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       // If cold-starting on splash, wait on splash until ready.
       if (!profileState.isReady) {
         if (loc == AppRoutes.splash) return null;
+        if (loc == AppRoutes.membershipPaywall) return null;
         if (loc == AppRoutes.login || loc == AppRoutes.register) {
           // Authenticated user on login/register screen — immediately send to home or paywall
           return (!isMembershipActive || isMembershipExpired)

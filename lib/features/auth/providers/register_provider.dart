@@ -73,6 +73,7 @@ class RegistrationDraft {
   final String password;
   final Branch? homeSite;
   final int stage; // 0: verifyPhone, 1: verifyEmail, 2: completed
+  final String? userId;
 
   const RegistrationDraft({
     this.fullName = '',
@@ -81,6 +82,7 @@ class RegistrationDraft {
     this.password = '',
     this.homeSite,
     this.stage = 0,
+    this.userId,
   });
 
   RegistrationDraft copyWith({
@@ -90,6 +92,7 @@ class RegistrationDraft {
     String? password,
     Branch? homeSite,
     int? stage,
+    String? userId,
   }) {
     return RegistrationDraft(
       fullName: fullName ?? this.fullName,
@@ -98,6 +101,7 @@ class RegistrationDraft {
       password: password ?? this.password,
       homeSite: homeSite ?? this.homeSite,
       stage: stage ?? this.stage,
+      userId: userId ?? this.userId,
     );
   }
 }
@@ -112,6 +116,7 @@ class RegistrationDraftNotifier extends StateNotifier<RegistrationDraft> {
     required String password,
     required Branch homeSite,
     int stage = 0,
+    String? userId,
   }) {
     state = RegistrationDraft(
       fullName: fullName,
@@ -120,11 +125,16 @@ class RegistrationDraftNotifier extends StateNotifier<RegistrationDraft> {
       password: password,
       homeSite: homeSite,
       stage: stage,
+      userId: userId,
     );
   }
 
   void setStage(int stage) {
     state = state.copyWith(stage: stage);
+  }
+
+  void setUserId(String userId) {
+    state = state.copyWith(userId: userId);
   }
 
   void clear() {
