@@ -514,19 +514,19 @@ class AuthRepository {
         unawaited(_bindDevice(authResponse.user!.id));
       }
     } catch (e) {
-      debugPrint('[TigerBay Auth] Native Google sign-in note: $e');
-      if (e is AuthException && e.message.toLowerCase().contains('cancel')) {
+      debugPrint('[TigerBay Auth] Native Google sign-in error: $e');
+      final errStr = e.toString();
+      if (errStr.toLowerCase().contains('cancel') ||
+          errStr.toLowerCase().contains('abort') ||
+          (e is AuthException && e.message.toLowerCase().contains('cancel'))) {
         return;
       }
-      // If native fails (e.g. SHA-1 mismatch or device without Play Services),
-      // fallback to inAppBrowserView OAuth so it stays inside an in-app sheet
-      // rather than kicking out to external Chrome.
-      final appScheme = EnvConfig.appScheme;
-      await _client.auth.signInWithOAuth(
-        OAuthProvider.google,
-        redirectTo: '$appScheme://login-callback',
-        authScreenLaunchMode: LaunchMode.inAppBrowserView,
-      );
+      if (errStr.contains('10') || errStr.contains('12500')) {
+        throw const AuthException(
+          'Google Sign-In configuration error (ApiException 10): The release SHA-1 fingerprint must be added to Google Cloud Console under Android OAuth Client ID.',
+        );
+      }
+      throw AuthException('Google Sign-In failed: $e');
     }
   }
 
