@@ -13,6 +13,8 @@ import '../../../data/models/branch_model.dart';
 import '../../../services/twilio_notification_service.dart';
 import '../../../shared/widgets/apple_touch_feedback.dart';
 import '../../../shared/widgets/safe_network_image.dart';
+import '../../../core/utils/phone_number_helper.dart';
+import '../../../shared/widgets/phone_input_field.dart';
 import '../../home/providers/home_provider.dart';
 import '../providers/profile_provider.dart';
 
@@ -87,7 +89,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       _initialized = true;
       _nameController.text = resolvedName;
       _emailController.text = resolvedEmail;
-      _phoneController.text = profile?.phone ?? '';
+      _phoneController.text = PhoneNumberHelper.formatDisplay(profile?.phone);
       _selectedGender = profile?.gender;
       _selectedHomeSiteId = profile?.homeSiteId;
       _selectedDob =
@@ -305,13 +307,17 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   // ── Verified Mobile Number Change Flow (Twilio SMS Verify) ───────────────
   void _showChangePhoneSheet() {
     HapticFeedback.selectionClick();
-    final newPhoneController = TextEditingController(text: '+44 ');
+    final (initialCountry, initialDigits) =
+        PhoneNumberHelper.parseE164(_phoneController.text);
+    CountryCode selectedCountry = initialCountry;
+    final nationalPhoneController = TextEditingController(text: initialDigits);
     final otpController = TextEditingController();
     int step = 0;
     bool isLoading = false;
     String? errorMessage;
     int cooldownSeconds = 60;
     Timer? resendTimer;
+    String cleanPhone = '';
 
     showModalBottomSheet<void>(
       context: context,
@@ -337,12 +343,18 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
           }
 
           Future<void> sendOtp() async {
-            final rawPhone = newPhoneController.text.trim();
-            final cleanPhone = rawPhone.replaceAll(RegExp(r'\s+'), '');
-            if (cleanPhone.length < 10) {
-              setModalState(() => errorMessage = 'Please enter a valid mobile number');
+            final validationError = PhoneNumberHelper.validate(
+              country: selectedCountry,
+              nationalInput: nationalPhoneController.text,
+            );
+            if (validationError != null) {
+              setModalState(() => errorMessage = validationError);
               return;
             }
+            cleanPhone = PhoneNumberHelper.formatToE164(
+              dialCode: selectedCountry.dialCode,
+              nationalInput: nationalPhoneController.text,
+            );
             setModalState(() {
               isLoading = true;
               errorMessage = null;
@@ -376,7 +388,10 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               setModalState(() => errorMessage = 'Enter the complete 6-digit code');
               return;
             }
-            final cleanPhone = newPhoneController.text.trim().replaceAll(RegExp(r'\s+'), '');
+            cleanPhone = PhoneNumberHelper.formatToE164(
+              dialCode: selectedCountry.dialCode,
+              nationalInput: nationalPhoneController.text,
+            );
             setModalState(() {
               isLoading = true;
               errorMessage = null;
@@ -397,7 +412,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                       homeSiteId: _selectedHomeSiteId,
                     );
                 if (!mounted) return;
-                setState(() => _phoneController.text = cleanPhone);
+                setState(() => _phoneController.text = PhoneNumberHelper.formatDisplay(cleanPhone));
                 HapticFeedback.heavyImpact();
                 navigator.pop();
                 messenger.showSnackBar(
@@ -480,7 +495,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                   Text(
                     step == 0
                         ? 'We will send a 6-digit SMS verification code to verify your new mobile number.'
-                        : 'Enter the 6-digit SMS code dispatched to ${newPhoneController.text.trim()}.',
+                        : 'Enter the 6-digit SMS code dispatched to ${PhoneNumberHelper.formatDisplay(cleanPhone)}.',
                     style: AppTypography.footnote.copyWith(color: AppColors.textSecondary),
                   ),
                   const SizedBox(height: 20),
@@ -508,29 +523,12 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                     const SizedBox(height: 14),
                   ],
                   if (step == 0) ...[
-                    Container(
-                      decoration: BoxDecoration(
-                        color: AppColors.brandBlack,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: AppColors.glassBorder, width: 0.8),
-                      ),
-                      child: TextField(
-                        controller: newPhoneController,
-                        keyboardType: TextInputType.phone,
-                        style: AppTypography.body.copyWith(
-                          color: AppColors.textPrimary,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: '+44 7700 900000',
-                          hintStyle: AppTypography.body.copyWith(color: AppColors.textHint),
-                          prefixIcon: const Icon(CupertinoIcons.phone_fill,
-                              color: AppColors.gold, size: 18),
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                        ),
-                      ),
+                    PhoneInputField(
+                      controller: nationalPhoneController,
+                      selectedCountry: selectedCountry,
+                      onCountryChanged: (c) {
+                        setModalState(() => selectedCountry = c);
+                      },
                     ),
                     const SizedBox(height: 20),
                     AppleTouchFeedback(

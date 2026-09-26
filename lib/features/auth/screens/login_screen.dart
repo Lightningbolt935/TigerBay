@@ -15,6 +15,8 @@ import 'package:tigerbay_app/features/auth/providers/profile_state_provider.dart
 import 'package:tigerbay_app/features/auth/providers/register_provider.dart';
 import 'package:tigerbay_app/features/auth/widgets/branch_selector_widget.dart';
 import 'package:tigerbay_app/shared/widgets/apple_touch_feedback.dart';
+import 'package:tigerbay_app/core/utils/phone_number_helper.dart';
+import 'package:tigerbay_app/shared/widgets/phone_input_field.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// Combined Login + Registration screen for TigerBay International.
@@ -60,7 +62,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   final _registerFullNameController = TextEditingController();
   final _registerEmailController = TextEditingController();
   final _registerPhoneController = TextEditingController();
-  String _registerCountryCode = '+44';
+  CountryCode _registerCountry = PhoneNumberHelper.defaultCountry;
   final _registerPasswordController = TextEditingController();
   final _registerConfirmPasswordController = TextEditingController();
   bool _registerPasswordObscured = true;
@@ -273,12 +275,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     }
 
     final rawPhone = _registerPhoneController.text.trim();
-    final cleanDigits = rawPhone.replaceAll(RegExp(r'\D'), '');
-    if (cleanDigits.length < 7) {
-      _showErrorSnack('Please enter a valid mobile phone number.');
+    final phoneError = PhoneNumberHelper.validate(
+      country: _registerCountry,
+      nationalInput: rawPhone,
+    );
+    if (phoneError != null) {
+      _showErrorSnack(phoneError);
       return;
     }
-    final formattedPhone = '$_registerCountryCode$cleanDigits';
+    final formattedPhone = PhoneNumberHelper.formatToE164(
+      dialCode: _registerCountry.dialCode,
+      nationalInput: rawPhone,
+    );
     final email = _registerEmailController.text.trim().toLowerCase();
     final fullName = _registerFullNameController.text.trim();
     final password = _registerPasswordController.text;
@@ -1103,71 +1111,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             // ── Phone Number ────────────────────────────────────────────────────
             _buildFieldLabel('MOBILE PHONE NUMBER'),
             const SizedBox(height: 8),
-            Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF16161A),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: _registerSubmitted &&
-                          _registerPhoneController.text.trim().length < 7
-                      ? AppColors.error
-                      : const Color(0xFF2C2C35),
-                ),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              child: Row(
-                children: [
-                  DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: _registerCountryCode,
-                      dropdownColor: const Color(0xFF222228),
-                      icon: const Icon(CupertinoIcons.chevron_down,
-                          size: 14, color: AppColors.champagneGold),
-                      style: GoogleFonts.poppins(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      items: const [
-                        DropdownMenuItem(value: '+44', child: Text('🇬🇧 +44')),
-                        DropdownMenuItem(value: '+971', child: Text('🇦🇪 +971')),
-                        DropdownMenuItem(value: '+1', child: Text('🇺🇸 +1')),
-                        DropdownMenuItem(value: '+91', child: Text('🇮🇳 +91')),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) setState(() => _registerCountryCode = val);
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(width: 1, height: 24, color: const Color(0xFF33333D)),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _registerPhoneController,
-                      keyboardType: TextInputType.phone,
-                      autofillHints: const [AutofillHints.telephoneNumber],
-                      style: GoogleFonts.poppins(color: Colors.white, fontSize: 14),
-                      decoration: const InputDecoration(
-                        hintText: '7123 456789',
-                        hintStyle: TextStyle(color: Color(0xFF6E6E78)),
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      validator: (v) {
-                        if (v == null || v.trim().isEmpty) {
-                          return 'Phone number is required';
-                        }
-                        final digits = v.replaceAll(RegExp(r'\D'), '');
-                        if (digits.length < 7) {
-                          return 'Enter a valid phone number';
-                        }
-                        return null;
-                      },
-                    ),
-                  ),
-                ],
-              ),
+            PhoneInputField(
+              controller: _registerPhoneController,
+              selectedCountry: _registerCountry,
+              hasError: _registerSubmitted &&
+                  PhoneNumberHelper.validate(
+                        country: _registerCountry,
+                        nationalInput: _registerPhoneController.text,
+                      ) !=
+                      null,
+              onCountryChanged: (chosen) {
+                setState(() => _registerCountry = chosen);
+              },
             ),
 
             const SizedBox(height: 18),

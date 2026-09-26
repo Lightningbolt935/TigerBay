@@ -13,6 +13,7 @@ import 'package:tigerbay_app/features/auth/providers/auth_provider.dart';
 import 'package:tigerbay_app/features/auth/providers/profile_state_provider.dart';
 import 'package:tigerbay_app/features/auth/providers/register_provider.dart';
 import 'package:tigerbay_app/services/twilio_notification_service.dart';
+import 'package:tigerbay_app/core/utils/phone_number_helper.dart';
 
 enum _RegStage {
   verifyPhone,
@@ -784,7 +785,7 @@ class _RegistrationVerificationScreenState
         ),
         const SizedBox(height: 8),
         Text(
-          'We sent a 6-digit SMS verification code to\n$effectivePhone',
+          'We sent a 6-digit SMS verification code to\n${PhoneNumberHelper.formatDisplay(effectivePhone)}',
           style: GoogleFonts.poppins(
             fontSize: 13,
             color: AppColors.textSecondary,
@@ -1057,7 +1058,7 @@ class _RegistrationVerificationScreenState
               _buildSummaryRow(
                 icon: CupertinoIcons.phone_fill,
                 label: 'Mobile Phone',
-                value: effectivePhone,
+                value: PhoneNumberHelper.formatDisplay(effectivePhone),
                 isVerified: true,
               ),
               const Divider(color: Color(0xFF24242C), height: 20),
