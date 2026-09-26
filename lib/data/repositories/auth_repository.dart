@@ -290,15 +290,35 @@ class AuthRepository {
     required String email,
     required String token,
   }) async {
-    final response = await _client.auth.verifyOTP(
-      email: email.trim().toLowerCase(),
-      token: token.trim(),
-      type: OtpType.signup,
-    );
-    if (response.user != null) {
-      unawaited(_bindDevice(response.user!.id));
+    try {
+      final response = await _client.auth.verifyOTP(
+        email: email.trim().toLowerCase(),
+        token: token.trim(),
+        type: OtpType.signup,
+      );
+      if (response.user != null) {
+        unawaited(_bindDevice(response.user!.id));
+      }
+      return response;
+    } on AuthException catch (e) {
+      final msg = e.message.toLowerCase();
+      if (msg.contains('expired') ||
+          msg.contains('invalid') ||
+          msg.contains('not found')) {
+        try {
+          final fallbackRes = await _client.auth.verifyOTP(
+            email: email.trim().toLowerCase(),
+            token: token.trim(),
+            type: OtpType.email,
+          );
+          if (fallbackRes.user != null) {
+            unawaited(_bindDevice(fallbackRes.user!.id));
+          }
+          return fallbackRes;
+        } catch (_) {}
+      }
+      rethrow;
     }
-    return response;
   }
 
   /// Verifies the 6-digit recovery code sent to user email for password reset.

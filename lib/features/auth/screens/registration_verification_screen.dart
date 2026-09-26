@@ -563,31 +563,29 @@ class _RegistrationVerificationScreenState
     }
   }
 
+  Future<void> _handleBackNavigation() async {
+    HapticFeedback.lightImpact();
+    if (_stage == _RegStage.verifyEmail) {
+      // Step back from email OTP to phone OTP stage
+      setState(() => _stage = _RegStage.verifyPhone);
+    } else {
+      // Aborting verification or leaving "Account Verified!" to sign in later.
+      // Must sign out cleanly so GoRouter redirect does not bounce an un-activated session to the membership paywall.
+      await ref.read(authProvider.notifier).signOut();
+      ref.read(registrationDraftProvider.notifier).clear();
+      if (mounted) {
+        context.go(AppRoutes.login);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Listen for email link confirmation (if user tapped magic link in email)
-    ref.listen<AuthState>(authProvider, (prev, next) {
-      if (next.status == AuthStatus.authenticated && mounted) {
-        HapticFeedback.mediumImpact();
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            setState(() => _stage = _RegStage.completed);
-          }
-        });
-      }
-    });
-
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
-        HapticFeedback.lightImpact();
-        if (_stage == _RegStage.verifyEmail) {
-          setState(() => _stage = _RegStage.verifyPhone);
-        } else {
-          ref.read(registrationDraftProvider.notifier).clear();
-          context.go(AppRoutes.login);
-        }
+        _handleBackNavigation();
       },
       child: Scaffold(
         backgroundColor: const Color(0xFF08080A),
@@ -597,15 +595,7 @@ class _RegistrationVerificationScreenState
           leading: IconButton(
             icon: const Icon(CupertinoIcons.chevron_back,
                 color: Colors.white, size: 22),
-            onPressed: () {
-              HapticFeedback.lightImpact();
-              if (_stage == _RegStage.verifyEmail) {
-                setState(() => _stage = _RegStage.verifyPhone);
-              } else {
-                ref.read(registrationDraftProvider.notifier).clear();
-                context.go(AppRoutes.login);
-              }
-            },
+            onPressed: _handleBackNavigation,
           ),
           title: Text(
             'Account Verification',
@@ -923,9 +913,13 @@ class _RegistrationVerificationScreenState
               ),
             ),
             GestureDetector(
-              onTap: () {
+              onTap: () async {
                 HapticFeedback.lightImpact();
-                context.pop();
+                await ref.read(authProvider.notifier).signOut();
+                ref.read(registrationDraftProvider.notifier).clear();
+                if (mounted) {
+                  context.go(AppRoutes.login);
+                }
               },
               child: Text(
                 'Change',
