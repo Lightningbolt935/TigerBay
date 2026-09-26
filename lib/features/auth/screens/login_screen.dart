@@ -639,7 +639,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   Widget build(BuildContext context) {
     ref.listen<AuthState>(authProvider, (previous, next) {
       if (next.error != null && mounted) {
-        _showErrorSnack(next.error!);
+        final err = next.error!.toLowerCase();
+        final isUnconfirmed = err.contains('confirm your email') ||
+            err.contains('email not confirmed') ||
+            err.contains('email_not_confirmed');
+        if (!isUnconfirmed) {
+          _showErrorSnack(next.error!);
+        }
       }
       if (next.status == AuthStatus.authenticated && mounted) {
         context.go(AppRoutes.home);
