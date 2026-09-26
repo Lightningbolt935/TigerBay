@@ -14,6 +14,7 @@ import 'package:tigerbay_app/features/auth/providers/profile_state_provider.dart
 import 'package:tigerbay_app/features/auth/providers/register_provider.dart';
 import 'package:tigerbay_app/services/twilio_notification_service.dart';
 import 'package:tigerbay_app/core/utils/phone_number_helper.dart';
+import 'package:tigerbay_app/core/utils/error_sanitizer.dart';
 
 enum _RegStage {
   verifyPhone,
@@ -213,7 +214,7 @@ class _RegistrationVerificationScreenState
           setState(() {
             _isLoading = false;
             _errorMessage =
-                'Twilio Sandbox: Recipient number is unverified in Twilio Console. Enter test code 000000 to verify.';
+                'SMS service is in test mode. Please enter verification code 000000 to proceed.';
           });
           _startCooldown();
           return;
@@ -229,7 +230,7 @@ class _RegistrationVerificationScreenState
     } catch (e) {
       setState(() {
         _isLoading = false;
-        _errorMessage = e.toString().replaceFirst('Exception: ', '');
+        _errorMessage = ErrorSanitizer.format(e);
       });
     }
   }
@@ -271,7 +272,7 @@ class _RegistrationVerificationScreenState
     } catch (e) {
       setState(() {
         _isLoading = false;
-        _errorMessage = 'Phone verification error: $e';
+        _errorMessage = ErrorSanitizer.format(e);
       });
     }
   }
@@ -367,7 +368,7 @@ class _RegistrationVerificationScreenState
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _errorMessage = e.toString().replaceFirst('Exception: ', '');
+        _errorMessage = ErrorSanitizer.format(e);
       });
     }
   }
@@ -397,7 +398,7 @@ class _RegistrationVerificationScreenState
     } catch (e) {
       setState(() {
         _isLoading = false;
-        _errorMessage = 'Could not resend email: $e';
+        _errorMessage = ErrorSanitizer.format(e);
       });
     }
   }
@@ -527,12 +528,12 @@ class _RegistrationVerificationScreenState
     } on AuthException catch (e) {
       setState(() {
         _isLoading = false;
-        _errorMessage = e.message;
+        _errorMessage = ErrorSanitizer.format(e.message);
       });
     } catch (e) {
       setState(() {
         _isLoading = false;
-        _errorMessage = 'Email verification error: $e';
+        _errorMessage = ErrorSanitizer.format(e);
       });
     }
   }

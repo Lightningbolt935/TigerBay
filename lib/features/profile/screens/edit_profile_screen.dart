@@ -14,6 +14,7 @@ import '../../../services/twilio_notification_service.dart';
 import '../../../shared/widgets/apple_touch_feedback.dart';
 import '../../../shared/widgets/safe_network_image.dart';
 import '../../../core/utils/phone_number_helper.dart';
+import '../../../core/utils/error_sanitizer.dart';
 import '../../../shared/widgets/phone_input_field.dart';
 import '../../home/providers/home_provider.dart';
 import '../providers/profile_provider.dart';
@@ -382,19 +383,19 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                   step = 1;
                   isLoading = false;
                   errorMessage =
-                      'Twilio Sandbox: Recipient number is unverified in Twilio Console. Use test code 000000 to verify.';
+                      'SMS service is in test mode. Please enter verification code 000000 to proceed.';
                 });
                 startCooldown();
               } else {
                 setModalState(() {
                   isLoading = false;
-                  errorMessage = res['error']?.toString() ?? 'Failed to send SMS code';
+                  errorMessage = ErrorSanitizer.format(res['error']);
                 });
               }
             } catch (e) {
               setModalState(() {
                 isLoading = false;
-                errorMessage = 'Error sending code: $e';
+                errorMessage = ErrorSanitizer.format(e);
               });
             }
           }
@@ -462,7 +463,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
             } catch (e) {
               setModalState(() {
                 isLoading = false;
-                errorMessage = 'Verification error: $e';
+                errorMessage = ErrorSanitizer.format(e);
               });
             }
           }

@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide Headers;
 import '../core/config/env_config.dart';
+import '../core/utils/error_sanitizer.dart';
 
 /// Service for managing SMS notifications, booking alerts, and OTP verification
 /// using Twilio REST and Twilio Verify APIs.
@@ -203,12 +204,12 @@ class TwilioNotificationService {
           errStr.contains('caller id');
       return {
         'status': 'error',
-        'error': errorMsg ?? 'Failed to send verification code',
+        'error': ErrorSanitizer.format(errorMsg ?? 'Failed to send verification code'),
         'code': errorCode,
         'isTrialRestriction': isTrial,
       };
     } catch (e) {
-      return {'status': 'error', 'error': e.toString()};
+      return {'status': 'error', 'error': ErrorSanitizer.format(e)};
     }
   }
 

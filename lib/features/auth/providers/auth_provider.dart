@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:tigerbay_app/data/models/branch_model.dart';
 import 'package:tigerbay_app/data/models/user_model.dart';
 import 'package:tigerbay_app/data/repositories/auth_repository.dart';
+import 'package:tigerbay_app/core/utils/error_sanitizer.dart';
 
 // ── Supabase client singleton ──────────────────────────────────────────────
 
@@ -242,7 +243,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
-        error: e.toString(),
+        error: ErrorSanitizer.format(e),
       );
       return false;
     }
@@ -294,7 +295,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
-        error: e.toString(),
+        error: ErrorSanitizer.format(e),
       );
       return false;
     }
@@ -309,7 +310,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } on AuthException catch (e) {
       state = state.copyWith(error: _localizeAuthError(e.message));
     } catch (e) {
-      state = state.copyWith(error: e.toString());
+      state = state.copyWith(error: ErrorSanitizer.format(e));
     } finally {
       state = state.copyWith(isLoading: false);
     }
@@ -343,7 +344,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       return false;
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      state = state.copyWith(isLoading: false, error: ErrorSanitizer.format(e));
       return false;
     }
   }
@@ -361,7 +362,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } on AuthException catch (e) {
       state = state.copyWith(error: _localizeAuthError(e.message));
     } catch (e) {
-      state = state.copyWith(error: e.toString());
+      state = state.copyWith(error: ErrorSanitizer.format(e));
     } finally {
       state = state.copyWith(isLoading: false);
     }
@@ -378,7 +379,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } on AuthException catch (e) {
       state = state.copyWith(error: _localizeAuthError(e.message));
     } catch (e) {
-      state = state.copyWith(error: e.toString());
+      state = state.copyWith(error: ErrorSanitizer.format(e));
     } finally {
       state = state.copyWith(isLoading: false);
     }
@@ -395,7 +396,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } on AuthException catch (e) {
       state = state.copyWith(error: _localizeAuthError(e.message));
     } catch (e) {
-      state = state.copyWith(error: e.toString());
+      state = state.copyWith(error: ErrorSanitizer.format(e));
     } finally {
       state = state.copyWith(isLoading: false);
     }
@@ -416,31 +417,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   // ── Error localization ──────────────────────────────────────────────────────
 
   String _localizeAuthError(String rawMessage) {
-    final m = rawMessage.toLowerCase();
-    if (m.contains('invalid login credentials') ||
-        m.contains('invalid_credentials')) {
-      return 'Incorrect email or password. Please try again.';
-    }
-    if (m.contains('email already registered') ||
-        m.contains('user_already_exists')) {
-      return 'This email is already registered. Try signing in instead.';
-    }
-    if (m.contains('email not confirmed') ||
-        m.contains('email_not_confirmed')) {
-      return 'Please confirm your email before signing in. '
-          'Check your inbox for the verification link.';
-    }
-    if (m.contains('rate limit') || m.contains('too many requests')) {
-      return 'Too many attempts. Please wait a moment and try again.';
-    }
-    if (m.contains('password should be at least') ||
-        m.contains('weak_password')) {
-      return 'Password must be at least 6 characters.';
-    }
-    if (m.contains('network') || m.contains('socket')) {
-      return 'No internet connection. Please check your network.';
-    }
-    return rawMessage;
+    return ErrorSanitizer.format(rawMessage);
   }
 
   /// Checks whether the user has confirmed their email address.
