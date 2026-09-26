@@ -95,6 +95,16 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       _selectedHomeSiteId = profile?.homeSiteId;
       _selectedDob =
           profile?.dob != null ? DateTime.tryParse(profile!.dob!) : null;
+
+      _selectedDiningPrefs.clear();
+      if (profile?.diningPreferences != null && profile!.diningPreferences.isNotEmpty) {
+        _selectedDiningPrefs.addAll(profile.diningPreferences);
+      } else {
+        final metaPrefs = authUser?.userMetadata?['dining_preferences'];
+        if (metaPrefs is List) {
+          _selectedDiningPrefs.addAll(metaPrefs.map((e) => e.toString().trim()).where((e) => e.isNotEmpty));
+        }
+      }
     }
   }
 
@@ -1040,6 +1050,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
           gender: _selectedGender,
           dob: _selectedDob,
           homeSiteId: _selectedHomeSiteId,
+          diningPreferences: _selectedDiningPrefs.toList(),
         );
 
     if (success && mounted) {

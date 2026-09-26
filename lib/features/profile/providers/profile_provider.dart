@@ -63,6 +63,13 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
       final authAvatar = authUser?.userMetadata?['avatar_url'] as String? ??
           authUser?.userMetadata?['picture'] as String?;
 
+      final authPrefs = authUser?.userMetadata?['dining_preferences'];
+      if (profile.diningPreferences.isEmpty && authPrefs is List && authPrefs.isNotEmpty) {
+        profile = profile.copyWith(
+          diningPreferences: authPrefs.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList(),
+        );
+      }
+
       final Map<String, dynamic> backfill = {};
       if ((profile.email == null || profile.email!.isEmpty) && authEmail != null && authEmail.isNotEmpty) {
         profile = profile.copyWith(email: authEmail);
@@ -98,9 +105,22 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
     String? gender,
     DateTime? dob,
     int? homeSiteId,
+    List<String>? diningPreferences,
   }) async {
     state = state.copyWith(isSaving: true, clearError: true, savedSuccessfully: false);
     try {
+      // 1. Sync dining preferences to Auth User Metadata (always reliable)
+      if (diningPreferences != null) {
+        try {
+          await _supabase.auth.updateUser(
+            UserAttributes(data: {'dining_preferences': diningPreferences}),
+          );
+        } catch (authErr) {
+          debugPrint('[ProfileProvider] auth metadata update notice: $authErr');
+        }
+      }
+
+      // 2. Prepare public.profiles update map
       final updateMap = <String, dynamic>{
         'full_name': fullName,
         'email': email,
@@ -113,15 +133,36 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
         updateMap['dob'] = dob.toIso8601String().split('T').first;
       }
 
-      final data = await _supabase
-          .from('profiles')
-          .update(updateMap)
-          .eq('id', _userId)
-          .select()
-          .single();
+      // 3. Attempt update on public.profiles (gracefully handles column absence)
+      Map<String, dynamic> data;
+      try {
+        final mapWithPrefs = Map<String, dynamic>.from(updateMap);
+        if (diningPreferences != null) {
+          mapWithPrefs['dining_preferences'] = diningPreferences;
+        }
+        data = await _supabase
+            .from('profiles')
+            .update(mapWithPrefs)
+            .eq('id', _userId)
+            .select()
+            .single();
+      } catch (dbErr) {
+        debugPrint('[ProfileProvider] Notice: saving without dining_preferences column in DB: $dbErr');
+        data = await _supabase
+            .from('profiles')
+            .update(updateMap)
+            .eq('id', _userId)
+            .select()
+            .single();
+      }
+
+      var updatedProfile = UserProfile.fromMap(data);
+      if (diningPreferences != null) {
+        updatedProfile = updatedProfile.copyWith(diningPreferences: diningPreferences);
+      }
 
       state = state.copyWith(
-        profile: UserProfile.fromMap(data),
+        profile: updatedProfile,
         isSaving: false,
         savedSuccessfully: true,
       );

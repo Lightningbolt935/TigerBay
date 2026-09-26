@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 /// ═══════════════════════════════════════════════════════════════════════════
 /// TigerBay International — UserProfile Model
 /// ═══════════════════════════════════════════════════════════════════════════
@@ -18,6 +20,7 @@ class UserProfile {
   final String membershipStatus;
   final int stripsBalance;
   final String? memberCode;
+  final List<String> diningPreferences;
   final DateTime? membershipExpiresAt;
   final DateTime? updatedAt;
 
@@ -35,6 +38,7 @@ class UserProfile {
     this.membershipStatus = 'inactive',
     this.stripsBalance = 0,
     this.memberCode,
+    this.diningPreferences = const [],
     this.membershipExpiresAt,
     this.updatedAt,
   });
@@ -109,6 +113,21 @@ class UserProfile {
       }
     }
 
+    // Safely parse dining preferences (Halal, Vegetarian, Nut Allergy, etc.)
+    List<String> diningPrefs = const [];
+    final rawPrefs = map['dining_preferences'] ??
+        map['raw_user_meta_data']?['dining_preferences'];
+    if (rawPrefs is List) {
+      diningPrefs = rawPrefs.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+    } else if (rawPrefs is String && rawPrefs.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(rawPrefs);
+        if (decoded is List) {
+          diningPrefs = decoded.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+        }
+      } catch (_) {}
+    }
+
     return UserProfile(
       id: map['id'] as String? ?? '',
       email: map['email'] as String?,
@@ -124,6 +143,7 @@ class UserProfile {
           (map['membership_status'] as String?) ?? 'inactive',
       stripsBalance: _safeInt(map['strips_balance']) ?? 0,
       memberCode: map['member_code']?.toString(),
+      diningPreferences: diningPrefs,
       membershipExpiresAt: map['membership_expires_at'] != null
           ? DateTime.tryParse(map['membership_expires_at'].toString())
           : null,
@@ -148,6 +168,7 @@ class UserProfile {
         'membership_status': membershipStatus,
         'strips_balance': stripsBalance,
         if (memberCode != null) 'member_code': memberCode,
+        if (diningPreferences.isNotEmpty) 'dining_preferences': diningPreferences,
         'membership_expires_at': membershipExpiresAt?.toIso8601String(),
         'updated_at': updatedAt?.toIso8601String(),
       };
@@ -165,6 +186,7 @@ class UserProfile {
     String? membershipStatus,
     int? stripsBalance,
     String? memberCode,
+    List<String>? diningPreferences,
     DateTime? membershipExpiresAt,
   }) {
     return UserProfile(
@@ -181,6 +203,7 @@ class UserProfile {
       membershipStatus: membershipStatus ?? this.membershipStatus,
       stripsBalance: stripsBalance ?? this.stripsBalance,
       memberCode: memberCode ?? this.memberCode,
+      diningPreferences: diningPreferences ?? this.diningPreferences,
       membershipExpiresAt: membershipExpiresAt ?? this.membershipExpiresAt,
       updatedAt: updatedAt,
     );

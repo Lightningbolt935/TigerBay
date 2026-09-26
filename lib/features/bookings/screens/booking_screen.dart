@@ -40,12 +40,17 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
     }
   }
 
-  /// Injects customer name, email, and phone into the Collins/DMN form.
+  /// Injects customer name, email, phone, and dining preferences into the Collins/DMN form.
   Future<void> _injectUserDetails({
     required String name,
     required String email,
     required String phone,
+    List<String> diningPreferences = const [],
   }) async {
+    final prefsText = diningPreferences.isNotEmpty
+        ? 'Special Requests / Dietary: ${diningPreferences.join(', ')}'
+        : '';
+
     final script = '''
       (function() {
         const nameField = document.querySelector('input[name="name"], input[placeholder*="name" i], input[id*="name" i]');
@@ -54,6 +59,18 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
         if (nameField && !nameField.value) nameField.value = ${jsonEncode(name)};
         if (emailField && !emailField.value) emailField.value = ${jsonEncode(email)};
         if (phoneField && !phoneField.value) phoneField.value = ${jsonEncode(phone)};
+
+        const prefs = ${jsonEncode(prefsText)};
+        if (prefs && prefs.length > 0) {
+          const notesFields = document.querySelectorAll('textarea[name*="note" i], textarea[name*="request" i], textarea[name*="comment" i], textarea[name*="special" i], textarea[name*="diet" i], textarea[placeholder*="request" i], textarea[placeholder*="diet" i], textarea[placeholder*="note" i], textarea[id*="note" i], textarea[id*="request" i], textarea[id*="comment" i], textarea[id*="special" i]');
+          notesFields.forEach(function(field) {
+            if (!field.value || field.value.trim() === '') {
+              field.value = prefs;
+            } else if (!field.value.includes(prefs)) {
+              field.value = field.value + ' | ' + prefs;
+            }
+          });
+        }
       })();
     ''';
     try {
@@ -191,6 +208,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                   name: profile.fullName ?? '',
                   email: profile.email ?? '',
                   phone: profile.phone ?? '',
+                  diningPreferences: profile.diningPreferences,
                 );
               }
             }

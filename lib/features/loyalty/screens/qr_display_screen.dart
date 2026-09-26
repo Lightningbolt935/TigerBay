@@ -50,6 +50,7 @@ class _QrDisplayScreenState extends ConsumerState<QrDisplayScreen> {
       memberCode: memberCode,
       deviceId: 'device',
       secret: secret,
+      diningPreferences: profile?.diningPreferences ?? const [],
     );
     _qrTimer!.start();
     _sub = _qrTimer!.stream.listen((p) {

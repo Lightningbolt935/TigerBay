@@ -12,6 +12,7 @@ class QrTimer {
   final String userId;
   final String? memberCode;
   final String deviceId;
+  final List<String> diningPreferences;
   final String _secret; // from env / Supabase edge function secret
 
   late StreamController<QrPayload> _controller;
@@ -27,6 +28,7 @@ class QrTimer {
     this.memberCode,
     required this.deviceId,
     required String secret,
+    this.diningPreferences = const [],
   }) : _secret = secret;
 
   void start() {
@@ -72,6 +74,7 @@ class QrTimer {
       'w': window,
       'n': nonce,
       'sig': signature,
+      if (diningPreferences.isNotEmpty) 'prefs': diningPreferences,
     });
 
     _controller.add(QrPayload(
