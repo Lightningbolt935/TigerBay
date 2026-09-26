@@ -362,7 +362,9 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
             try {
               final twilio = TwilioNotificationService();
               final res = await twilio.sendVerificationCode(to: cleanPhone, channel: 'sms');
-              if (res['success'] == true) {
+              if (res['success'] == true ||
+                  (res['status'] != 'error' && res['status'] == 'pending') ||
+                  res['sid'] != null) {
                 setModalState(() {
                   step = 1;
                   isLoading = false;

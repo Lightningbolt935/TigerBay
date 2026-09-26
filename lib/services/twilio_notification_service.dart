@@ -152,6 +152,7 @@ class TwilioNotificationService {
         if (data is Map && (data['status'] == 'pending' || data['sid'] != null)) {
           debugPrint('[Twilio] OTP sent via edge function: ${data['sid']}');
           return {
+            'success': true,
             'status': 'pending',
             'sid': data['sid'],
             'to': to,
@@ -185,6 +186,7 @@ class TwilioNotificationService {
 
       final data = response.data ?? {};
       return {
+        'success': true,
         'status': 'pending',
         'sid': data['sid'],
         'to': data['to'],
