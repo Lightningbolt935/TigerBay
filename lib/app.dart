@@ -303,29 +303,39 @@ final routerProvider = Provider<GoRouter>((ref) {
           final extraMap = state.extra is Map ? (state.extra as Map) : null;
           final draft = ref.read(registrationDraftProvider);
 
-          final rawFullName = extraMap?['fullName'] as String?;
+          final rawFullName = extraMap?['fullName']?.toString();
           final fullName = (rawFullName != null && rawFullName.trim().isNotEmpty)
               ? rawFullName.trim()
               : draft.fullName;
 
-          final rawEmail = extraMap?['email'] as String?;
+          final rawEmail = extraMap?['email']?.toString();
           final email = (rawEmail != null && rawEmail.trim().isNotEmpty)
               ? rawEmail.trim()
               : draft.email;
 
-          final rawPhone = extraMap?['phone'] as String?;
+          final rawPhone = extraMap?['phone']?.toString();
           final phone = (rawPhone != null && rawPhone.trim().isNotEmpty)
               ? rawPhone.trim()
               : draft.phone;
 
-          final rawPassword = extraMap?['password'] as String?;
+          final rawPassword = extraMap?['password']?.toString();
           final password = (rawPassword != null && rawPassword.isNotEmpty)
               ? rawPassword
               : draft.password;
 
-          final homeSite = (extraMap?['homeSite'] as Branch?) ??
-              draft.homeSite ??
-              Branch.defaultBranches.first;
+          Branch parseBranch(dynamic val) {
+            if (val is Branch) return val;
+            if (val is Map) {
+              try {
+                return Branch.fromJson(Map<String, dynamic>.from(val));
+              } catch (e) {
+                debugPrint('[TigerBay Router] Branch parse error: $e');
+              }
+            }
+            return draft.homeSite ?? Branch.defaultBranches.first;
+          }
+
+          final homeSite = parseBranch(extraMap?['homeSite']);
 
           return RegistrationVerificationScreen(
             key: const ValueKey('registration_verification_screen_key'),
@@ -400,7 +410,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) {
           final id = state.pathParameters['id'] ?? '';
-          final booking = state.extra as BookingModel?;
+          BookingModel? booking;
+          if (state.extra is BookingModel) {
+            booking = state.extra as BookingModel;
+          } else if (state.extra is Map) {
+            try {
+              booking = BookingModel.fromJson(Map<String, dynamic>.from(state.extra as Map));
+            } catch (_) {}
+          }
           return BookingDetailScreen(bookingId: id, initialBooking: booking);
         },
       ),
