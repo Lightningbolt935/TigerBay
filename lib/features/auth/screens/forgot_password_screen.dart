@@ -407,26 +407,49 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
       }
     });
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF08080A),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(CupertinoIcons.chevron_back, color: Colors.white, size: 22),
-          onPressed: () {
-            HapticFeedback.lightImpact();
-            if (_currentStep == _ResetStep.chooseChannel) {
-              setState(() => _currentStep = _ResetStep.enterEmail);
-            } else if (_currentStep == _ResetStep.verifyOtp) {
-              setState(() => _currentStep = _resolvedPhone != null
-                  ? _ResetStep.chooseChannel
-                  : _ResetStep.enterEmail);
-            } else {
-              context.pop();
-            }
-          },
-        ),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        HapticFeedback.lightImpact();
+        if (_currentStep == _ResetStep.chooseChannel) {
+          setState(() => _currentStep = _ResetStep.enterEmail);
+        } else if (_currentStep == _ResetStep.verifyOtp) {
+          setState(() => _currentStep = _resolvedPhone != null
+              ? _ResetStep.chooseChannel
+              : _ResetStep.enterEmail);
+        } else {
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go(AppRoutes.login);
+          }
+        }
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFF08080A),
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(CupertinoIcons.chevron_back, color: Colors.white, size: 22),
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              if (_currentStep == _ResetStep.chooseChannel) {
+                setState(() => _currentStep = _ResetStep.enterEmail);
+              } else if (_currentStep == _ResetStep.verifyOtp) {
+                setState(() => _currentStep = _resolvedPhone != null
+                    ? _ResetStep.chooseChannel
+                    : _ResetStep.enterEmail);
+              } else {
+                if (context.canPop()) {
+                  context.pop();
+                } else {
+                  context.go(AppRoutes.login);
+                }
+              }
+            },
+          ),
         title: Text(
           'Security',
           style: GoogleFonts.poppins(
@@ -526,8 +549,9 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   // ── View 1: Enter Registered Email ──────────────────────────────────────────
   Widget _buildEnterEmailView() {

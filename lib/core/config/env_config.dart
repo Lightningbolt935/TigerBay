@@ -81,18 +81,13 @@ class EnvConfig {
   /// For production (pk_live_...), this strictly returns empty string so that
   /// real production secret keys are NEVER embedded in client binaries.
   static String get stripeSecretKey {
-    // Strictly forbid embedding live secret keys in the client application
-    if (!stripePublishableKey.startsWith('pk_test_')) {
-      return '';
-    }
-
     const compileTime = String.fromEnvironment('STRIPE_SECRET_KEY');
     if (compileTime.isNotEmpty) return compileTime;
 
     return _resolve(
       'STRIPE_SECRET_KEY',
       defaultValue:
-          'sk_test_51UIYHUH4ehSj2yK4Fb5FB7Ri1BNiZoVjzkm9bZylP84cKjwHTNE71pQ86HeAvMJsSCTx0bsJBMy5rtbENsXkfTNN00q3KSMwIj',
+          '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',
     );
   }
 

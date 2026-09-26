@@ -577,22 +577,35 @@ class _RegistrationVerificationScreenState
     });
 
     return PopScope(
-      canPop: _stage != _RegStage.completed,
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        HapticFeedback.lightImpact();
+        if (_stage == _RegStage.verifyEmail) {
+          setState(() => _stage = _RegStage.verifyPhone);
+        } else {
+          ref.read(registrationDraftProvider.notifier).clear();
+          context.go(AppRoutes.login);
+        }
+      },
       child: Scaffold(
         backgroundColor: const Color(0xFF08080A),
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
-          leading: _stage == _RegStage.completed
-              ? null
-              : IconButton(
-                  icon: const Icon(CupertinoIcons.chevron_back,
-                      color: Colors.white, size: 22),
-                  onPressed: () {
-                    HapticFeedback.lightImpact();
-                    context.pop();
-                  },
-                ),
+          leading: IconButton(
+            icon: const Icon(CupertinoIcons.chevron_back,
+                color: Colors.white, size: 22),
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              if (_stage == _RegStage.verifyEmail) {
+                setState(() => _stage = _RegStage.verifyPhone);
+              } else {
+                ref.read(registrationDraftProvider.notifier).clear();
+                context.go(AppRoutes.login);
+              }
+            },
+          ),
           title: Text(
             'Account Verification',
             style: GoogleFonts.poppins(
@@ -1079,6 +1092,33 @@ class _RegistrationVerificationScreenState
             ref.read(profileStateProvider.notifier).loadProfile();
             context.go(AppRoutes.membershipPaywall);
           },
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          height: 50,
+          child: OutlinedButton(
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              ref.read(registrationDraftProvider.notifier).clear();
+              context.go(AppRoutes.login);
+            },
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: Color(0xFF33333D), width: 1.2),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(25),
+              ),
+            ),
+            child: Text(
+              'SIGN IN LATER',
+              style: GoogleFonts.poppins(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppColors.champagneGold,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
         ),
         const SizedBox(height: 14),
         Text(

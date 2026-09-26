@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' hide AuthState;
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tigerbay_app/core/constants/app_routes.dart';
@@ -217,16 +218,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
     if (!success) {
       _failedLoginAttempts++;
+      final error = ref.read(authProvider).error ?? '';
+      final isUnconfirmed = error.toLowerCase().contains('confirm your email') ||
+          error.toLowerCase().contains('email not confirmed');
+
+      if (isUnconfirmed) {
+        _showEmailUnconfirmedDialog(
+          email: _loginEmailController.text.trim(),
+          password: _loginPasswordController.text,
+        );
+        return;
+      }
+
       if (_failedLoginAttempts >= 5) {
         _startLockoutTimer();
         _showErrorSnack('Too many failed attempts. Sign-in locked for 60 seconds.');
       } else {
         final remaining = 5 - _failedLoginAttempts;
-        final error = ref.read(authProvider).error;
         _showErrorSnack(
           remaining <= 2
-              ? '${error ?? 'Invalid email or password.'} ($remaining attempts remaining before security lock)'
-              : (error ?? 'Sign-in failed. Please try again.'),
+              ? '${error.isNotEmpty ? error : 'Invalid email or password.'} ($remaining attempts remaining before security lock)'
+              : (error.isNotEmpty ? error : 'Sign-in failed. Please try again.'),
         );
       }
       return;
@@ -428,6 +440,156 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                       color: AppColors.champagneGold,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showEmailUnconfirmedDialog({
+    required String email,
+    required String password,
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (modalContext) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF16161A),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+            border: Border(
+              top: BorderSide(color: Color(0xFF33333D), width: 1.2),
+            ),
+          ),
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 36),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF3A3A42),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.gold.withValues(alpha: 0.15),
+                  border: Border.all(color: AppColors.gold.withValues(alpha: 0.35)),
+                ),
+                child: const Icon(
+                  CupertinoIcons.mail_solid,
+                  color: AppColors.gold,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'Email Verification Required',
+                style: GoogleFonts.poppins(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Your account for $email was registered, but your email address has not been confirmed yet. Enter your verification code to complete sign in.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 28),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    Navigator.of(modalContext).pop();
+                    try {
+                      await Supabase.instance.client.auth.resend(
+                        type: OtpType.signup,
+                        email: email,
+                      );
+                    } catch (_) {}
+
+                    ref.read(registrationDraftProvider.notifier).setDraft(
+                          fullName: '',
+                          email: email,
+                          phone: '',
+                          password: password,
+                          homeSite: chosenHomeSite ??
+                              const Branch(
+                                id: 1,
+                                title: 'TigerBay Kingsbury',
+                                imageUrl: '',
+                                address: 'Kingsbury, London',
+                                isActive: true,
+                              ),
+                          stage: 1,
+                        );
+
+                    if (!mounted) return;
+                    context.go(
+                      AppRoutes.registrationVerification,
+                      extra: {
+                        'email': email,
+                        'password': password,
+                      },
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.gold,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(25),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: Text(
+                    'ENTER VERIFICATION CODE',
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF16161A),
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: OutlinedButton(
+                  onPressed: () => Navigator.of(modalContext).pop(),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Color(0xFF33333D)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(25),
+                    ),
+                  ),
+                  child: Text(
+                    'CANCEL',
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondary,
                       letterSpacing: 0.8,
                     ),
                   ),
