@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:tigerbay_app/core/constants/app_colors.dart';
@@ -10,6 +12,7 @@ import 'package:tigerbay_app/core/constants/app_routes.dart';
 import 'package:tigerbay_app/core/constants/dmn_config.dart';
 import 'package:tigerbay_app/core/theme/app_typography.dart';
 import 'package:tigerbay_app/data/models/branch_model.dart';
+import 'package:tigerbay_app/features/auth/providers/profile_state_provider.dart';
 import 'package:tigerbay_app/features/home/providers/home_provider.dart';
 import 'package:tigerbay_app/shared/widgets/apple_touch_feedback.dart';
 
@@ -37,6 +40,131 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
     }
   }
 
+  /// Injects customer name, email, and phone into the Collins/DMN form.
+  Future<void> _injectUserDetails({
+    required String name,
+    required String email,
+    required String phone,
+  }) async {
+    final script = '''
+      (function() {
+        const nameField = document.querySelector('input[name="name"], input[placeholder*="name" i], input[id*="name" i]');
+        const emailField = document.querySelector('input[name="email"], input[type="email"], input[placeholder*="email" i]');
+        const phoneField = document.querySelector('input[name="phone"], input[type="tel"], input[placeholder*="phone" i], input[placeholder*="mobile" i]');
+        if (nameField && !nameField.value) nameField.value = ${jsonEncode(name)};
+        if (emailField && !emailField.value) emailField.value = ${jsonEncode(email)};
+        if (phoneField && !phoneField.value) phoneField.value = ${jsonEncode(phone)};
+      })();
+    ''';
+    try {
+      await _webViewController?.runJavaScript(script);
+    } catch (_) {}
+  }
+
+  Future<void> _onBookingSuccess() async {
+    HapticFeedback.heavyImpact();
+    try {
+      final branch = ref.read(selectedBranchProvider);
+      Supabase.instance.client.functions.invoke(
+        'sync-collins-bookings',
+        body: branch != null ? {'branch_id': branch.id} : <String, dynamic>{},
+      );
+    } catch (_) {}
+
+    if (!mounted) return;
+    _showBookingSuccessSheet();
+  }
+
+  void _showBookingSuccessSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (bContext) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 28, 24, 34),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 68,
+              height: 68,
+              decoration: BoxDecoration(
+                color: AppColors.gold.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.gold, width: 2),
+              ),
+              child: const Icon(
+                CupertinoIcons.checkmark_alt,
+                color: AppColors.gold,
+                size: 38,
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              'Reservation Confirmed!',
+              style: AppTypography.headline.copyWith(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Your reservation with Access Collins has been confirmed and synced with your TigerBay account.',
+              textAlign: TextAlign.center,
+              style: AppTypography.subheadline.copyWith(
+                color: AppColors.textSecondary,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(bContext);
+                  context.go(AppRoutes.myBookings);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.gold,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                ),
+                child: const Text(
+                  'VIEW MY RESERVATIONS',
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(bContext);
+                context.go(AppRoutes.home);
+              },
+              child: Text(
+                'Back to Home',
+                style: AppTypography.callout.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// Builds (or rebuilds) the WebView controller for the given DMN [venueId].
   void _initWebView(String venueId) {
     if (_lastLoadedVenueId == venueId && _webViewController != null) return;
@@ -55,7 +183,33 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
             if (mounted) setState(() => _isLoading = true);
           },
           onPageFinished: (_) {
-            if (mounted) setState(() => _isLoading = false);
+            if (mounted) {
+              setState(() => _isLoading = false);
+              final profile = ref.read(profileStateProvider).profile;
+              if (profile != null) {
+                _injectUserDetails(
+                  name: profile.fullName ?? '',
+                  email: profile.email ?? '',
+                  phone: profile.phone ?? '',
+                );
+              }
+            }
+          },
+          onNavigationRequest: (request) {
+            final url = request.url.toLowerCase();
+            final confirmationPatterns = [
+              'booking-confirmed',
+              'thank-you',
+              'confirmation',
+              'booking_confirmed',
+            ];
+            for (final pattern in confirmationPatterns) {
+              if (url.contains(pattern)) {
+                _onBookingSuccess();
+                return NavigationDecision.navigate;
+              }
+            }
+            return NavigationDecision.navigate;
           },
           onHttpError: (error) {
             debugPrint(

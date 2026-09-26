@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_routes.dart';
 import '../../../core/theme/app_typography.dart';
@@ -149,55 +150,68 @@ class _MyBookingsScreenState extends ConsumerState<MyBookingsScreen>
 
             // ── Reservations List Content ───────────────────────────────────
             Expanded(
-              child: bookingsAsync.when(
-                data: (allBookings) {
-                  // Apply venue filter if set
-                  final filtered = _venueFilter == 'All Lounges'
-                      ? allBookings
-                      : allBookings.where((b) {
-                          return b.branchName.toLowerCase().contains(
-                                _venueFilter.toLowerCase(),
-                              );
-                        }).toList();
-
-                  final upcoming = filtered
-                      .where((b) => b.status == BookingStatus.upcoming)
-                      .toList();
-                  final past = filtered
-                      .where((b) => b.status == BookingStatus.past)
-                      .toList();
-                  final cancelled = filtered
-                      .where((b) => b.status == BookingStatus.cancelled)
-                      .toList();
-
-                  return TabBarView(
-                    controller: _tabController,
-                    children: [
-                      _BookingList(
-                        bookings: upcoming,
-                        label: 'UPCOMING RESERVATIONS',
-                        status: BookingStatus.upcoming,
-                      ),
-                      _BookingList(
-                        bookings: past,
-                        label: 'PREVIOUS VISITS',
-                        status: BookingStatus.past,
-                      ),
-                      _BookingList(
-                        bookings: cancelled,
-                        label: 'CANCELLED BOOKINGS',
-                        status: BookingStatus.cancelled,
-                      ),
-                    ],
-                  );
+              child: RefreshIndicator(
+                color: AppColors.gold,
+                backgroundColor: AppColors.surface,
+                onRefresh: () async {
+                  HapticFeedback.lightImpact();
+                  try {
+                    await Supabase.instance.client.functions.invoke(
+                      'sync-collins-bookings',
+                    );
+                  } catch (_) {}
+                  ref.invalidate(userBookingsStreamProvider);
                 },
-                loading: () => const Center(
-                  child: CircularProgressIndicator(
-                    color: AppColors.gold,
-                    strokeWidth: 2,
+                child: bookingsAsync.when(
+                  data: (allBookings) {
+                    // Apply venue filter if set
+                    final filtered = _venueFilter == 'All Lounges'
+                        ? allBookings
+                        : allBookings.where((b) {
+                            return b.branchName.toLowerCase().contains(
+                                  _venueFilter.toLowerCase(),
+                                );
+                          }).toList();
+
+                    final upcoming = filtered
+                        .where((b) => b.status == BookingStatus.upcoming)
+                        .toList();
+                    final past = filtered
+                        .where((b) => b.status == BookingStatus.past)
+                        .toList();
+                    final cancelled = filtered
+                        .where((b) => b.status == BookingStatus.cancelled)
+                        .toList();
+
+                    return TabBarView(
+                      controller: _tabController,
+                      children: [
+                        _BookingList(
+                          bookings: upcoming,
+                          label: 'UPCOMING RESERVATIONS',
+                          status: BookingStatus.upcoming,
+                        ),
+                        _BookingList(
+                          bookings: past,
+                          label: 'PREVIOUS VISITS',
+                          status: BookingStatus.past,
+                        ),
+                        _BookingList(
+                          bookings: cancelled,
+                          label: 'CANCELLED BOOKINGS',
+                          status: BookingStatus.cancelled,
+                        ),
+                      ],
+                    );
+                  },
+                  loading: () => const Center(
+                    child: CircularProgressIndicator(
+                      color: AppColors.gold,
+                      strokeWidth: 2,
+                    ),
                   ),
+                  error: (_, __) => _fallbackList(),
                 ),
-                error: (_, __) => _fallbackList(),
               ),
             ),
           ],
