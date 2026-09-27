@@ -4,13 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:tigerbay_app/core/config/stripe_config.dart';
-import 'package:tigerbay_app/shared/widgets/stripe_card_bottom_sheet.dart';
+import 'package:tigerbay_app/core/constants/app_colors.dart';
 
 /// ═══════════════════════════════════════════════════════════════════════════
 /// TigerBay International — Stripe Payment Service
 /// ═══════════════════════════════════════════════════════════════════════════
-/// Provides native Stripe Payment Sheet processing for table booking deposits
-/// and membership activations. Supports Apple Pay, Google Pay, and credit/debit cards.
+/// Provides official native Stripe Payment Sheet processing for table booking
+/// deposits and membership activations.
+/// Unlocks all features Stripe offers: Link by Stripe (1-click checkout),
+/// Google Pay, Apple Pay, and Credit/Debit Cards.
 class StripeService {
   StripeService._();
 
@@ -69,19 +71,50 @@ class StripeService {
         );
       }
 
-      // 2. Present TigerBay native Card Payment Sheet (Full Area Touch Target + Instant Keyboard Autofocus)
-      if (!context.mounted) {
-        return const StripePaymentResult(success: false, cancelled: true);
-      }
-      final sheetResult = await StripeCardBottomSheet.show(
-        context: context,
-        clientSecret: clientSecret,
-        paymentIntentId: paymentIntentId,
-        amountFormatted: '£${(amountPence / 100).toStringAsFixed(2)}',
-        title: 'Table Reservation Deposit',
+      // 2. Initialize the official Stripe Payment Sheet with full options
+      await Stripe.instance.initPaymentSheet(
+        paymentSheetParameters: SetupPaymentSheetParameters(
+          paymentIntentClientSecret: clientSecret,
+          merchantDisplayName: StripeConfig.merchantDisplayName,
+          returnURL: StripeConfig.returnURL,
+          applePay: const PaymentSheetApplePay(
+            merchantCountryCode: StripeConfig.merchantCountryCode,
+          ),
+          googlePay: PaymentSheetGooglePay(
+            merchantCountryCode: StripeConfig.merchantCountryCode,
+            testEnv: StripeConfig.isTestMode,
+          ),
+          billingDetailsCollectionConfiguration: const BillingDetailsCollectionConfiguration(
+            name: CollectionMode.automatic,
+            phone: CollectionMode.automatic,
+            email: CollectionMode.automatic,
+            address: AddressCollectionMode.never,
+          ),
+          style: ThemeMode.dark,
+          appearance: const PaymentSheetAppearance(
+            colors: PaymentSheetAppearanceColors(
+              primary: AppColors.gold,
+              background: Color(0xFF141418),
+              componentBackground: Color(0xFF1C1C22),
+              componentBorder: Color(0xFF2E2E38),
+              componentDivider: Color(0xFF2E2E38),
+              primaryText: Colors.white,
+              secondaryText: Color(0xFF9E9EA8),
+              placeholderText: Color(0xFF6E6E78),
+              icon: AppColors.gold,
+            ),
+          ),
+        ),
       );
 
-      return sheetResult;
+      // 3. Present the official Stripe Payment Sheet
+      await Stripe.instance.presentPaymentSheet();
+
+      debugPrint('[Stripe] ✅ Booking deposit payment completed: $paymentIntentId');
+      return StripePaymentResult(
+        success: true,
+        paymentIntentId: paymentIntentId,
+      );
     } on StripeException catch (e) {
       if (paymentIntentId.isNotEmpty) {
         final isPaid = await _verifyPaymentIntentSucceeded(paymentIntentId);
@@ -155,9 +188,9 @@ class StripeService {
       // 1. Obtain PaymentIntent client_secret
       final intentData = await _createOrFetchPaymentIntent(
         payload: {
-          'user_id': userId,
-          'tier_id': tierId,
           'tier_name': tierName,
+          'tier_id': tierId ?? 'tier_1',
+          'user_id': userId ?? '',
           'amount': amountPence,
           'currency': currency,
         },
@@ -184,19 +217,50 @@ class StripeService {
         );
       }
 
-      // 2. Present TigerBay native Card Payment Sheet (Full Area Touch Target + Instant Keyboard Autofocus)
-      if (!context.mounted) {
-        return const StripePaymentResult(success: false, cancelled: true);
-      }
-      final sheetResult = await StripeCardBottomSheet.show(
-        context: context,
-        clientSecret: clientSecret,
-        paymentIntentId: paymentIntentId,
-        amountFormatted: '£${amountGbp.toStringAsFixed(2)}',
-        title: '$tierName Membership',
+      // 2. Initialize the official Stripe Payment Sheet with full options
+      await Stripe.instance.initPaymentSheet(
+        paymentSheetParameters: SetupPaymentSheetParameters(
+          paymentIntentClientSecret: clientSecret,
+          merchantDisplayName: StripeConfig.merchantDisplayName,
+          returnURL: StripeConfig.returnURL,
+          applePay: const PaymentSheetApplePay(
+            merchantCountryCode: StripeConfig.merchantCountryCode,
+          ),
+          googlePay: PaymentSheetGooglePay(
+            merchantCountryCode: StripeConfig.merchantCountryCode,
+            testEnv: StripeConfig.isTestMode,
+          ),
+          billingDetailsCollectionConfiguration: const BillingDetailsCollectionConfiguration(
+            name: CollectionMode.automatic,
+            phone: CollectionMode.automatic,
+            email: CollectionMode.automatic,
+            address: AddressCollectionMode.never,
+          ),
+          style: ThemeMode.dark,
+          appearance: const PaymentSheetAppearance(
+            colors: PaymentSheetAppearanceColors(
+              primary: AppColors.gold,
+              background: Color(0xFF141418),
+              componentBackground: Color(0xFF1C1C22),
+              componentBorder: Color(0xFF2E2E38),
+              componentDivider: Color(0xFF2E2E38),
+              primaryText: Colors.white,
+              secondaryText: Color(0xFF9E9EA8),
+              placeholderText: Color(0xFF6E6E78),
+              icon: AppColors.gold,
+            ),
+          ),
+        ),
       );
 
-      return sheetResult;
+      // 3. Present the official Stripe Payment Sheet
+      await Stripe.instance.presentPaymentSheet();
+
+      debugPrint('[Stripe] ✅ Membership payment completed: $paymentIntentId');
+      return StripePaymentResult(
+        success: true,
+        paymentIntentId: paymentIntentId,
+      );
     } on StripeException catch (e) {
       if (paymentIntentId.isNotEmpty) {
         final isPaid = await _verifyPaymentIntentSucceeded(paymentIntentId);
@@ -302,7 +366,7 @@ class StripeService {
         final formParams = <String, String>{
           'amount': amountPence.toString(),
           'currency': currency.toLowerCase(),
-          'payment_method_types[0]': 'card',
+          'automatic_payment_methods[enabled]': 'true',
         };
 
         metadata.forEach((k, v) {
@@ -386,8 +450,6 @@ class StripeService {
               status == 'requires_capture') {
             return true;
           }
-          // If still requires_payment_method or requires_action → not paid yet,
-          // keep retrying.
         }
       } catch (e) {
         debugPrint('[Stripe] Server verification error (attempt ${attempt + 1}): $e');
