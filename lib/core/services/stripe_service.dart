@@ -92,10 +92,6 @@ class StripeService {
               secondaryText: AppColors.textSecondary,
               placeholderText: AppColors.textHint,
             ),
-            shapes: PaymentSheetShape(
-              borderRadius: 16,
-              borderWidth: 1,
-            ),
           ),
         ),
       );
@@ -232,10 +228,6 @@ class StripeService {
               primaryText: Colors.white,
               secondaryText: AppColors.textSecondary,
               placeholderText: AppColors.textHint,
-            ),
-            shapes: PaymentSheetShape(
-              borderRadius: 16,
-              borderWidth: 1,
             ),
           ),
         ),

@@ -11,7 +11,6 @@ import '../../auth/providers/profile_state_provider.dart';
 import '../../profile/providers/membership_provider.dart';
 import '../providers/loyalty_provider.dart';
 import 'live_loyalty_card.dart';
-import 'tier_benefits_sheet.dart';
 
 /// ═══════════════════════════════════════════════════════════════════════════
 /// TigerBay International — Member Wallet & Digital Pass (Apple Luxury Grade)
@@ -131,120 +130,95 @@ class LoyaltyScreen extends ConsumerWidget {
             ),
           ),
 
-          // ── VIP Tier Progression & Roadmap Tracker ────────────────────────
+          // ── Digital Pass Quick Instruction ────────────────────────────────
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
-              child: profileStream.when(
-                data: (profile) {
-                  final balance = profile?.stripsBalance ?? 0;
-                  final currentTierId = profile?.membershipTierId ?? 1;
-                  return _buildTierProgressCard(
-                    context,
-                    balance: balance,
-                    tierId: currentTierId,
-                  );
-                },
-                loading: () => const SizedBox.shrink(),
-                error: (_, __) {
-                  final fallback = ref.read(userProfileProvider);
-                  return _buildTierProgressCard(
-                    context,
-                    balance: fallback?.stripsBalance ?? 0,
-                    tierId: fallback?.membershipTierId ?? 1,
-                  );
-                },
+              padding: const EdgeInsets.fromLTRB(20, 6, 20, 10),
+              child: Center(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      CupertinoIcons.qrcode_viewfinder,
+                      size: 15,
+                      color: AppColors.gold.withValues(alpha: 0.8),
+                    ),
+                    const SizedBox(width: 7),
+                    Text(
+                      'Tap card above to show QR pass for till scanning',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white60,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
 
-          // ── Clean Primary Actions: Show QR Pass & Redeem Rewards ─────────
+          // ── Link Physical Card Action ─────────────────────────────────────
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 6, 20, 16),
-              child: Row(
-                children: [
-                  // 1. Primary Gold Button: Show QR Pass (Present to Server at Till)
-                  Expanded(
-                    flex: 6,
-                    child: AppleTouchFeedback(
-                      onTap: () => context.push(AppRoutes.qrDisplay),
-                      child: Container(
-                        height: 52,
-                        decoration: BoxDecoration(
-                          gradient: AppColors.goldGradient,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.gold.withValues(alpha: 0.22),
-                              blurRadius: 16,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(
-                              CupertinoIcons.qrcode_viewfinder,
-                              color: Colors.black,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'SHOW QR PASS',
-                              style: GoogleFonts.poppins(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.6,
-                                color: Colors.black,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
+              child: AppleTouchFeedback(
+                onTap: () => context.push(AppRoutes.linkPhysicalCard),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF141418),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: const Color(0xFF262630),
+                      width: 0.8,
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  // 2. Secondary Glass Button: Rewards Store (Spend Strips)
-                  Expanded(
-                    flex: 5,
-                    child: AppleTouchFeedback(
-                      onTap: () => context.push(AppRoutes.rewardStore),
-                      child: Container(
-                        height: 52,
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF181820),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: const Color(0xFF2C2C3A),
-                            width: 0.9,
-                          ),
+                          color: AppColors.gold.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(10),
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                        child: const Icon(
+                          CupertinoIcons.creditcard,
+                          size: 16,
+                          color: AppColors.gold,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Icon(
-                              CupertinoIcons.gift_fill,
-                              color: AppColors.champagneGold,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 8),
                             Text(
-                              'REWARDS',
+                              'Have a Physical Lounge Card?',
                               style: GoogleFonts.poppins(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
-                                letterSpacing: 0.6,
                                 color: Colors.white,
+                              ),
+                            ),
+                            Text(
+                              'Link your plastic card to merge points',
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                color: AppColors.textSecondary,
                               ),
                             ),
                           ],
                         ),
                       ),
-                    ),
+                      const Icon(
+                        CupertinoIcons.chevron_right,
+                        size: 14,
+                        color: AppColors.textHint,
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
@@ -407,162 +381,7 @@ class LoyaltyScreen extends ConsumerWidget {
     );
   }
 
-  // ── Helper Widgets ─────────────────────────────────────────────────────────
-
-  Widget _buildTierProgressCard(
-    BuildContext context, {
-    required int balance,
-    required int tierId,
-  }) {
-    String currentTier = 'Explorer';
-    String nextTier = 'Gold VIP';
-    int targetPoints = 500;
-    int nextTierId = 2;
-
-    if (tierId >= 4) {
-      currentTier = 'Black Society';
-      nextTier = 'Highest Tier';
-      targetPoints = balance;
-      nextTierId = 4;
-    } else if (tierId == 3) {
-      currentTier = 'Platinum';
-      nextTier = 'Black Society';
-      targetPoints = 3000;
-      nextTierId = 4;
-    } else if (tierId == 2) {
-      currentTier = 'Gold';
-      nextTier = 'Platinum';
-      targetPoints = 1500;
-      nextTierId = 3;
-    } else {
-      currentTier = 'Explorer';
-      nextTier = 'Gold';
-      targetPoints = 500;
-      nextTierId = 2;
-    }
-
-    final double progress = (targetPoints > 0)
-        ? (balance / targetPoints).clamp(0.0, 1.0)
-        : 1.0;
-    final int pointsRemaining = (targetPoints - balance).clamp(0, 99999);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF131317),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF252530), width: 0.9),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.gold.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      currentTier.toUpperCase(),
-                      style: GoogleFonts.poppins(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.8,
-                        color: AppColors.gold,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  const Icon(
-                    CupertinoIcons.arrow_right,
-                    size: 11,
-                    color: AppColors.textHint,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    nextTier,
-                    style: GoogleFonts.poppins(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-              AppleTouchFeedback(
-                onTap: () => TierBenefitsSheet.show(
-                  context,
-                  initialTierId: nextTierId,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Tier Perks',
-                      style: GoogleFonts.poppins(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.gold,
-                      ),
-                    ),
-                    const SizedBox(width: 2),
-                    const Icon(
-                      CupertinoIcons.chevron_right,
-                      size: 11,
-                      color: AppColors.gold,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // Animated Bar
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 6,
-              backgroundColor: const Color(0xFF22222E),
-              valueColor: const AlwaysStoppedAnimation<Color>(AppColors.gold),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '$balance / $targetPoints Strips',
-                style: GoogleFonts.poppins(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              Text(
-                tierId >= 4
-                    ? 'Maximum Status Achieved'
-                    : '$pointsRemaining points to $nextTier',
-                style: GoogleFonts.poppins(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.gold,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
+  // ── Helper Dialogs ────────────────────────────────────────────────────────
 
   void _showHowStripsWorkDialog(BuildContext context) {
     HapticFeedback.lightImpact();
