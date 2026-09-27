@@ -36,6 +36,7 @@ class StripeService {
     }
 
     String paymentIntentId = '';
+    FocusManager.instance.primaryFocus?.unfocus();
 
     try {
       // 1. Obtain PaymentIntent client_secret
@@ -74,7 +75,6 @@ class StripeService {
           paymentIntentClientSecret: clientSecret,
           merchantDisplayName: StripeConfig.merchantDisplayName,
           returnURL: StripeConfig.returnURL,
-          paymentMethodOrder: const ['card'],
           applePay: const PaymentSheetApplePay(
             merchantCountryCode: StripeConfig.merchantCountryCode,
           ),
@@ -175,6 +175,7 @@ class StripeService {
 
     final amountPence = (amountGbp * 100).round();
     String paymentIntentId = '';
+    FocusManager.instance.primaryFocus?.unfocus();
 
     try {
       // 1. Obtain PaymentIntent client_secret
@@ -215,7 +216,6 @@ class StripeService {
           paymentIntentClientSecret: clientSecret,
           merchantDisplayName: StripeConfig.merchantDisplayName,
           returnURL: StripeConfig.returnURL,
-          paymentMethodOrder: const ['card'],
           applePay: const PaymentSheetApplePay(
             merchantCountryCode: StripeConfig.merchantCountryCode,
           ),
