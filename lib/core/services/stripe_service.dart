@@ -1,10 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:tigerbay_app/core/config/stripe_config.dart';
 import 'package:tigerbay_app/core/constants/app_colors.dart';
+import 'package:tigerbay_app/core/services/web_card_payment_sheet.dart';
 
 /// ═══════════════════════════════════════════════════════════════════════════
 /// TigerBay International — Stripe Payment Service
@@ -71,7 +74,44 @@ class StripeService {
         );
       }
 
-      // 2. Initialize the official Stripe Payment Sheet with full options
+      // 2. Initialize the official Stripe Payment Sheet with full options.
+      //    The Payment Sheet is native-only; on web the same PaymentIntent is
+      //    confirmed through a Stripe Elements card field instead.
+      if (kIsWeb) {
+        if (!context.mounted) {
+          return const StripePaymentResult(
+            success: false,
+            error: 'Payment could not be started.',
+          );
+        }
+        final outcome = await WebCardPaymentSheet.present(
+          context: context,
+          clientSecret: clientSecret,
+          amount: amountPence / 100,
+          currency: currency,
+          title: 'Table booking deposit',
+          subtitle: 'Secure your reservation',
+        );
+
+        if (outcome == null) {
+          return const StripePaymentResult(success: false, cancelled: true);
+        }
+        if (!outcome.success) {
+          return StripePaymentResult(
+            success: false,
+            cancelled: outcome.cancelled,
+            error: outcome.error ?? 'Payment failed',
+          );
+        }
+
+        debugPrint('[Stripe] ✅ Booking deposit completed on web: '
+            '${outcome.paymentIntentId}');
+        return StripePaymentResult(
+          success: true,
+          paymentIntentId: outcome.paymentIntentId ?? paymentIntentId,
+        );
+      }
+
       await Stripe.instance.initPaymentSheet(
         paymentSheetParameters: SetupPaymentSheetParameters(
           paymentIntentClientSecret: clientSecret,
@@ -217,7 +257,44 @@ class StripeService {
         );
       }
 
-      // 2. Initialize the official Stripe Payment Sheet with full options
+      // 2. Initialize the official Stripe Payment Sheet with full options.
+      //    The Payment Sheet is native-only; on web the same PaymentIntent is
+      //    confirmed through a Stripe Elements card field instead.
+      if (kIsWeb) {
+        if (!context.mounted) {
+          return const StripePaymentResult(
+            success: false,
+            error: 'Payment could not be started.',
+          );
+        }
+        final outcome = await WebCardPaymentSheet.present(
+          context: context,
+          clientSecret: clientSecret,
+          amount: amountGbp,
+          currency: currency,
+          title: '$tierName Membership',
+          subtitle: 'Activate your TigerBay membership',
+        );
+
+        if (outcome == null) {
+          return const StripePaymentResult(success: false, cancelled: true);
+        }
+        if (!outcome.success) {
+          return StripePaymentResult(
+            success: false,
+            cancelled: outcome.cancelled,
+            error: outcome.error ?? 'Payment failed',
+          );
+        }
+
+        debugPrint('[Stripe] ✅ Membership payment completed on web: '
+            '${outcome.paymentIntentId}');
+        return StripePaymentResult(
+          success: true,
+          paymentIntentId: outcome.paymentIntentId ?? paymentIntentId,
+        );
+      }
+
       await Stripe.instance.initPaymentSheet(
         paymentSheetParameters: SetupPaymentSheetParameters(
           paymentIntentClientSecret: clientSecret,
@@ -353,8 +430,11 @@ class StripeService {
       debugPrint('[Stripe] Edge function call failed ($edgeErr), attempting direct API fallback...');
     }
 
-    // Attempt 2: Resilient direct Stripe API invocation with secret key
-    if (StripeConfig.secretKey.isNotEmpty) {
+    // Attempt 2: Resilient direct Stripe API invocation with secret key.
+    // dart:io HttpClient is unavailable in the browser, and shipping a secret
+    // key to a public bundle is unacceptable, so web depends solely on the
+    // Edge Function above.
+    if (!kIsWeb && StripeConfig.secretKey.isNotEmpty) {
       final client = HttpClient();
       try {
         final request = await client.postUrl(
@@ -424,6 +504,10 @@ class StripeService {
   static const List<int> _verifyDelaysMs = [0, 1000, 2000, 3000];
 
   static Future<bool> _verifyPaymentIntentSucceeded(String intentId) async {
+    // Web cannot call the Stripe REST API from the client: no dart:io, and the
+    // verification secret must never reach a public bundle. The browser relies
+    // on the status returned by confirmCardPayment instead.
+    if (kIsWeb) return false;
     if (intentId.isEmpty || StripeConfig.secretKey.isEmpty) return false;
 
     for (int attempt = 0; attempt < _maxVerifyAttempts; attempt++) {

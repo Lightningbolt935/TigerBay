@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -107,21 +109,36 @@ Future<void> main() async {
     anonKey: EnvConfig.supabaseAnonKey,
   );
 
-  // ── Init Stripe (mobile only) ──────────────────────────────────────────────
-  // flutter_stripe 11.5.0 ships no web implementation. Its default factory
-  // (MethodChannelStripeFactory) eagerly evaluates Platform.isIOS and
-  // Platform.isAndroid, and dart:io throws UnsupportedError on web. Touching
-  // any Stripe.* static on the web therefore aborts main() before runApp, which
-  // surfaces as a blank black screen once the boot splash times out.
-  if (!kIsWeb) {
-    final stripeKey = EnvConfig.stripePublishableKey;
-    if (stripeKey.startsWith('pk_')) {
-      Stripe.publishableKey = stripeKey;
+  // ── Init Stripe ────────────────────────────────────────────────────────────
+  // Previously this was web-skipped, which left the browser with no Stripe
+  // backend at all. It is safe now because the `flutter_stripe_web` dependency
+  // registers WebStripe, which assigns StripePlatform.instance before the
+  // MethodChannelStripeFactory fallback in stripe_platform_interface is ever
+  // evaluated. That fallback reads Platform.isIOS/Platform.isAndroid and throws
+  // UnsupportedError in the browser.
+  final stripeKey = EnvConfig.stripePublishableKey;
+  if (stripeKey.startsWith('pk_')) {
+    Stripe.publishableKey = stripeKey;
+    if (!kIsWeb) {
+      // merchantIdentifier and urlScheme are native-only concepts; the web
+      // backend reads the current page URL instead.
       Stripe.merchantIdentifier = 'merchant.io.tigerbay.app';
       Stripe.urlScheme = EnvConfig.appScheme;
       Stripe.setReturnUrlSchemeOnAndroid = true;
-      await Stripe.instance.applySettings();
     }
+
+    // Deliberately not awaited. On web, initialise() injects
+    // https://js.stripe.com/v3 and waits for it, so blocking here would tie
+    // Flutter's first frame to a third-party CDN and leave the user staring at
+    // the boot splash if that request is slow or blocked. flutter_stripe
+    // defers settings internally — every Stripe call routes through
+    // _awaitForSettings(), which applies and awaits the settings itself — so
+    // the payment flow still waits for Stripe to be ready.
+    unawaited(
+      Stripe.instance.applySettings().catchError((Object e) {
+        debugPrint('[TigerBay] Stripe initialisation failed: $e');
+      }),
+    );
   }
 
   runApp(

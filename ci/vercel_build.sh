@@ -99,10 +99,16 @@ add_define APP_ENV
 add_define DEMO_MODE
 
 # ── 4. Build ─────────────────────────────────────────────────────────────────
+# --no-web-resources-cdn makes the app serve CanvasKit from build/web/canvaskit
+# instead of fetching it from www.gstatic.com at runtime. A blocked or slow
+# gstatic request means the app never paints its first frame and the user is
+# left staring at the boot splash — a self-hosted demo must not depend on a
+# third-party CDN being reachable from the venue's network.
 echo "▸ flutter build web --release"
 flutter build web \
   --release \
   --base-href=/ \
+  --no-web-resources-cdn \
   --no-wasm-dry-run \
   "${DART_DEFINES[@]}"
 

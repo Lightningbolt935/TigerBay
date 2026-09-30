@@ -4,7 +4,7 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.2.0 <4.0.0'
+  sdk: '>=3.3.0 <4.0.0'
 
 dependencies:
   flutter:
@@ -21,6 +21,10 @@ dependencies:
 
   # Payments
   flutter_stripe: ^11.4.0
+  # Official web implementation of the Stripe platform interface. Without it
+  # stripe_platform_interface falls back to MethodChannelStripeFactory, which
+  # reads Platform.isIOS/Platform.isAndroid and throws on the browser.
+  flutter_stripe_web: ^6.5.1
   flutter_inappwebview: ^6.1.5
   dio: ^5.4.0
 
