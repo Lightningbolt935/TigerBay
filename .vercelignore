@@ -1,0 +1,54 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Files excluded from the Vercel upload.
+#
+# NOTE: when this file exists, Vercel stops honouring .gitignore. Every secret
+# that .gitignore protected (most importantly .env, which holds the live Stripe
+# secret key and Twilio auth token) therefore has to be listed explicitly here,
+# or it would be uploaded and compiled into the public web bundle.
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── Secrets — never upload ───────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Version control / tooling ────────────────────────────────────────────────
+.git
+.gitignore
+.github
+.idea
+.vscode
+*.iml
+
+# ── Build artifacts & caches (Vercel rebuilds these from source) ─────────────
+build/
+.dart_tool/
+.flutter-plugins-dependencies
+coverage/
+
+# ── Non-web platform targets ─────────────────────────────────────────────────
+# The Flutter web bundle only compiles lib/, web/ and assets/. Shipping the
+# mobile toolchains would add ~100 MB to every single upload.
+android/
+ios/
+windows/
+
+# ── Release binaries & archives ──────────────────────────────────────────────
+*.apk
+*.aab
+*.ipa
+*.zip
+*.msi
+*.exe
+
+# ── Backend sources (deployed with the Supabase CLI, not Vercel) ─────────────
+supabase/.temp
+
+# ── Tests, docs & local scratch ──────────────────────────────────────────────
+test/
+AZURE_DEPLOYMENT.md
+VERCEL_DEPLOY.md
+README.md
+*.log
+analyze_output.txt
+build_log.txt

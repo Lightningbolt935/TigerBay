@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# ═══════════════════════════════════════════════════════════════════════════
+# TigerBay International — Vercel production build for Flutter Web
+# ═══════════════════════════════════════════════════════════════════════════
+# Vercel's build image has no Flutter SDK, so we install a pinned version,
+# restore dependencies, compile the web bundle, and strip the debug symbol
+# files that are never fetched at runtime.
+#
+# Secrets are NEVER passed in as --dart-define: they would be readable by any
+# visitor in the compiled main.dart.js. Only the browser-safe, public values
+# below are baked into the bundle. Server-side secrets (Stripe secret key,
+# Twilio auth token) must live in the Supabase Edge Function environment.
+# ═══════════════════════════════════════════════════════════════════════════
+set -euo pipefail
+
+FLUTTER_VERSION="${FLUTTER_VERSION:-3.41.6}"
+FLUTTER_ROOT="${FLUTTER_ROOT:-/tmp/flutter}"
+export PATH="${FLUTTER_ROOT}/bin:${PATH}"
+
+# Vercel only passes production env vars when this is explicitly requested.
+export PUB_CACHE="${PUB_CACHE:-/tmp/pub-cache}"
+export FLUTTER_SUPPRESS_ANALYTICS=true
+export CI=true
+
+# ── 1. Install Flutter ───────────────────────────────────────────────────────
+if [ ! -x "${FLUTTER_ROOT}/bin/flutter" ]; then
+  echo "▸ Downloading Flutter ${FLUTTER_VERSION}..."
+  ARCHIVE="flutter_linux_${FLUTTER_VERSION}-stable.tar.xz"
+  URL="https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/${ARCHIVE}"
+
+  curl -fsSL --retry 3 --retry-delay 2 -o "/tmp/${ARCHIVE}" "${URL}"
+  mkdir -p "${FLUTTER_ROOT}"
+  # GNU tar auto-detects the xz container when extracting.
+  tar -xf "/tmp/${ARCHIVE}" -C "${FLUTTER_ROOT}"
+  rm -f "/tmp/${ARCHIVE}"
+fi
+
+# The SDK is a git checkout owned by a different uid inside the build sandbox.
+git config --global --add safe.directory "${FLUTTER_ROOT}" || true
+
+echo "▸ Flutter version: $(flutter --version --machine 2>/dev/null | head -c 200)"
+flutter config --no-analytics >/dev/null 2>&1 || true
+
+# ── 2. Restore dependencies ──────────────────────────────────────────────────
+echo "▸ flutter pub get"
+flutter pub get
+
+# ── 3. Collect browser-safe configuration ────────────────────────────────────
+# Reads a value from the environment, tolerating unset/empty so that a missing
+# Vercel variable degrades to the app's compiled-in defaults instead of failing
+# the build.
+env_or_empty() {
+  printf '%s' "${!1:-}"
+}
+
+DART_DEFINES=()
+add_define() {
+  local key="$1" value
+  value="$(env_or_empty "${key}")"
+  if [ -n "${value}" ]; then
+    DART_DEFINES+=("--dart-define=${key}=${value}")
+    echo "  ✓ ${key}"
+  else
+    echo "  – ${key} (unset — using compiled default)"
+  fi
+}
+
+echo "▸ Public build configuration:"
+add_define SUPABASE_URL
+add_define SUPABASE_ANON_KEY
+add_define STRIPE_PUBLISHABLE_KEY
+add_define GOOGLE_WEB_CLIENT_ID
+add_define APP_SCHEME
+add_define APP_ENV
+
+# ── 4. Build ─────────────────────────────────────────────────────────────────
+echo "▸ flutter build web --release"
+flutter build web \
+  --release \
+  --base-href=/ \
+  --no-wasm-dry-run \
+  "${DART_DEFINES[@]}"
+
+# ── 5. Trim artifacts that are never served ──────────────────────────────────
+# CanvasKit ships DWARF symbol tables alongside every variant. They are only
+# useful for debugging native crashes and add ~7 MB to every upload.
+echo "▸ Stripping CanvasKit symbol files"
+find build/web/canvaskit -name '*.symbols' -type f -delete 2>/dev/null || true
+
+echo "▸ Build complete:"
+du -sh build/web
+echo "▸ Output directory: build/web"

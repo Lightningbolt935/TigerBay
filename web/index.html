@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <!--
     If you are serving your web app in a path other than the root, change the
@@ -18,11 +18,20 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="description" content="TigerBay International — Member Loyalty App">
+  <meta name="theme-color" content="#0A0A0A">
+  <meta name="color-scheme" content="dark">
+
+  <meta property="og:title" content="TigerBay International">
+  <meta property="og:description" content="The TigerBay International members' loyalty app.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="icons/Icon-512.png">
+  <meta name="twitter:card" content="summary_large_image">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="TigerBay International">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
@@ -31,6 +40,15 @@
 
   <title>TigerBay International</title>
   <link rel="manifest" href="manifest.json">
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       Brand typography. google_fonts resolves weights at runtime, so warming
+       the connection avoids a flash of fallback text on first paint.
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://js.stripe.com" crossorigin>
+  <link rel="preconnect" href="https://accounts.google.com">
 
   <!-- ═══════════════════════════════════════════════════════════════════════
        Google Identity Services (GIS) — required by google_sign_in on web.
@@ -42,6 +60,64 @@
        Stripe.js v3 — required by flutter_stripe / Stripe Elements on web.
        ═══════════════════════════════════════════════════════════════════════ -->
   <script src="https://js.stripe.com/v3/"></script>
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background-color: #0A0A0A;
+      overscroll-behavior: none;
+    }
+
+    /* Boot splash shown until Flutter paints its first frame. */
+    #tigerbay-boot {
+      position: fixed;
+      inset: 0;
+      z-index: 2147483647;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 22px;
+      background: radial-gradient(circle at 50% 38%, #1a1a1f 0%, #0a0a0a 62%);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      transition: opacity 320ms ease;
+    }
+    #tigerbay-boot.is-done { opacity: 0; pointer-events: none; }
+    #tigerbay-boot .mark {
+      font-size: 30px;
+      font-weight: 700;
+      letter-spacing: 6px;
+      text-transform: uppercase;
+      color: #C9A84C;
+    }
+    #tigerbay-boot .sub {
+      font-size: 11px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: #6C6C70;
+    }
+    #tigerbay-boot .bar {
+      width: 132px;
+      height: 2px;
+      overflow: hidden;
+      border-radius: 2px;
+      background: #26262b;
+    }
+    #tigerbay-boot .bar span {
+      display: block;
+      width: 40%;
+      height: 100%;
+      border-radius: 2px;
+      background: #C9A84C;
+      animation: tb-sweep 1.25s ease-in-out infinite;
+    }
+    @keyframes tb-sweep {
+      0%   { transform: translateX(-100%); }
+      100% { transform: translateX(350%); }
+    }
+  </style>
 </head>
 <body>
   <!--
@@ -52,6 +128,38 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
+  <div id="tigerbay-boot">
+    <div class="mark">TigerBay</div>
+    <div class="bar"><span></span></div>
+    <div class="sub">International</div>
+  </div>
+
+  <noscript>
+    <div style="padding:32px;color:#fff;font-family:sans-serif;text-align:center">
+      TigerBay International requires JavaScript to run.
+    </div>
+  </noscript>
+
+  <script>
+    // Remove the boot splash as soon as Flutter renders its first frame.
+    // A hard timeout guarantees it can never trap the user behind the splash.
+    (function () {
+      var splash = document.getElementById('tigerbay-boot');
+      if (!splash) return;
+      var done = false;
+      function dismiss() {
+        if (done) return;
+        done = true;
+        splash.classList.add('is-done');
+        window.setTimeout(function () {
+          if (splash.parentNode) splash.parentNode.removeChild(splash);
+        }, 350);
+      }
+      window.addEventListener('flutter-first-frame', dismiss);
+      window.setTimeout(dismiss, 15000);
+    })();
+  </script>
+
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
