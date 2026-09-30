@@ -485,8 +485,17 @@ class AuthRepository {
   Future<void> signInWithGoogle() async {
     final webClientId = EnvConfig.googleWebClientId;
     try {
+      // The web implementation reads `clientId`; `serverClientId` is the Android
+      // parameter and its web implementation asserts it must be null. Passing
+      // only serverClientId leaves the web client id null, and the plugin's
+      // `clientId: appClientId!` then throws "Null check operator used on a null
+      // value". Asserts are stripped from release builds, so the plugin's own
+      // "ClientID not set" message never appears and the raw null check is all
+      // the user sees.
       final googleSignIn = GoogleSignIn(
-        serverClientId: webClientId.isNotEmpty ? webClientId : null,
+        clientId: kIsWeb ? webClientId : null,
+        serverClientId:
+            !kIsWeb && webClientId.isNotEmpty ? webClientId : null,
         scopes: ['email', 'profile'],
       );
 
