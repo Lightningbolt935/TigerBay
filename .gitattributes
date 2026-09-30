@@ -1,0 +1,23 @@
+# Vercel builds this repo on Linux, so shell scripts must stay LF in the
+# committed blob. Without this, a Windows checkout with core.autocrlf=true
+# can commit CRLF and the build fails with "bad interpreter: /bin/bash^M".
+* text=auto
+
+*.sh text eol=lf
+ci/vercel_build.sh text eol=lf
+
+# Web assets are served as-is; never rewrite their line endings.
+web/*.html text eol=lf
+web/*.json text eol=lf
+
+# Binary assets must never be touched.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.ttf binary
+*.otf binary
+*.apk binary
+*.aab binary
+*.wasm binary
