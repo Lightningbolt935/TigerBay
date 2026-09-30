@@ -10,6 +10,7 @@ import 'package:tigerbay_app/core/constants/app_colors.dart';
 import 'package:tigerbay_app/core/constants/app_routes.dart';
 import 'package:tigerbay_app/features/auth/providers/auth_provider.dart';
 import 'package:tigerbay_app/services/twilio_notification_service.dart';
+import 'package:tigerbay_app/core/config/demo_mode.dart';
 
 enum _ResetStep {
   enterEmail,
@@ -268,8 +269,8 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     });
 
     try {
-      if (code == '000000') {
-        debugPrint('[ForgotPassword] Master OTP 000000 accepted for password recovery testing.');
+      if (DemoMode.isMasterOtp(code)) {
+        debugPrint('[ForgotPassword] Demo master OTP accepted for password recovery.');
         _isMasterOtpUsed = true;
         HapticFeedback.mediumImpact();
         setState(() {

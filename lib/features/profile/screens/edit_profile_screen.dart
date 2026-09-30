@@ -15,6 +15,7 @@ import '../../../shared/widgets/apple_touch_feedback.dart';
 import '../../../shared/widgets/safe_network_image.dart';
 import '../../../core/utils/phone_number_helper.dart';
 import '../../../core/utils/error_sanitizer.dart';
+import '../../../core/config/demo_mode.dart';
 import '../../../shared/widgets/phone_input_field.dart';
 import '../../home/providers/home_provider.dart';
 import '../providers/profile_provider.dart';
@@ -392,8 +393,8 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 setModalState(() {
                   step = 1;
                   isLoading = false;
-                  errorMessage =
-                      'SMS service is in test mode. Please enter verification code 000000 to proceed.';
+                  errorMessage = DemoMode.hint ??
+                      'SMS service is in test mode. Please request a new code and try again.';
                 });
                 startCooldown();
               } else {
@@ -585,7 +586,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                               ),
                       ),
                     ),
-                    if (errorMessage != null) ...[
+                    if (DemoMode.isEnabled && errorMessage != null) ...[
                       const SizedBox(height: 12),
                       Center(
                         child: CupertinoButton(
@@ -593,12 +594,13 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                           onPressed: () {
                             setModalState(() {
                               step = 1;
-                              errorMessage = 'Enter test code 000000 to verify.';
+                              errorMessage =
+                                  'Enter code manually (${DemoMode.masterOtp} for testing)';
                             });
                             startCooldown();
                           },
                           child: Text(
-                            'Enter code manually (use 000000 for testing)',
+                            'Enter code manually (use ${DemoMode.masterOtp} for testing)',
                             style: GoogleFonts.poppins(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
@@ -640,23 +642,25 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                         ),
                       ),
                     ),
-                    Center(
-                      child: CupertinoButton(
-                        padding: const EdgeInsets.only(top: 8),
-                        onPressed: () {
-                          otpController.text = '000000';
-                          verifyOtp();
-                        },
-                        child: Text(
-                          '⚡ Tap to auto-verify with test code (000000)',
-                          style: GoogleFonts.poppins(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.champagneGold,
+                    if (DemoMode.isEnabled) ...[
+                      Center(
+                        child: CupertinoButton(
+                          padding: const EdgeInsets.only(top: 8),
+                          onPressed: () {
+                            otpController.text = DemoMode.masterOtp;
+                            verifyOtp();
+                          },
+                          child: Text(
+                            '⚡ Tap to auto-verify with test code',
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.champagneGold,
+                            ),
                           ),
                         ),
                       ),
-                    ),
+                    ],
                     const SizedBox(height: 12),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,

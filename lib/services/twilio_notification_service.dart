@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide Headers;
 import '../core/config/env_config.dart';
+import '../core/config/demo_mode.dart';
 import '../core/utils/error_sanitizer.dart';
 
 /// Service for managing SMS notifications, booking alerts, and OTP verification
@@ -218,9 +219,9 @@ class TwilioNotificationService {
     required String to,
     required String code,
   }) async {
-    // ── Master OTP Bypass for Testing ──────────────────────────────────────
-    if (code.trim() == '000000') {
-      debugPrint('[Twilio] Master OTP 000000 accepted for $to (testing bypass)');
+    // ── Demo master OTP (only when the build enables it) ────────────────────
+    if (DemoMode.isMasterOtp(code)) {
+      debugPrint('[Twilio] Demo master OTP accepted for $to');
       return true;
     }
 

@@ -15,6 +15,7 @@ import 'package:tigerbay_app/features/auth/providers/register_provider.dart';
 import 'package:tigerbay_app/services/twilio_notification_service.dart';
 import 'package:tigerbay_app/core/utils/phone_number_helper.dart';
 import 'package:tigerbay_app/core/utils/error_sanitizer.dart';
+import 'package:tigerbay_app/core/config/demo_mode.dart';
 
 enum _RegStage {
   verifyPhone,
@@ -213,8 +214,8 @@ class _RegistrationVerificationScreenState
         if (isTrial) {
           setState(() {
             _isLoading = false;
-            _errorMessage =
-                'SMS service is in test mode. Please enter verification code 000000 to proceed.';
+            _errorMessage = DemoMode.hint ??
+                'SMS service is in test mode. Please request a new code and try again.';
           });
           _startCooldown();
           return;
@@ -248,8 +249,8 @@ class _RegistrationVerificationScreenState
     });
 
     try {
-      if (code == '000000') {
-        debugPrint('[Registration] Master OTP 000000 accepted for phone SMS testing.');
+      if (DemoMode.isMasterOtp(code)) {
+        debugPrint('[Registration] Demo master OTP accepted for phone SMS stage.');
         await _initiateEmailPhase();
         return;
       }
@@ -440,8 +441,8 @@ class _RegistrationVerificationScreenState
         } catch (_) {}
       }
 
-      if (code == '000000') {
-        debugPrint('[Registration] Master OTP 000000 accepted for email verification of $email');
+      if (DemoMode.isMasterOtp(code)) {
+        debugPrint('[Registration] Demo master OTP accepted for email stage of $email');
 
         // If password is available in draft, sign in to establish active Supabase session
         if (effectivePassword.isNotEmpty) {

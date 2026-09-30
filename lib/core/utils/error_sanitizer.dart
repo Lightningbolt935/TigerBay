@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import '../config/demo_mode.dart';
+
 /// ═══════════════════════════════════════════════════════════════════════════
 /// TigerBay International — Error Sanitizer & Humanizer
 /// ═══════════════════════════════════════════════════════════════════════════
@@ -53,7 +55,8 @@ class ErrorSanitizer {
         lower.contains('verified caller id') ||
         lower.contains('21608') ||
         lower.contains('sandbox')) {
-      return 'SMS service is in test mode. For testing, please enter verification code 000000.';
+      return DemoMode.hint ??
+          'SMS service is in test mode. Please request a new code and try again.';
     }
 
     // ── Twilio / SMS Invalid Phone Number ──────────────────────────────────
