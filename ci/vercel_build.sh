@@ -27,12 +27,32 @@ if [ ! -x "${FLUTTER_ROOT}/bin/flutter" ]; then
   echo "▸ Downloading Flutter ${FLUTTER_VERSION}..."
   ARCHIVE="flutter_linux_${FLUTTER_VERSION}-stable.tar.xz"
   URL="https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/${ARCHIVE}"
+  DOWNLOAD_DIR="$(mktemp -d)"
 
-  curl -fsSL --retry 3 --retry-delay 2 -o "/tmp/${ARCHIVE}" "${URL}"
-  mkdir -p "${FLUTTER_ROOT}"
-  # GNU tar auto-detects the xz container when extracting.
-  tar -xf "/tmp/${ARCHIVE}" -C "${FLUTTER_ROOT}"
-  rm -f "/tmp/${ARCHIVE}"
+  curl -fsSL --retry 3 --retry-delay 2 -o "${DOWNLOAD_DIR}/${ARCHIVE}" "${URL}"
+
+  # The archive contains a single top-level `flutter/` directory, so it must be
+  # unpacked into the PARENT of FLUTTER_ROOT and then moved into place.
+  # Unpacking straight into FLUTTER_ROOT would yield FLUTTER_ROOT/flutter/bin/flutter
+  # and every later `flutter` call would fail with "command not found".
+  EXTRACT_DIR="$(mktemp -d)"
+  tar -xf "${DOWNLOAD_DIR}/${ARCHIVE}" -C "${EXTRACT_DIR}"
+
+  if [ ! -x "${EXTRACT_DIR}/flutter/bin/flutter" ]; then
+    echo "ERROR: unexpected archive layout, no flutter/bin/flutter at the top level" >&2
+    exit 1
+  fi
+
+  mkdir -p "$(dirname "${FLUTTER_ROOT}")"
+  rm -rf "${FLUTTER_ROOT}"
+  mv "${EXTRACT_DIR}/flutter" "${FLUTTER_ROOT}"
+
+  rm -rf "${EXTRACT_DIR}" "${DOWNLOAD_DIR}"
+fi
+
+if [ ! -x "${FLUTTER_ROOT}/bin/flutter" ]; then
+  echo "ERROR: Flutter is not executable at ${FLUTTER_ROOT}/bin/flutter" >&2
+  exit 1
 fi
 
 # The SDK is a git checkout owned by a different uid inside the build sandbox.
