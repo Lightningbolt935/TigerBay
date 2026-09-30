@@ -107,14 +107,19 @@ Future<void> main() async {
     anonKey: EnvConfig.supabaseAnonKey,
   );
 
-  // ── Init Stripe ────────────────────────────────────────────────────────────
-  final stripeKey = EnvConfig.stripePublishableKey;
-  if (stripeKey.startsWith('pk_')) {
-    Stripe.publishableKey = stripeKey;
-    Stripe.merchantIdentifier = 'merchant.io.tigerbay.app';
-    Stripe.urlScheme = EnvConfig.appScheme;
-    Stripe.setReturnUrlSchemeOnAndroid = true;
-    if (!kIsWeb) {
+  // ── Init Stripe (mobile only) ──────────────────────────────────────────────
+  // flutter_stripe 11.5.0 ships no web implementation. Its default factory
+  // (MethodChannelStripeFactory) eagerly evaluates Platform.isIOS and
+  // Platform.isAndroid, and dart:io throws UnsupportedError on web. Touching
+  // any Stripe.* static on the web therefore aborts main() before runApp, which
+  // surfaces as a blank black screen once the boot splash times out.
+  if (!kIsWeb) {
+    final stripeKey = EnvConfig.stripePublishableKey;
+    if (stripeKey.startsWith('pk_')) {
+      Stripe.publishableKey = stripeKey;
+      Stripe.merchantIdentifier = 'merchant.io.tigerbay.app';
+      Stripe.urlScheme = EnvConfig.appScheme;
+      Stripe.setReturnUrlSchemeOnAndroid = true;
       await Stripe.instance.applySettings();
     }
   }

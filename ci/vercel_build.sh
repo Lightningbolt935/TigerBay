@@ -93,6 +93,11 @@ add_define GOOGLE_WEB_CLIENT_ID
 add_define APP_SCHEME
 add_define APP_ENV
 
+# Demo mode is opt-in per environment: set DEMO_MODE=true on a Vercel environment
+# to accept the master OTP (000000) in place of a real SMS code. It is unset by
+# default, so a production deploy stays demo-off unless you deliberately enable it.
+add_define DEMO_MODE
+
 # ── 4. Build ─────────────────────────────────────────────────────────────────
 echo "▸ flutter build web --release"
 flutter build web \

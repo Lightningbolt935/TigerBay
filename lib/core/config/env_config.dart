@@ -19,7 +19,12 @@ class EnvConfig {
     if (_initialized) return;
 
     try {
-      await dotenv.load(fileName: '.env');
+      // There is no .env inside a web bundle — flutter_dotenv would request
+      // assets/.env, get a 404, and leave the noise in the console. Web config
+      // arrives via --dart-define, which _resolve() already prefers.
+      if (!kIsWeb) {
+        await dotenv.load(fileName: '.env');
+      }
       if (kDebugMode) {
         debugPrint('[EnvConfig] Loaded configuration from .env');
       }
