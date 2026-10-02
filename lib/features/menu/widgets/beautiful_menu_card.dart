@@ -7,10 +7,11 @@ import 'package:tigerbay_app/data/models/menu_item_model.dart';
 /// ═══════════════════════════════════════════════════════════════════════════
 /// TigerBay International — Beautiful Menu Card Widget
 /// ═══════════════════════════════════════════════════════════════════════════
-/// Standalone card component for menu items. Shows a discount ribbon when
-/// discount_percentage > 0, with discounted price in gold and original price
-/// struck through. Follows the full dark luxury design system.
-class BeautifulMenuCard extends StatelessWidget {
+/// Standalone card component for menu items. Supports multi-image carousels
+/// with page indicators when multiple images are detected, shows a discount
+/// ribbon when discount_percentage > 0, with discounted price in gold and
+/// original price struck through. Follows the full dark luxury design system.
+class BeautifulMenuCard extends StatefulWidget {
   final MenuItemModel item;
   final VoidCallback? onTap;
 
@@ -21,9 +22,29 @@ class BeautifulMenuCard extends StatelessWidget {
   });
 
   @override
+  State<BeautifulMenuCard> createState() => _BeautifulMenuCardState();
+}
+
+class _BeautifulMenuCardState extends State<BeautifulMenuCard> {
+  int _currentImageIndex = 0;
+  late final PageController _pageController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: widget.onTap,
       child: Container(
         decoration: BoxDecoration(
           color: AppColors.surface,
@@ -40,7 +61,7 @@ class BeautifulMenuCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Image Section with Optional Discount Ribbon ────────────
+            // ── Image / Multi-Image Carousel Section ───────────────────
             _buildImageSection(),
 
             // ── Content Section ───────────────────────────────────────
@@ -51,7 +72,7 @@ class BeautifulMenuCard extends StatelessWidget {
                 children: [
                   // Item Name
                   Text(
-                    item.name,
+                    widget.item.name,
                     style: GoogleFonts.poppins(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
@@ -64,7 +85,7 @@ class BeautifulMenuCard extends StatelessWidget {
 
                   // Description
                   Text(
-                    item.description,
+                    widget.item.description,
                     style: GoogleFonts.poppins(
                       fontSize: 12,
                       color: AppColors.textSecondary,
@@ -87,55 +108,100 @@ class BeautifulMenuCard extends StatelessWidget {
   }
 
   Widget _buildImageSection() {
+    final images = widget.item.images.isNotEmpty
+        ? widget.item.images
+        : (widget.item.imageUrl != null && widget.item.imageUrl!.isNotEmpty
+            ? [widget.item.imageUrl!]
+            : <String>[]);
+
     return SizedBox(
       height: 140,
       width: double.infinity,
       child: Stack(
         children: [
-          // ── Image ───────────────────────────────────────────────────
+          // ── Image or Carousel ───────────────────────────────────────
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
-            child: item.imageUrl != null && item.imageUrl!.isNotEmpty
-                ? CachedNetworkImage(
-                    imageUrl: item.imageUrl!,
-                    height: 140,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                    placeholder: (_, __) => Container(
-                      height: 140,
-                      color: AppColors.surfaceLight,
-                      child: const Center(
-                        child: CircularProgressIndicator(
-                          color: AppColors.gold,
-                          strokeWidth: 2,
-                        ),
+            child: images.isEmpty
+                ? _buildPlaceholderImage()
+                : images.length == 1
+                    ? _buildSingleNetworkImage(images.first)
+                    : PageView.builder(
+                        controller: _pageController,
+                        itemCount: images.length,
+                        onPageChanged: (index) {
+                          setState(() {
+                            _currentImageIndex = index;
+                          });
+                        },
+                        itemBuilder: (context, index) {
+                          return _buildSingleNetworkImage(images[index]);
+                        },
                       ),
-                    ),
-                    errorWidget: (_, __, ___) => Container(
-                      height: 140,
-                      color: AppColors.surfaceLight,
-                      child: const Icon(
-                        Icons.restaurant_outlined,
-                        color: AppColors.textHint,
-                        size: 40,
-                      ),
-                    ),
-                  )
-                : Container(
-                    height: 140,
-                    color: AppColors.surfaceLight,
-                    child: const Center(
-                      child: Icon(
-                        Icons.restaurant_outlined,
-                        color: AppColors.textHint,
-                        size: 40,
-                      ),
-                    ),
-                  ),
           ),
 
+          // ── Carousel Dots & Badge (only when 2+ images exist) ───────
+          if (images.length > 1) ...[
+            // Bottom Indicator Dots
+            Positioned(
+              bottom: 8,
+              left: 0,
+              right: 0,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(
+                  images.length,
+                  (index) => AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    margin: const EdgeInsets.symmetric(horizontal: 2.5),
+                    width: _currentImageIndex == index ? 14 : 5,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: _currentImageIndex == index
+                          ? AppColors.gold
+                          : Colors.white.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            // Top-right Image Counter Badge
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.photo_library_outlined,
+                      size: 11,
+                      color: Colors.white,
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      '${_currentImageIndex + 1}/${images.length}',
+                      style: GoogleFonts.poppins(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+
           // ── Discount Ribbon (top-left, only if discounted) ──────────
-          if (item.hasDiscount)
+          if (widget.item.hasDiscount)
             Positioned(
               top: 0,
               left: 0,
@@ -152,7 +218,7 @@ class BeautifulMenuCard extends StatelessWidget {
                   ),
                 ),
                 child: Text(
-                  '${item.discountPercentage}% OFF',
+                  '${widget.item.discountPercentage}% OFF',
                   style: GoogleFonts.poppins(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
@@ -166,13 +232,47 @@ class BeautifulMenuCard extends StatelessWidget {
     );
   }
 
+  Widget _buildSingleNetworkImage(String url) {
+    return CachedNetworkImage(
+      imageUrl: url,
+      height: 140,
+      width: double.infinity,
+      fit: BoxFit.cover,
+      placeholder: (_, __) => Container(
+        height: 140,
+        color: AppColors.surfaceLight,
+        child: const Center(
+          child: CircularProgressIndicator(
+            color: AppColors.gold,
+            strokeWidth: 2,
+          ),
+        ),
+      ),
+      errorWidget: (_, __, ___) => _buildPlaceholderImage(),
+    );
+  }
+
+  Widget _buildPlaceholderImage() {
+    return Container(
+      height: 140,
+      color: AppColors.surfaceLight,
+      child: const Center(
+        child: Icon(
+          Icons.restaurant_outlined,
+          color: AppColors.textHint,
+          size: 40,
+        ),
+      ),
+    );
+  }
+
   Widget _buildPriceRow() {
-    if (item.hasDiscount) {
+    if (widget.item.hasDiscount) {
       // ── Discounted: gold new price + struck-through original ────────
       return Row(
         children: [
           Text(
-            item.discountedPriceFormatted,
+            widget.item.discountedPriceFormatted,
             style: GoogleFonts.poppins(
               fontSize: 16,
               fontWeight: FontWeight.w700,
@@ -181,7 +281,7 @@ class BeautifulMenuCard extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Text(
-            item.formattedPrice,
+            widget.item.formattedPrice,
             style: GoogleFonts.poppins(
               fontSize: 13,
               fontWeight: FontWeight.w400,
@@ -196,7 +296,7 @@ class BeautifulMenuCard extends StatelessWidget {
 
     // ── Standard price (no discount) ──────────────────────────────────
     return Text(
-      item.formattedPrice,
+      widget.item.formattedPrice,
       style: GoogleFonts.poppins(
         fontSize: 16,
         fontWeight: FontWeight.w600,
