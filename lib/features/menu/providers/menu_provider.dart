@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tigerbay_app/data/models/menu_item_model.dart';
 import 'package:tigerbay_app/data/models/menu_category_node.dart';
 import 'package:tigerbay_app/data/models/package_model.dart';
+import 'package:tigerbay_app/data/repositories/menu_repository.dart';
 import 'package:tigerbay_app/features/home/providers/home_provider.dart';
 
 // ── Search & Compatibility Providers ─────────────────────────────────────────
@@ -16,7 +17,6 @@ final menuRepositoryProvider = Provider<MenuRepository>((ref) {
 // DYNAMIC VENUE MENU TYPES & CATEGORIES (SUPABASE DRIVEN)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Streams the distinct menu types available for the currently selected branch
 final availableMenuTypesProvider = StreamProvider<List<String>>((ref) {
   final selectedBranch = ref.watch(selectedBranchProvider);
   return ref.watch(menuRepositoryProvider).watchMenuTypes(
@@ -24,10 +24,8 @@ final availableMenuTypesProvider = StreamProvider<List<String>>((ref) {
       );
 });
 
-/// Currently selected Menu Type.
 final selectedMenuTypeProvider = StateProvider<String>((ref) => 'food');
 
-/// Watch active categories for the selected menu type & branch
 final hierarchicalCategoriesProvider =
     StreamProvider<List<MenuCategoryNode>>((ref) {
   final menuType = ref.watch(selectedMenuTypeProvider);
@@ -38,7 +36,6 @@ final hierarchicalCategoriesProvider =
       );
 });
 
-/// Category navigation breadcrumb stack
 class CategoryNavigationNotifier
     extends StateNotifier<List<MenuCategoryNode>> {
   CategoryNavigationNotifier() : super([]);
@@ -71,13 +68,11 @@ final categoryNavigationStackProvider = StateNotifierProvider<
   return CategoryNavigationNotifier();
 });
 
-/// Currently active category node (null means 'ALL' categories of the selectedMenuType)
 final currentCategoryNodeProvider = Provider<MenuCategoryNode?>((ref) {
   final stack = ref.watch(categoryNavigationStackProvider);
   return stack.isNotEmpty ? stack.last : null;
 });
 
-/// Stream of celebration packages for the selected branch
 final celebrationPackagesProvider = StreamProvider<List<PackageModel>>((ref) {
   final selectedBranch = ref.watch(selectedBranchProvider);
   return ref.watch(menuRepositoryProvider).watchPackages(
@@ -85,7 +80,6 @@ final celebrationPackagesProvider = StreamProvider<List<PackageModel>>((ref) {
       );
 });
 
-/// Stream of all dishes for the active venue
 final dishesForBranchStreamProvider = StreamProvider<List<MenuItemModel>>((ref) {
   final selectedBranch = ref.watch(selectedBranchProvider);
   return ref.watch(menuRepositoryProvider).watchDishes(
@@ -93,7 +87,6 @@ final dishesForBranchStreamProvider = StreamProvider<List<MenuItemModel>>((ref) 
       );
 });
 
-/// Filtered dishes for current branch, category selection, and search query.
 final dishesForCurrentHierarchyProvider =
     Provider<AsyncValue<List<MenuItemModel>>>((ref) {
   final dishesAsync = ref.watch(dishesForBranchStreamProvider);
@@ -108,7 +101,6 @@ final dishesForCurrentHierarchyProvider =
     final activeCategoryNames =
         activeCategories.map((c) => c.name.toLowerCase()).toSet();
 
-    // Check if a dish belongs to an active category under this menu type
     bool belongsToCurrentMenuType(MenuItemModel dish) {
       if (dish.categoryId != null && activeCategoryIds.contains(dish.categoryId)) {
         return true;
@@ -130,7 +122,6 @@ final dishesForCurrentHierarchyProvider =
         }
       }
 
-      // Keyword fallback when categories are still loading or matching defaults
       if (menuType == 'food' &&
           (dishCat.contains('food') ||
               dishCat.contains('starter') ||
@@ -158,7 +149,6 @@ final dishesForCurrentHierarchyProvider =
       return false;
     }
 
-    // 1. Search Query active
     if (searchQuery.isNotEmpty) {
       return allDishes.where((dish) {
         if (!dish.isAvailable) return false;
@@ -171,7 +161,6 @@ final dishesForCurrentHierarchyProvider =
       }).toList();
     }
 
-    // 2. Specific Category Node selected
     if (currentNode != null) {
       final targetId = currentNode.id;
       final targetName = currentNode.name.toLowerCase();
@@ -190,7 +179,6 @@ final dishesForCurrentHierarchyProvider =
       }).toList();
     }
 
-    // 3. Root Level: Show all dishes under the active dynamic menu type
     return allDishes
         .where((dish) => dish.isAvailable && belongsToCurrentMenuType(dish))
         .toList();
