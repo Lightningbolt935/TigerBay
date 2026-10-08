@@ -160,6 +160,10 @@ class MenuItemModel {
           .toList();
     }
 
+    final branchIdVal = json['branch_id'] is int
+        ? json['branch_id'] as int
+        : int.tryParse(json['branch_id']?.toString() ?? '');
+
     return MenuItemModel(
       id: json['id'].toString(),
       name: (json['name'] as String?) ?? '',
@@ -170,9 +174,7 @@ class MenuItemModel {
       category: (json['category'] as String?) ?? 'food',
       subcategory: json['subcategory'] as String?,
       categoryId: json['category_id']?.toString(),
-      branchId: json['branch_id'] is int
-          ? json['branch_id'] as int
-          : int.tryParse(json['branch_id']?.toString() ?? ''),
+      branchId: branchIdVal,
       isAvailable: (json['is_available'] as bool?) ?? true,
       discountPercentage: safeInt(json['discount_percentage']) ?? 0,
       variants: parsedVariants,

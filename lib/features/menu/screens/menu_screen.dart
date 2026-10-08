@@ -314,13 +314,17 @@ class MenuScreen extends ConsumerWidget {
                   color: isSelected ? Colors.black : const Color(0xFF8E8B85),
                 ),
                 const SizedBox(width: 5),
-                Text(
-                  label,
-                  style: GoogleFonts.outfit(
-                    fontSize: 11,
-                    fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                    color: isSelected ? Colors.black : const Color(0xFFC2BEB6),
-                    letterSpacing: 1.2,
+                Flexible(
+                  child: Text(
+                    label,
+                    style: GoogleFonts.outfit(
+                      fontSize: 11,
+                      fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                      color: isSelected ? Colors.black : const Color(0xFFC2BEB6),
+                      letterSpacing: 1.0,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -769,6 +773,38 @@ class _DishDetailModalSheetState extends State<_DishDetailModalSheet> {
                       ),
                     ],
                   ),
+                  if (widget.item.hasDiscount) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Text(
+                          widget.item.formattedPrice,
+                          style: GoogleFonts.poppins(
+                            fontSize: 13,
+                            color: AppColors.textHint,
+                            decoration: TextDecoration.lineThrough,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.brandRed,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '${widget.item.discountPercentage}% OFF',
+                            style: GoogleFonts.poppins(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                   if (widget.item.description.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Text(
@@ -778,6 +814,111 @@ class _DishDetailModalSheetState extends State<_DishDetailModalSheet> {
                         color: AppColors.textSecondary,
                         height: 1.5,
                       ),
+                    ),
+                  ],
+                  if (widget.item.variants.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      'Options / Sizes',
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: widget.item.variants.map((v) {
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E1E26),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: AppColors.gold.withValues(alpha: 0.35),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                v.name,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                v.formattedPrice,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.champagneGold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                  if (widget.item.addons.isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    Text(
+                      'Available Extras & Add-ons',
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: widget.item.addons.map((a) {
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E1E26),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.1),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                a.name,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                '+${a.formattedPrice}',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.champagneGold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
                     ),
                   ],
                   const SizedBox(height: 24),
@@ -974,7 +1115,7 @@ class _MenuBranchSelector extends StatelessWidget {
                     ),
                   ),
                   subtitle: Text(
-                    b.city,
+                    b.city ?? 'London',
                     style: GoogleFonts.poppins(
                       fontSize: 12,
                       color: AppColors.textSecondary,

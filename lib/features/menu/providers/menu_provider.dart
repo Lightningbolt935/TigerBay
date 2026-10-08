@@ -2,16 +2,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tigerbay_app/data/models/menu_item_model.dart';
 import 'package:tigerbay_app/data/models/menu_category_node.dart';
 import 'package:tigerbay_app/data/models/package_model.dart';
-import 'package:tigerbay_app/data/repositories/menu_repository.dart';
 import 'package:tigerbay_app/features/home/providers/home_provider.dart';
+
+export 'package:tigerbay_app/features/home/providers/home_provider.dart'
+    show menuRepositoryProvider;
 
 // ── Search & Compatibility Providers ─────────────────────────────────────────
 
 final menuSearchQueryProvider = StateProvider<String>((ref) => '');
-
-final menuRepositoryProvider = Provider<MenuRepository>((ref) {
-  return MenuRepository();
-});
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // DYNAMIC VENUE MENU TYPES & CATEGORIES (SUPABASE DRIVEN)
@@ -122,28 +120,32 @@ final dishesForCurrentHierarchyProvider =
         }
       }
 
-      if (menuType == 'food' &&
-          (dishCat.contains('food') ||
-              dishCat.contains('starter') ||
-              dishCat.contains('main') ||
-              dishCat.contains('curry') ||
-              dishCat.contains('biryani'))) {
-        return true;
-      }
-      if (menuType == 'drinks' &&
-          (dishCat.contains('drink') ||
-              dishCat.contains('wine') ||
-              dishCat.contains('cocktail') ||
-              dishCat.contains('beer') ||
-              dishCat.contains('spirit') ||
-              dishCat.contains('beverage'))) {
-        return true;
-      }
-      if (menuType == 'shisha' && dishCat.contains('shisha')) {
-        return true;
-      }
-      if (menuType == 'dessert' && (dishCat.contains('dessert') || dishCat.contains('sweet'))) {
-        return true;
+      // Keyword fallback ONLY when categories in Supabase are empty / loading
+      if (activeCategories.isEmpty) {
+        if (menuType == 'food' &&
+            (dishCat.contains('food') ||
+                dishCat.contains('starter') ||
+                dishCat.contains('main') ||
+                dishCat.contains('curry') ||
+                dishCat.contains('biryani'))) {
+          return true;
+        }
+        if (menuType == 'drinks' &&
+            (dishCat.contains('drink') ||
+                dishCat.contains('wine') ||
+                dishCat.contains('cocktail') ||
+                dishCat.contains('beer') ||
+                dishCat.contains('spirit') ||
+                dishCat.contains('beverage'))) {
+          return true;
+        }
+        if (menuType == 'shisha' && dishCat.contains('shisha')) {
+          return true;
+        }
+        if (menuType == 'dessert' &&
+            (dishCat.contains('dessert') || dishCat.contains('sweet'))) {
+          return true;
+        }
       }
 
       return false;
