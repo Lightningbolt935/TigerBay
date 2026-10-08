@@ -1,64 +1,44 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tigerbay_app/data/models/menu_item_model.dart';
 import 'package:tigerbay_app/data/models/menu_category_node.dart';
+import 'package:tigerbay_app/data/models/package_model.dart';
 import 'package:tigerbay_app/features/home/providers/home_provider.dart';
 
-// ── Legacy Compatibility Providers ────────────────────────────────────────────
-
-final selectedMenuCategoryProvider =
-    StateProvider<MenuCategory>((ref) => MenuCategory.all);
+// ── Search & Compatibility Providers ─────────────────────────────────────────
 
 final menuSearchQueryProvider = StateProvider<String>((ref) => '');
 
-final dishesStreamProvider = StreamProvider<List<MenuItemModel>>((ref) {
-  return ref.read(menuRepositoryProvider).watchDishes();
-});
-
-final groupedDishesProvider =
-    Provider<Map<String, List<MenuItemModel>>>((ref) {
-  final dishesAsync = ref.watch(dishesStreamProvider);
-  final selectedCategory = ref.watch(selectedMenuCategoryProvider);
-  final searchQuery = ref.watch(menuSearchQueryProvider).toLowerCase();
-
-  final items = dishesAsync.asData?.value ?? [];
-
-  final filtered = items.where((item) {
-    final categoryMatch = selectedCategory == MenuCategory.all ||
-        item.menuCategory == selectedCategory;
-    final searchMatch = searchQuery.isEmpty ||
-        item.name.toLowerCase().contains(searchQuery) ||
-        item.description.toLowerCase().contains(searchQuery) ||
-        item.category.toLowerCase().contains(searchQuery);
-    return categoryMatch && searchMatch;
-  }).toList();
-
-  final Map<String, List<MenuItemModel>> grouped = {};
-  for (final item in filtered) {
-    grouped.putIfAbsent(item.category, () => []).add(item);
-  }
-  return grouped;
+final menuRepositoryProvider = Provider<MenuRepository>((ref) {
+  return MenuRepository();
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// HIERARCHICAL & DYNAMIC MENU STATE MANAGEMENT (SUPABASE DRIVEN)
+// DYNAMIC VENUE MENU TYPES & CATEGORIES (SUPABASE DRIVEN)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Root Menu Tab: 'food', 'drinks', 'shisha'
+/// Streams the distinct menu types available for the currently selected branch
+final availableMenuTypesProvider = StreamProvider<List<String>>((ref) {
+  final selectedBranch = ref.watch(selectedBranchProvider);
+  return ref.watch(menuRepositoryProvider).watchMenuTypes(
+        branchId: selectedBranch?.id,
+      );
+});
+
+/// Currently selected Menu Type.
 final selectedMenuTypeProvider = StateProvider<String>((ref) => 'food');
 
-/// Watch active categories for the currently selected menu type in realtime from Supabase.
-/// Strictly filtered by is_active == true and selected branch.
+/// Watch active categories for the selected menu type & branch
 final hierarchicalCategoriesProvider =
     StreamProvider<List<MenuCategoryNode>>((ref) {
   final menuType = ref.watch(selectedMenuTypeProvider);
   final selectedBranch = ref.watch(selectedBranchProvider);
-  return ref.read(menuRepositoryProvider).watchCategories(
-    menuType: menuType,
-    branchId: selectedBranch?.id,
-  );
+  return ref.watch(menuRepositoryProvider).watchCategories(
+        menuType: menuType,
+        branchId: selectedBranch?.id,
+      );
 });
 
-/// Category navigation breadcrumb stack (e.g. [Food, Starters])
+/// Category navigation breadcrumb stack
 class CategoryNavigationNotifier
     extends StateNotifier<List<MenuCategoryNode>> {
   CategoryNavigationNotifier() : super([]);
@@ -70,13 +50,6 @@ class CategoryNavigationNotifier
   void popCategory() {
     if (state.isNotEmpty) {
       state = state.sublist(0, state.length - 1);
-    }
-  }
-
-  void popToCategory(MenuCategoryNode node) {
-    final index = state.indexWhere((n) => n.id == node.id);
-    if (index >= 0) {
-      state = state.sublist(0, index + 1);
     }
   }
 
@@ -98,33 +71,32 @@ final categoryNavigationStackProvider = StateNotifierProvider<
   return CategoryNavigationNotifier();
 });
 
-/// Currently active category node (null means 'ALL' categories of selectedMenuType)
+/// Currently active category node (null means 'ALL' categories of the selectedMenuType)
 final currentCategoryNodeProvider = Provider<MenuCategoryNode?>((ref) {
   final stack = ref.watch(categoryNavigationStackProvider);
   return stack.isNotEmpty ? stack.last : null;
 });
 
-/// The categories / subcategories to display at the current hierarchical depth
-final currentLevelCategoriesProvider =
-    Provider<AsyncValue<List<MenuCategoryNode>>>((ref) {
-  final rootCategoriesAsync = ref.watch(hierarchicalCategoriesProvider);
-  final currentNode = ref.watch(currentCategoryNodeProvider);
-
-  return rootCategoriesAsync.whenData((roots) {
-    if (currentNode == null) {
-      return roots;
-    }
-    // Return children of current node if any
-    return currentNode.subcategories;
-  });
+/// Stream of celebration packages for the selected branch
+final celebrationPackagesProvider = StreamProvider<List<PackageModel>>((ref) {
+  final selectedBranch = ref.watch(selectedBranchProvider);
+  return ref.watch(menuRepositoryProvider).watchPackages(
+        branchId: selectedBranch?.id,
+      );
 });
 
-/// Filtered dishes for the current category selection, search, and active Supabase categories.
-/// If an admin hides a category (is_active == false), its dishes are vanished as well.
+/// Stream of all dishes for the active venue
+final dishesForBranchStreamProvider = StreamProvider<List<MenuItemModel>>((ref) {
+  final selectedBranch = ref.watch(selectedBranchProvider);
+  return ref.watch(menuRepositoryProvider).watchDishes(
+        branchId: selectedBranch?.id,
+      );
+});
+
+/// Filtered dishes for current branch, category selection, and search query.
 final dishesForCurrentHierarchyProvider =
     Provider<AsyncValue<List<MenuItemModel>>>((ref) {
-  final selectedBranch = ref.watch(selectedBranchProvider);
-  final dishesAsync = ref.watch(menuForBranchProvider(selectedBranch?.id));
+  final dishesAsync = ref.watch(dishesForBranchStreamProvider);
   final currentNode = ref.watch(currentCategoryNodeProvider);
   final menuType = ref.watch(selectedMenuTypeProvider).toLowerCase();
   final searchQuery = ref.watch(menuSearchQueryProvider).trim().toLowerCase();
@@ -136,12 +108,12 @@ final dishesForCurrentHierarchyProvider =
     final activeCategoryNames =
         activeCategories.map((c) => c.name.toLowerCase()).toSet();
 
-    // Check if a dish belongs to an active category mentioned in Supabase
-    bool belongsToActiveCategory(MenuItemModel dish) {
-      if (dish.categoryId != null &&
-          activeCategoryIds.contains(dish.categoryId)) {
+    // Check if a dish belongs to an active category under this menu type
+    bool belongsToCurrentMenuType(MenuItemModel dish) {
+      if (dish.categoryId != null && activeCategoryIds.contains(dish.categoryId)) {
         return true;
       }
+
       final dishCat = dish.category.toLowerCase();
       final dishSub = dish.subcategory?.toLowerCase();
 
@@ -158,26 +130,29 @@ final dishesForCurrentHierarchyProvider =
         }
       }
 
-      // If no categories in Supabase yet, match by menuType keywords
-      if (activeCategories.isEmpty) {
-        if (menuType == 'food' &&
-            (dishCat.contains('food') ||
-                dishCat.contains('starter') ||
-                dishCat.contains('dessert') ||
-                dishCat.contains('main'))) {
-          return true;
-        }
-        if (menuType == 'drinks' &&
-            (dishCat.contains('drink') ||
-                dishCat.contains('wine') ||
-                dishCat.contains('beer') ||
-                dishCat.contains('spirit') ||
-                dishCat.contains('cocktail'))) {
-          return true;
-        }
-        if (menuType == 'shisha' && dishCat.contains('shisha')) {
-          return true;
-        }
+      // Keyword fallback when categories are still loading or matching defaults
+      if (menuType == 'food' &&
+          (dishCat.contains('food') ||
+              dishCat.contains('starter') ||
+              dishCat.contains('main') ||
+              dishCat.contains('curry') ||
+              dishCat.contains('biryani'))) {
+        return true;
+      }
+      if (menuType == 'drinks' &&
+          (dishCat.contains('drink') ||
+              dishCat.contains('wine') ||
+              dishCat.contains('cocktail') ||
+              dishCat.contains('beer') ||
+              dishCat.contains('spirit') ||
+              dishCat.contains('beverage'))) {
+        return true;
+      }
+      if (menuType == 'shisha' && dishCat.contains('shisha')) {
+        return true;
+      }
+      if (menuType == 'dessert' && (dishCat.contains('dessert') || dishCat.contains('sweet'))) {
+        return true;
       }
 
       return false;
@@ -192,7 +167,7 @@ final dishesForCurrentHierarchyProvider =
             dish.category.toLowerCase().contains(searchQuery) ||
             (dish.subcategory != null &&
                 dish.subcategory!.toLowerCase().contains(searchQuery));
-        return matchesSearch && belongsToActiveCategory(dish);
+        return matchesSearch;
       }).toList();
     }
 
@@ -215,9 +190,9 @@ final dishesForCurrentHierarchyProvider =
       }).toList();
     }
 
-    // 3. Root Level: Show all dishes belonging to active categories for current menuType
+    // 3. Root Level: Show all dishes under the active dynamic menu type
     return allDishes
-        .where((dish) => dish.isAvailable && belongsToActiveCategory(dish))
+        .where((dish) => dish.isAvailable && belongsToCurrentMenuType(dish))
         .toList();
   });
 });
