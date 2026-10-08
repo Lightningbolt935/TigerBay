@@ -48,4 +48,10 @@ class AppRoutes {
 
   // Notifications Inbox
   static const String notifications = '/notifications';
+
+  // Venue & Entertainment
+  static const String venueLanding = '/venue';
+  static const String whatsOn = '/whats-on';
+  static const String packages = '/packages';
+  static const String contactUs = '/contact-us';
 }

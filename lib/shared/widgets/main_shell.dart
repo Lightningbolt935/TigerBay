@@ -19,10 +19,16 @@ class MainShell extends ConsumerWidget {
 
   static const List<_NavItem> _items = [
     _NavItem(
-      label: 'Feed',
-      icon: CupertinoIcons.square_grid_2x2,
-      activeIcon: CupertinoIcons.square_grid_2x2_fill,
+      label: 'Lounges',
+      icon: CupertinoIcons.compass,
+      activeIcon: CupertinoIcons.compass_fill,
       route: AppRoutes.home,
+    ),
+    _NavItem(
+      label: "What's On",
+      icon: CupertinoIcons.sparkles,
+      activeIcon: CupertinoIcons.sparkles,
+      route: AppRoutes.whatsOn,
     ),
     _NavItem(
       label: 'Menu',
@@ -37,12 +43,6 @@ class MainShell extends ConsumerWidget {
       route: AppRoutes.loyalty,
     ),
     _NavItem(
-      label: 'Rewards',
-      icon: CupertinoIcons.gift,
-      activeIcon: CupertinoIcons.gift_fill,
-      route: AppRoutes.rewardStore,
-    ),
-    _NavItem(
       label: 'Profile',
       icon: CupertinoIcons.person_crop_circle,
       activeIcon: CupertinoIcons.person_crop_circle_fill,
@@ -52,10 +52,18 @@ class MainShell extends ConsumerWidget {
 
   int _currentIndex(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
-    for (int i = 0; i < _items.length; i++) {
-      if (location.startsWith(_items[i].route)) return i;
+    if (location.startsWith(AppRoutes.profile)) return 4;
+    if (location.startsWith(AppRoutes.loyalty) ||
+        location.startsWith(AppRoutes.rewardStore) ||
+        location.startsWith(AppRoutes.qrDisplay)) {
+      return 3;
     }
-    return 0;
+    if (location.startsWith(AppRoutes.menu)) return 2;
+    if (location.startsWith(AppRoutes.whatsOn) ||
+        location.startsWith(AppRoutes.packages)) {
+      return 1;
+    }
+    return 0; // Default to Lounges
   }
 
   @override

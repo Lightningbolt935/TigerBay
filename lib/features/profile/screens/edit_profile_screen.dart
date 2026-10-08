@@ -11,6 +11,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../data/models/branch_model.dart';
 import '../../../services/twilio_notification_service.dart';
+import '../../../services/firebase_phone_auth_service.dart';
 import '../../../shared/widgets/apple_touch_feedback.dart';
 import '../../../shared/widgets/safe_network_image.dart';
 import '../../../core/utils/phone_number_helper.dart';
@@ -329,6 +330,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     int cooldownSeconds = 60;
     Timer? resendTimer;
     String cleanPhone = '';
+    String? firebaseVerificationId;
 
     showModalBottomSheet<void>(
       context: context,
@@ -370,13 +372,76 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               isLoading = true;
               errorMessage = null;
             });
+
+            // 1. Try Firebase Phone Auth first (since SHA-1 and SHA-256 are active in Firebase)
+            try {
+              debugPrint('[EditProfile] Dispatching SMS OTP via Firebase Phone Auth to $cleanPhone...');
+              final firebaseService = FirebasePhoneAuthService();
+              firebaseVerificationId = await firebaseService.sendOtp(
+                phoneNumber: cleanPhone,
+                timeout: const Duration(seconds: 60),
+                onVerificationCompleted: (credential) async {
+                  debugPrint('[EditProfile] Firebase auto-verification completed');
+                },
+              );
+
+              if (firebaseVerificationId == 'AUTO_VERIFIED') {
+                resendTimer?.cancel();
+                if (!mounted || !sheetContext.mounted) return;
+                final navigator = Navigator.of(sheetContext);
+                final messenger = ScaffoldMessenger.of(context);
+                await ref.read(profileProvider.notifier).updateProfile(
+                      fullName: _nameController.text.trim(),
+                      email: _emailController.text.trim(),
+                      phone: cleanPhone,
+                      gender: _selectedGender,
+                      dob: _selectedDob,
+                      homeSiteId: _selectedHomeSiteId,
+                    );
+                if (!mounted) return;
+                setState(() => _phoneController.text = PhoneNumberHelper.formatDisplay(cleanPhone));
+                HapticFeedback.heavyImpact();
+                navigator.pop();
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: const Row(
+                      children: [
+                        Icon(Icons.check_circle_rounded,
+                            color: AppColors.champagneGold, size: 18),
+                        SizedBox(width: 10),
+                        Text(
+                          'Mobile number verified and updated!',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+                        ),
+                      ],
+                    ),
+                    backgroundColor: const Color(0xFF1E1E22),
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      side: const BorderSide(color: AppColors.glassBorder, width: 0.8),
+                    ),
+                  ),
+                );
+                return;
+              }
+
+              debugPrint('[EditProfile] ✅ Firebase OTP sent! verificationId: $firebaseVerificationId');
+              setModalState(() {
+                step = 1;
+                isLoading = false;
+                errorMessage = null;
+              });
+              startCooldown();
+              return;
+            } catch (firebaseErr) {
+              debugPrint('[EditProfile] Firebase Phone Auth notice: $firebaseErr. Trying Twilio SMS fallback...');
+            }
+
+            // 2. Fallback to Twilio
             try {
               final twilio = TwilioNotificationService();
               final res = await twilio.sendVerificationCode(to: cleanPhone, channel: 'sms');
-              final isTrial = res['isTrialRestriction'] == true ||
-                  (res['error']?.toString().toLowerCase().contains('unverified') ?? false) ||
-                  (res['error']?.toString().toLowerCase().contains('compliance') ?? false) ||
-                  (res['error']?.toString().toLowerCase().contains('trusthub') ?? false);
 
               if (res['success'] == true ||
                   (res['status'] != 'error' && res['status'] == 'pending') ||
@@ -385,15 +450,6 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                   step = 1;
                   isLoading = false;
                   errorMessage = null;
-                });
-                startCooldown();
-              } else if (isTrial) {
-                // Twilio trial account restriction: auto-advance to step 1 and advise tester
-                setModalState(() {
-                  step = 1;
-                  isLoading = false;
-                  errorMessage =
-                      'SMS service is in test mode. Please enter verification code 000000 to proceed.';
                 });
                 startCooldown();
               } else {
@@ -427,8 +483,29 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
             final messenger = ScaffoldMessenger.of(context);
             final navigator = Navigator.of(sheetContext);
             try {
-              final twilio = TwilioNotificationService();
-              final approved = await twilio.verifyCode(to: cleanPhone, code: otp);
+              bool approved = false;
+
+              // 1. Verify via Firebase Phone Auth
+              if (firebaseVerificationId != null && firebaseVerificationId != 'AUTO_VERIFIED') {
+                try {
+                  final firebaseService = FirebasePhoneAuthService();
+                  await firebaseService.verifyOtp(
+                    verificationId: firebaseVerificationId!,
+                    smsCode: otp,
+                  );
+                  debugPrint('[EditProfile] ✅ Firebase Phone Auth verification successful!');
+                  approved = true;
+                } catch (fbErr) {
+                  debugPrint('[EditProfile] Firebase OTP verify check notice: $fbErr');
+                }
+              }
+
+              // 2. Fallback to Twilio verify
+              if (!approved) {
+                final twilio = TwilioNotificationService();
+                approved = await twilio.verifyCode(to: cleanPhone, code: otp);
+              }
+
               if (approved) {
                 resendTimer?.cancel();
                 await ref.read(profileProvider.notifier).updateProfile(
@@ -585,30 +662,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                               ),
                       ),
                     ),
-                    if (errorMessage != null) ...[
-                      const SizedBox(height: 12),
-                      Center(
-                        child: CupertinoButton(
-                          padding: EdgeInsets.zero,
-                          onPressed: () {
-                            setModalState(() {
-                              step = 1;
-                              errorMessage = 'Enter test code 000000 to verify.';
-                            });
-                            startCooldown();
-                          },
-                          child: Text(
-                            'Enter code manually (use 000000 for testing)',
-                            style: GoogleFonts.poppins(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.champagneGold,
-                              decoration: TextDecoration.underline,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+
                   ] else ...[
                     Container(
                       decoration: BoxDecoration(
@@ -640,23 +694,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                         ),
                       ),
                     ),
-                    Center(
-                      child: CupertinoButton(
-                        padding: const EdgeInsets.only(top: 8),
-                        onPressed: () {
-                          otpController.text = '000000';
-                          verifyOtp();
-                        },
-                        child: Text(
-                          '⚡ Tap to auto-verify with test code (000000)',
-                          style: GoogleFonts.poppins(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.champagneGold,
-                          ),
-                        ),
-                      ),
-                    ),
+
                     const SizedBox(height: 12),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,

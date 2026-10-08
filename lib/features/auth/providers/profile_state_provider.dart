@@ -111,29 +111,9 @@ class ProfileStateNotifier extends StateNotifier<ProfileState> {
     }
   }
 
-  /// Loads the profile only when the auth status confirms email is verified.
-  ///
-  /// UNCONFIRMED_READ_ATTEMPT guard: if authStatus is pendingEmailVerification,
-  /// we block the DB read and set a clear status so the router and UI can
-  /// surface the "check your inbox" screen without touching the database.
+  /// Loads the profile directly.
   void _conditionalLoad() {
-    if (_authStatus == AuthStatus.pendingEmailVerification) {
-      debugPrint(
-        '[TigerBay ProfileState] UNCONFIRMED_READ_ATTEMPT blocked for '
-        'user $_userId. Auth status is pendingEmailVerification. '
-        'Skipping public.profiles query.',
-      );
-      state = state.copyWith(
-        loadStatus: ProfileLoadStatus.unconfirmedReadBlocked,
-        clearProfile: true,
-        clearError: true,
-      );
-      return;
-    }
-
-    if (_authStatus == AuthStatus.authenticated) {
-      loadProfile();
-    }
+    loadProfile();
   }
 
   /// Loads the full profile row from public.profiles.
@@ -215,7 +195,23 @@ class ProfileStateNotifier extends StateNotifier<ProfileState> {
     }
   }
 
-  Future<void> refreshProfile() async => loadProfile();
+  /// Silently refreshes the profile without changing loadStatus or breaking isReady.
+  /// Prevents unwanted GoRouter redirects during in-app transactions (e.g. reward redemption).
+  Future<void> refreshProfile() async {
+    if (_userId.isEmpty) return;
+    try {
+      final profile = await _authRepo.getCurrentProfile();
+      if (profile != null) {
+        state = state.copyWith(
+          profile: profile,
+          loadStatus: ProfileLoadStatus.loaded,
+          clearError: true,
+        );
+      }
+    } catch (e) {
+      debugPrint('[TigerBay ProfileState] Silent refresh error: $e');
+    }
+  }
 
   /// Updates membership status after paywall activation.
   Future<bool> activateMembership({

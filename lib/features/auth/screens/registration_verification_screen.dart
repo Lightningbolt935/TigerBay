@@ -13,18 +13,19 @@ import 'package:tigerbay_app/features/auth/providers/auth_provider.dart';
 import 'package:tigerbay_app/features/auth/providers/profile_state_provider.dart';
 import 'package:tigerbay_app/features/auth/providers/register_provider.dart';
 import 'package:tigerbay_app/services/twilio_notification_service.dart';
+import 'package:tigerbay_app/services/firebase_phone_auth_service.dart';
 import 'package:tigerbay_app/core/utils/phone_number_helper.dart';
 import 'package:tigerbay_app/core/utils/error_sanitizer.dart';
 
 enum _RegStage {
   verifyPhone,
-  verifyEmail,
   completed,
 }
 
 /// ═══════════════════════════════════════════════════════════════════════════
-/// TigerBay International — Registration Verification Pipeline
-/// Enforces dual-factor verification (SMS Phone OTP + Email OTP) during signup.
+/// TigerBay International — Registration Security Verification Pipeline
+/// Streamlined single-phase verification using Mobile SMS OTP (Twilio / Firebase).
+/// Email verification step is removed to provide instant, friction-free onboarding.
 /// ═══════════════════════════════════════════════════════════════════════════
 class RegistrationVerificationScreen extends ConsumerStatefulWidget {
   final String fullName;
@@ -55,12 +56,9 @@ class _RegistrationVerificationScreenState
       List.generate(6, (_) => TextEditingController());
   final List<FocusNode> _phoneFocusNodes = List.generate(6, (_) => FocusNode());
 
-  final List<TextEditingController> _emailOtpControllers =
-      List.generate(6, (_) => TextEditingController());
-  final List<FocusNode> _emailFocusNodes = List.generate(6, (_) => FocusNode());
-
   bool _isLoading = false;
   String? _errorMessage;
+  String? _firebaseVerificationId;
 
   int _resendCooldown = 0;
   Timer? _cooldownTimer;
@@ -97,9 +95,7 @@ class _RegistrationVerificationScreenState
     super.initState();
 
     final draft = ref.read(registrationDraftProvider);
-    if (draft.stage == 1) {
-      _stage = _RegStage.verifyEmail;
-    } else if (draft.stage == 2) {
+    if (draft.stage == 2) {
       _stage = _RegStage.completed;
     }
 
@@ -107,16 +103,6 @@ class _RegistrationVerificationScreenState
       _phoneFocusNodes[i].onKeyEvent = (node, event) =>
           _handleOtpKeyEvent(event, i, _phoneOtpControllers, _phoneFocusNodes);
       _phoneFocusNodes[i].addListener(() {
-        if (mounted) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) setState(() {});
-          });
-        }
-      });
-
-      _emailFocusNodes[i].onKeyEvent = (node, event) =>
-          _handleOtpKeyEvent(event, i, _emailOtpControllers, _emailFocusNodes);
-      _emailFocusNodes[i].addListener(() {
         if (mounted) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) setState(() {});
@@ -159,12 +145,6 @@ class _RegistrationVerificationScreenState
     for (final f in _phoneFocusNodes) {
       f.dispose();
     }
-    for (final c in _emailOtpControllers) {
-      c.dispose();
-    }
-    for (final f in _emailFocusNodes) {
-      f.dispose();
-    }
     _cooldownTimer?.cancel();
     super.dispose();
   }
@@ -188,7 +168,7 @@ class _RegistrationVerificationScreenState
     });
   }
 
-  // ── Phase 1: Send & Verify Phone SMS OTP ────────────────────────────────────
+  // ── Send & Verify Phone SMS OTP ─────────────────────────────────────────────
   Future<void> _sendPhoneOtp() async {
     final phone = effectivePhone;
     if (phone.isEmpty) {
@@ -201,24 +181,44 @@ class _RegistrationVerificationScreenState
       _errorMessage = null;
     });
 
+    // 1. Try Firebase Phone Auth first
+    try {
+      debugPrint('[Registration] Dispatching SMS OTP via Firebase Phone Auth to $phone...');
+      final firebaseService = FirebasePhoneAuthService();
+      _firebaseVerificationId = await firebaseService.sendOtp(
+        phoneNumber: phone,
+        timeout: const Duration(seconds: 60),
+        onVerificationCompleted: (credential) async {
+          debugPrint('[Registration] Firebase auto-verification completed');
+          if (mounted) {
+            await _completeRegistration();
+          }
+        },
+      );
+
+      if (_firebaseVerificationId == 'AUTO_VERIFIED') {
+        return;
+      }
+
+      debugPrint('[Registration] ✅ Firebase OTP sent! verificationId: $_firebaseVerificationId');
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _startCooldown();
+        if (_phoneFocusNodes.isNotEmpty) {
+          _phoneFocusNodes[0].requestFocus();
+        }
+      }
+      return;
+    } catch (firebaseErr) {
+      debugPrint('[Registration] Firebase Phone Auth notice: $firebaseErr. Trying Twilio SMS fallback...');
+    }
+
+    // 2. Fallback to Twilio
     try {
       final twilio = TwilioNotificationService();
       final res = await twilio.sendVerificationCode(to: phone, channel: 'sms');
       if (res['status'] == 'error') {
         final err = res['error']?.toString() ?? 'Could not send SMS verification code.';
-        final isTrial = res['isTrialRestriction'] == true ||
-            err.toLowerCase().contains('unverified') ||
-            err.toLowerCase().contains('compliance') ||
-            err.toLowerCase().contains('trusthub');
-        if (isTrial) {
-          setState(() {
-            _isLoading = false;
-            _errorMessage =
-                'SMS service is in test mode. Please enter verification code 000000 to proceed.';
-          });
-          _startCooldown();
-          return;
-        }
         throw Exception(err);
       }
 
@@ -248,12 +248,24 @@ class _RegistrationVerificationScreenState
     });
 
     try {
-      if (code == '000000') {
-        debugPrint('[Registration] Master OTP 000000 accepted for phone SMS testing.');
-        await _initiateEmailPhase();
-        return;
+      // 1. If Firebase verification ID exists, verify with Firebase
+      if (_firebaseVerificationId != null && _firebaseVerificationId != 'AUTO_VERIFIED') {
+        try {
+          debugPrint('[Registration] Verifying code with Firebase: $_firebaseVerificationId');
+          final firebaseService = FirebasePhoneAuthService();
+          await firebaseService.verifyOtp(
+            verificationId: _firebaseVerificationId!,
+            smsCode: code,
+          );
+          debugPrint('[Registration] ✅ Firebase Phone Auth verification successful!');
+          await _completeRegistration();
+          return;
+        } catch (firebaseVerifyErr) {
+          debugPrint('[Registration] Firebase verification check notice: $firebaseVerifyErr');
+        }
       }
 
+      // 2. Otherwise verify with Twilio
       final phone = effectivePhone;
       final twilio = TwilioNotificationService();
       final approved = await twilio.verifyCode(to: phone, code: code);
@@ -262,8 +274,8 @@ class _RegistrationVerificationScreenState
             'The SMS verification code entered is incorrect. Please try again.');
       }
 
-      // Phone is verified! Now initiate Email registration in Supabase
-      await _initiateEmailPhase();
+      // Phone is verified! Complete account creation and activate session directly
+      await _completeRegistration();
     } on AuthException catch (e) {
       setState(() {
         _isLoading = false;
@@ -277,155 +289,30 @@ class _RegistrationVerificationScreenState
     }
   }
 
-  // ── Phase 2: Create Account in Supabase & Dispatch Email OTP ────────────────
-  Future<void> _initiateEmailPhase() async {
+  // ── Create Account in Supabase & Complete Registration ───────────────────────
+  Future<void> _completeRegistration() async {
     try {
-      // Persist stage 1 into registration draft
-      ref.read(registrationDraftProvider.notifier).setStage(1);
+      ref.read(registrationDraftProvider.notifier).setStage(2);
 
-      final success = await ref.read(authProvider.notifier).signUpWithEmail(
-            email: effectiveEmail,
-            password: effectivePassword,
-            fullName: effectiveFullName,
-            homeSite: effectiveHomeSite,
-            phone: effectivePhone,
-          );
-
-      // Save user ID if available
-      final user = ref.read(authProvider).user ?? Supabase.instance.client.auth.currentUser;
-      if (user != null) {
-        ref.read(registrationDraftProvider.notifier).setUserId(user.id);
-        // Guarantee profile row is written/updated immediately
-        try {
-          await Supabase.instance.client.from('profiles').upsert({
-            'id': user.id,
-            'email': effectiveEmail.trim().toLowerCase(),
-            'phone': effectivePhone.trim(),
-            'full_name': effectiveFullName.trim(),
-            'home_site_id': effectiveHomeSite.id,
-            'membership_status': 'inactive',
-            'updated_at': DateTime.now().toIso8601String(),
-          });
-        } catch (e) {
-          debugPrint('[Registration] Pre-emptive profile upsert notice: $e');
-        }
-      }
-
-      if (!success) {
-        final error = ref.read(authProvider).error ?? '';
-        final isAlreadyRegistered = error.toLowerCase().contains('already exists') ||
-            error.toLowerCase().contains('already registered') ||
-            error.toLowerCase().contains('user already registered');
-
-        if (isAlreadyRegistered) {
-          // Account already created in Supabase (e.g. earlier retry) — lookup user ID & trigger OTP resend
-          debugPrint('[Registration] Account already created; requesting fresh email OTP code.');
-          try {
-            final match = await Supabase.instance.client
-                .from('profiles')
-                .select('id')
-                .or('phone.eq.${effectivePhone.trim()},email.ilike.${effectiveEmail.trim().toLowerCase()}')
-                .limit(1)
-                .maybeSingle();
-            if (match != null && match['id'] != null) {
-              final uid = match['id'] as String;
-              ref.read(registrationDraftProvider.notifier).setUserId(uid);
-              await Supabase.instance.client.from('profiles').upsert({
-                'id': uid,
-                'email': effectiveEmail.trim().toLowerCase(),
-                'phone': effectivePhone.trim(),
-                'full_name': effectiveFullName.trim(),
-                'home_site_id': effectiveHomeSite.id,
-                'membership_status': 'inactive',
-                'updated_at': DateTime.now().toIso8601String(),
-              });
-            }
-          } catch (_) {}
-
-          try {
-            await Supabase.instance.client.auth.resend(
-              type: OtpType.signup,
-              email: effectiveEmail,
-            );
-          } catch (_) {}
-        } else {
-          throw Exception(error.isNotEmpty ? error : 'Registration failed. Please try again.');
-        }
-      }
-
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _stage = _RegStage.verifyEmail;
-      });
-      _startCooldown();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _emailFocusNodes.isNotEmpty) {
-          _emailFocusNodes[0].requestFocus();
-        }
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _errorMessage = ErrorSanitizer.format(e);
-      });
-    }
-  }
-
-  Future<void> _resendEmailOtp() async {
-    if (_resendCooldown > 0) return;
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    try {
-      await Supabase.instance.client.auth.resend(
-        type: OtpType.signup,
-        email: effectiveEmail,
-      );
-      setState(() => _isLoading = false);
-      _startCooldown();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Verification code resent to $effectiveEmail'),
-          backgroundColor: AppColors.success,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _errorMessage = ErrorSanitizer.format(e);
-      });
-    }
-  }
-
-  Future<void> _handleVerifyEmail() async {
-    final code = _emailOtpControllers.map((c) => c.text.trim()).join();
-    if (code.length != 6) {
-      setState(() => _errorMessage = 'Please enter the 6-digit email code.');
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    try {
       final email = effectiveEmail.trim().toLowerCase();
       final phone = effectivePhone.trim();
       final name = effectiveFullName.trim();
-      final homeSiteId = effectiveHomeSite.id;
+      final homeSite = effectiveHomeSite;
 
-      // 1. Identify target user ID
-      String? targetUserId = ref.read(registrationDraftProvider).userId ??
-          Supabase.instance.client.auth.currentUser?.id;
+      // Register account in Supabase
+      await ref.read(authProvider.notifier).signUpWithEmail(
+            email: email,
+            password: effectivePassword,
+            fullName: name,
+            homeSite: homeSite,
+            phone: phone,
+          );
 
-      if (targetUserId == null) {
+      // Identify user ID
+      final user = ref.read(authProvider).user ?? Supabase.instance.client.auth.currentUser;
+      String? verifiedUid = user?.id;
+
+      if (verifiedUid == null) {
         try {
           final match = await Supabase.instance.client
               .from('profiles')
@@ -434,77 +321,20 @@ class _RegistrationVerificationScreenState
               .limit(1)
               .maybeSingle();
           if (match != null && match['id'] != null) {
-            targetUserId = match['id'] as String;
-            ref.read(registrationDraftProvider.notifier).setUserId(targetUserId);
+            verifiedUid = match['id'] as String;
           }
         } catch (_) {}
       }
 
-      if (code == '000000') {
-        debugPrint('[Registration] Master OTP 000000 accepted for email verification of $email');
-
-        // If password is available in draft, sign in to establish active Supabase session
-        if (effectivePassword.isNotEmpty) {
-          try {
-            final loginRes = await ref.read(authRepositoryProvider).signInWithEmail(
-              email: email,
-              password: effectivePassword,
-            );
-            if (loginRes.user != null) {
-              targetUserId = loginRes.user!.id;
-            }
-          } catch (e) {
-            debugPrint('[Registration] Master OTP auto-signin notice: $e');
-          }
-        }
-
-        // Guarantee profile is saved in public.profiles
-        if (targetUserId != null) {
-          try {
-            await Supabase.instance.client.from('profiles').upsert({
-              'id': targetUserId,
-              'email': email,
-              'phone': phone,
-              'full_name': name,
-              'home_site_id': homeSiteId,
-              'membership_status': 'inactive',
-              'updated_at': DateTime.now().toIso8601String(),
-            });
-            ref.read(registrationDraftProvider.notifier).setUserId(targetUserId);
-          } catch (e) {
-            debugPrint('[Registration] Profile upsert notice: $e');
-          }
-        }
-
-        ref.read(registrationDraftProvider.notifier).setStage(2);
-        ref.read(authProvider.notifier).markRegistrationVerified(
-          email: email,
-          userId: targetUserId,
-        );
-        ref.invalidate(profileStateProvider);
-
-        setState(() {
-          _isLoading = false;
-          _stage = _RegStage.completed;
-        });
-        return;
-      }
-
-      final authRes = await ref.read(authRepositoryProvider).verifyEmailOtp(
-            email: email,
-            token: code,
-          );
-
-      final verifiedUid = authRes.user?.id ?? targetUserId;
       if (verifiedUid != null) {
-        // Sync email, phone & name into public.profiles
+        // Guarantee profile row is active and updated immediately
         try {
           await Supabase.instance.client.from('profiles').upsert({
             'id': verifiedUid,
             'email': email,
             'phone': phone,
             'full_name': name,
-            'home_site_id': homeSiteId,
+            'home_site_id': homeSite.id,
             'membership_status': 'inactive',
             'updated_at': DateTime.now().toIso8601String(),
           });
@@ -514,23 +344,20 @@ class _RegistrationVerificationScreenState
         }
       }
 
-      ref.read(registrationDraftProvider.notifier).setStage(2);
+      // Mark registration verified so downstream router and profile load freely
       ref.read(authProvider.notifier).markRegistrationVerified(
-        email: email,
-        userId: verifiedUid,
-      );
+            email: email,
+            userId: verifiedUid,
+          );
       ref.invalidate(profileStateProvider);
 
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
         _stage = _RegStage.completed;
       });
-    } on AuthException catch (e) {
-      setState(() {
-        _isLoading = false;
-        _errorMessage = ErrorSanitizer.format(e.message);
-      });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
         _errorMessage = ErrorSanitizer.format(e);
@@ -538,26 +365,19 @@ class _RegistrationVerificationScreenState
     }
   }
 
-  void _onDigitChanged(int index, String val, bool isPhone) {
-    final controllers = isPhone ? _phoneOtpControllers : _emailOtpControllers;
-    final nodes = isPhone ? _phoneFocusNodes : _emailFocusNodes;
-
+  void _onDigitChanged(int index, String val) {
     // ── Handle full 6-digit paste or SMS Autofill (e.g. "123456") ──────────
     if (val.length > 1) {
       final digits = val.replaceAll(RegExp(r'\D'), '');
       for (int i = 0; i < digits.length && i < 6; i++) {
-        controllers[i].text = digits[i];
+        _phoneOtpControllers[i].text = digits[i];
       }
       if (digits.length >= 6) {
-        nodes[5].unfocus();
+        _phoneFocusNodes[5].unfocus();
         HapticFeedback.mediumImpact();
-        if (isPhone) {
-          _handleVerifyPhone();
-        } else {
-          _handleVerifyEmail();
-        }
+        _handleVerifyPhone();
       } else if (digits.isNotEmpty) {
-        nodes[digits.length.clamp(0, 5)].requestFocus();
+        _phoneFocusNodes[digits.length.clamp(0, 5)].requestFocus();
       }
       return;
     }
@@ -565,32 +385,22 @@ class _RegistrationVerificationScreenState
     if (val.isNotEmpty) {
       HapticFeedback.lightImpact();
       if (index < 5) {
-        nodes[index + 1].requestFocus();
+        _phoneFocusNodes[index + 1].requestFocus();
       } else {
-        nodes[index].unfocus();
+        _phoneFocusNodes[index].unfocus();
         HapticFeedback.mediumImpact();
-        if (isPhone) {
-          _handleVerifyPhone();
-        } else {
-          _handleVerifyEmail();
-        }
+        _handleVerifyPhone();
       }
     }
   }
 
   Future<void> _handleBackNavigation() async {
     HapticFeedback.lightImpact();
-    if (_stage == _RegStage.verifyEmail) {
-      // Step back from email OTP to phone OTP stage
-      setState(() => _stage = _RegStage.verifyPhone);
-    } else {
-      // Aborting verification or leaving "Account Verified!" to sign in later.
-      // Must sign out cleanly so GoRouter redirect does not bounce an un-activated session to the membership paywall.
-      await ref.read(authProvider.notifier).signOut();
-      ref.read(registrationDraftProvider.notifier).clear();
-      if (mounted) {
-        context.go(AppRoutes.login);
-      }
+    // Leaving registration verification cleanly
+    await ref.read(authProvider.notifier).signOut();
+    ref.read(registrationDraftProvider.notifier).clear();
+    if (mounted) {
+      context.go(AppRoutes.login);
     }
   }
 
@@ -613,7 +423,7 @@ class _RegistrationVerificationScreenState
             onPressed: _handleBackNavigation,
           ),
           title: Text(
-            'Account Verification',
+            'Security Verification',
             style: GoogleFonts.poppins(
               fontSize: 16,
               fontWeight: FontWeight.w600,
@@ -628,11 +438,11 @@ class _RegistrationVerificationScreenState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // Step Progress Indicator
+                // Step Progress Header
                 _buildProgressHeader(),
                 const SizedBox(height: 32),
 
-                // Animated Dynamic Stage View
+                // Animated Stage View
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 320),
                   switchInCurve: Curves.easeOutCubic,
@@ -653,7 +463,6 @@ class _RegistrationVerificationScreenState
                     key: ValueKey(_stage),
                     child: switch (_stage) {
                       _RegStage.verifyPhone => _buildPhoneStage(),
-                      _RegStage.verifyEmail => _buildEmailStage(),
                       _RegStage.completed => _buildCompletedStage(),
                     },
                   ),
@@ -699,88 +508,61 @@ class _RegistrationVerificationScreenState
   }
 
   Widget _buildProgressHeader() {
-    final isPhoneDone = _stage != _RegStage.verifyPhone;
-    final isEmailDone = _stage == _RegStage.completed;
+    final isDone = _stage == _RegStage.completed;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
       decoration: BoxDecoration(
         color: const Color(0xFF16161A),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFF2C2C35)),
+        border: Border.all(
+          color: isDone
+              ? AppColors.success.withValues(alpha: 0.4)
+              : AppColors.gold.withValues(alpha: 0.35),
+        ),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // Step 1: Phone
-          Row(
-            children: [
-              Icon(
-                isPhoneDone
-                    ? CupertinoIcons.checkmark_circle_fill
-                    : CupertinoIcons.phone_fill,
-                color: isPhoneDone ? AppColors.success : AppColors.gold,
-                size: 18,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '1. Phone SMS',
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: isPhoneDone ? Colors.white70 : AppColors.gold,
-                ),
-              ),
-            ],
+          Icon(
+            isDone
+                ? CupertinoIcons.checkmark_shield_fill
+                : CupertinoIcons.shield_lefthalf_fill,
+            color: isDone ? AppColors.success : AppColors.gold,
+            size: 19,
           ),
-          const Icon(CupertinoIcons.chevron_right, size: 14, color: Colors.white30),
-          // Step 2: Email
-          Row(
-            children: [
-              Icon(
-                isEmailDone
-                    ? CupertinoIcons.checkmark_circle_fill
-                    : CupertinoIcons.mail_solid,
-                color: isEmailDone
-                    ? AppColors.success
-                    : (_stage == _RegStage.verifyEmail ? AppColors.gold : Colors.white30),
-                size: 18,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '2. Email Code',
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: isEmailDone
-                      ? Colors.white70
-                      : (_stage == _RegStage.verifyEmail ? AppColors.gold : Colors.white30),
-                ),
-              ),
-            ],
+          const SizedBox(width: 10),
+          Text(
+            isDone ? 'Account Authenticated' : 'Mobile SMS Verification',
+            style: GoogleFonts.poppins(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: isDone ? Colors.white : AppColors.champagneGold,
+              letterSpacing: 0.3,
+            ),
           ),
         ],
       ),
     );
   }
 
-  // ── Step 1: Phone Verification ──────────────────────────────────────────────
+  // ── Phone Verification Stage ────────────────────────────────────────────────
   Widget _buildPhoneStage() {
     return Column(
       children: [
         Container(
-          width: 64,
-          height: 64,
+          width: 68,
+          height: 68,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: AppColors.gold.withValues(alpha: 0.12),
             border: Border.all(color: AppColors.gold.withValues(alpha: 0.35), width: 1.5),
           ),
-          child: const Icon(CupertinoIcons.phone_fill, color: AppColors.gold, size: 30),
+          child: const Icon(CupertinoIcons.phone_fill, color: AppColors.gold, size: 32),
         ),
         const SizedBox(height: 20),
         Text(
-          'Verify Mobile Phone',
+          'Verify Your Mobile',
           style: GoogleFonts.poppins(
             fontSize: 22,
             fontWeight: FontWeight.w700,
@@ -830,7 +612,7 @@ class _RegistrationVerificationScreenState
         const SizedBox(height: 28),
 
         // 6-digit OTP fields
-        _buildOtpFields(controllers: _phoneOtpControllers, focusNodes: _phoneFocusNodes, isPhone: true),
+        _buildOtpFields(controllers: _phoneOtpControllers, focusNodes: _phoneFocusNodes),
         const SizedBox(height: 24),
 
         // Resend
@@ -874,7 +656,7 @@ class _RegistrationVerificationScreenState
 
         const SizedBox(height: 24),
         _buildActionButton(
-          label: 'VERIFY PHONE NUMBER',
+          label: 'VERIFY & CREATE ACCOUNT',
           isLoading: _isLoading,
           onTap: _handleVerifyPhone,
         ),
@@ -882,129 +664,7 @@ class _RegistrationVerificationScreenState
     );
   }
 
-  // ── Step 2: Email Verification ──────────────────────────────────────────────
-  Widget _buildEmailStage() {
-    return Column(
-      children: [
-        Container(
-          width: 64,
-          height: 64,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: AppColors.gold.withValues(alpha: 0.12),
-            border: Border.all(color: AppColors.gold.withValues(alpha: 0.35), width: 1.5),
-          ),
-          child: const Icon(CupertinoIcons.mail_solid, color: AppColors.gold, size: 30),
-        ),
-        const SizedBox(height: 20),
-        Text(
-          'Verify Email Address',
-          style: GoogleFonts.poppins(
-            fontSize: 22,
-            fontWeight: FontWeight.w700,
-            color: Colors.white,
-          ),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Phone verified ✓\nNow enter the 6-digit code sent to\n$effectiveEmail',
-          style: GoogleFonts.poppins(
-            fontSize: 13,
-            color: AppColors.textSecondary,
-            height: 1.4,
-          ),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              'Incorrect email address? ',
-              style: GoogleFonts.poppins(
-                fontSize: 12,
-                color: AppColors.textHint,
-              ),
-            ),
-            GestureDetector(
-              onTap: () async {
-                HapticFeedback.lightImpact();
-                await ref.read(authProvider.notifier).signOut();
-                ref.read(registrationDraftProvider.notifier).clear();
-                if (mounted) {
-                  context.go(AppRoutes.login);
-                }
-              },
-              child: Text(
-                'Change',
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.gold,
-                  decoration: TextDecoration.underline,
-                  decorationColor: AppColors.gold,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 28),
-
-        // 6-digit OTP fields
-        _buildOtpFields(controllers: _emailOtpControllers, focusNodes: _emailFocusNodes, isPhone: false),
-        const SizedBox(height: 24),
-
-        // Resend
-        if (_resendCooldown > 0)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF141418),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFF282830)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(CupertinoIcons.timer, size: 14, color: AppColors.textSecondary),
-                const SizedBox(width: 6),
-                Text(
-                  'Resend code in ${_resendCooldown}s',
-                  style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          )
-        else
-          TextButton.icon(
-            onPressed: _isLoading ? null : _resendEmailOtp,
-            icon: const Icon(CupertinoIcons.arrow_clockwise, size: 15, color: AppColors.gold),
-            label: Text(
-              'Resend Email Code',
-              style: GoogleFonts.poppins(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.gold,
-              ),
-            ),
-          ),
-
-        const SizedBox(height: 24),
-        _buildActionButton(
-          label: 'COMPLETE REGISTRATION',
-          isLoading: _isLoading,
-          onTap: _handleVerifyEmail,
-        ),
-      ],
-    );
-  }
-
-  // ── Step 3: Completed Stage ─────────────────────────────────────────────────
+  // ── Completed Stage ─────────────────────────────────────────────────────────
   Widget _buildCompletedStage() {
     return Column(
       children: [
@@ -1038,7 +698,7 @@ class _RegistrationVerificationScreenState
         ),
         const SizedBox(height: 8),
         Text(
-          'Both your mobile phone and email address are authenticated. Welcome to TigerBay International.',
+          'Your mobile number has been authenticated. Welcome to TigerBay International.',
           style: GoogleFonts.poppins(
             fontSize: 13,
             color: AppColors.textSecondary,
@@ -1075,7 +735,6 @@ class _RegistrationVerificationScreenState
                 icon: CupertinoIcons.mail_solid,
                 label: 'Email Address',
                 value: effectiveEmail,
-                isVerified: true,
               ),
               const Divider(color: Color(0xFF24242C), height: 20),
               _buildSummaryRow(
@@ -1155,7 +814,6 @@ class _RegistrationVerificationScreenState
   Widget _buildOtpFields({
     required List<TextEditingController> controllers,
     required List<FocusNode> focusNodes,
-    required bool isPhone,
   }) {
     final hasError = _errorMessage != null;
 
@@ -1220,7 +878,7 @@ class _RegistrationVerificationScreenState
                   contentPadding: EdgeInsets.zero,
                 ),
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                onChanged: (val) => _onDigitChanged(i, val, isPhone),
+                onChanged: (val) => _onDigitChanged(i, val),
               ),
             );
           }),

@@ -53,7 +53,7 @@ class ErrorSanitizer {
         lower.contains('verified caller id') ||
         lower.contains('21608') ||
         lower.contains('sandbox')) {
-      return 'SMS service is in test mode. For testing, please enter verification code 000000.';
+      return 'Unable to deliver SMS verification to this phone number. Please check the number or contact guest support.';
     }
 
     // ── Twilio / SMS Invalid Phone Number ──────────────────────────────────

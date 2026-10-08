@@ -76,9 +76,32 @@ class LoyaltyScreen extends ConsumerWidget {
                   color: AppColors.textSecondary,
                   size: 20,
                 ),
+                tooltip: 'Strips Rules',
                 onPressed: () => _showHowStripsWorkDialog(context),
               ),
-              const SizedBox(width: 8),
+              AppleTouchFeedback(
+                onTap: () => context.push(AppRoutes.profile),
+                child: Container(
+                  margin: const EdgeInsets.only(right: 16, left: 4),
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF141418),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: AppColors.champagneGold.withValues(alpha: 0.6),
+                      width: 1.0,
+                    ),
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      CupertinoIcons.person_crop_circle_fill,
+                      color: AppColors.champagneGold,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
 
@@ -133,7 +156,7 @@ class LoyaltyScreen extends ConsumerWidget {
           // ── Digital Pass Quick Instruction ────────────────────────────────
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 6, 20, 10),
+              padding: const EdgeInsets.fromLTRB(20, 6, 20, 8),
               child: Center(
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -153,6 +176,225 @@ class LoyaltyScreen extends ConsumerWidget {
                       ),
                     ),
                   ],
+                ),
+              ),
+            ),
+          ),
+
+          // ── Membership Plan Validity & Strips Guarantee ───────────────────
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 2, 20, 12),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF141418),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: AppColors.gold.withValues(alpha: 0.28),
+                    width: 0.8,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        color: AppColors.gold.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.verified_user_rounded,
+                        color: AppColors.champagneGold,
+                        size: 16,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                'STRIPS VALIDITY',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 1.2,
+                                  color: AppColors.champagneGold,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 1.5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF34C759).withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Text(
+                                  'VALID PLAN',
+                                  style: TextStyle(
+                                    fontSize: 8.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF34C759),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Your Strips remain active and valid with your ongoing membership plan.',
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // ── Redeem Rewards Hero Card ──────────────────────────────────────
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 2, 20, 10),
+              child: AppleTouchFeedback(
+                onTap: () => context.push(AppRoutes.rewardStore),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color(0xFF221A0F),
+                        Color(0xFF141418),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: AppColors.gold.withValues(alpha: 0.45),
+                      width: 1.0,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.gold.withValues(alpha: 0.12),
+                        blurRadius: 18,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [AppColors.gold, Color(0xFF9E782F)],
+                          ),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.gold.withValues(alpha: 0.35),
+                              blurRadius: 10,
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          CupertinoIcons.gift_fill,
+                          color: Colors.black,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  'REDEEM REWARDS',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 1.2,
+                                    color: AppColors.champagneGold,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.gold.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Text(
+                                    'STORE',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.gold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              'Exchange Strips for shisha, drinks & VIP treats',
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.gold,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Redeem',
+                              style: GoogleFonts.poppins(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.black,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            const Icon(
+                              CupertinoIcons.arrow_right,
+                              size: 12,
+                              color: Colors.black,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -420,6 +662,9 @@ class LoyaltyScreen extends ConsumerWidget {
               const SizedBox(height: 14),
               Text(
                 '• Strips are TigerBay points earned on dining, shisha, and reservations.\n\n'
+                '• Strips Validity: Your Strips remain active and valid with your ongoing membership plan.\n\n'
+                '• Birthday Reward Strips: Valid exclusively for a promotional period of 30 days during your birthday month.\n\n'
+                '• Reward Auto-Expiry: Redeemed reward vouchers generate a secure QR pass valid for 15 minutes at the till.\n\n'
                 '• Higher VIP tiers earn up to 3x Strips on every pound spent.\n\n'
                 '• Spend your Strips in the Reward Store for complimentary drinks, shisha, and VIP table perks.\n\n'
                 '• Every 10 lounge visits unlock milestone streak bonus points automatically.',

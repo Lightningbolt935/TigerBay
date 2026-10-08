@@ -12,7 +12,6 @@ import 'package:tigerbay_app/core/constants/app_colors.dart';
 import 'package:tigerbay_app/core/theme/app_typography.dart';
 import 'package:tigerbay_app/features/auth/providers/auth_provider.dart';
 import 'package:tigerbay_app/features/auth/providers/profile_state_provider.dart';
-import 'package:tigerbay_app/features/auth/providers/register_provider.dart';
 import 'package:tigerbay_app/features/auth/widgets/branch_selector_widget.dart';
 import 'package:tigerbay_app/shared/widgets/apple_touch_feedback.dart';
 import 'package:tigerbay_app/core/utils/phone_number_helper.dart';
@@ -56,6 +55,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   final _loginEmailController = TextEditingController();
   final _loginPasswordController = TextEditingController();
   bool _loginPasswordObscured = true;
+
+  // ── Phone login state ─────────────────────────────────────────────────────────
+  bool _isPhoneLogin = false;
+  final _loginPhoneController = TextEditingController();
+  CountryCode _loginPhoneCountry = PhoneNumberHelper.defaultCountry;
+  bool _phoneLoginSubmitted = false;
 
   // ── Register form ─────────────────────────────────────────────────────────────
   final _registerFormKey = GlobalKey<FormState>();
@@ -171,6 +176,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     _sheenController.dispose();
     _loginEmailController.dispose();
     _loginPasswordController.dispose();
+    _loginPhoneController.dispose();
     _registerFullNameController.dispose();
     _registerEmailController.dispose();
     _registerPhoneController.dispose();
@@ -225,10 +231,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           error.toLowerCase().contains('email not confirmed');
 
       if (isUnconfirmed) {
-        _showEmailUnconfirmedDialog(
-          email: _loginEmailController.text.trim(),
-          password: _loginPasswordController.text,
-        );
+        _showErrorSnack('Email unconfirmed. Use "Phone Number" sign-in above.');
+        setState(() => _isPhoneLogin = true);
         return;
       }
 
@@ -259,6 +263,44 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       context.go(AppRoutes.home);
     } else {
       context.go(AppRoutes.membershipPaywall);
+    }
+  }
+
+  Future<void> _submitPhoneLogin() async {
+    if (_lockoutSecondsRemaining > 0) {
+      _showErrorSnack('Security lockout: Please wait $_lockoutSecondsRemaining seconds before trying again.');
+      return;
+    }
+
+    setState(() => _phoneLoginSubmitted = true);
+    final rawPhone = _loginPhoneController.text.trim();
+    final phoneError = PhoneNumberHelper.validate(
+      country: _loginPhoneCountry,
+      nationalInput: rawPhone,
+    );
+    if (phoneError != null) {
+      _showErrorSnack(phoneError);
+      return;
+    }
+
+    final formattedPhone = PhoneNumberHelper.formatToE164(
+      dialCode: _loginPhoneCountry.dialCode,
+      nationalInput: rawPhone,
+    );
+
+    final vid = await ref.read(authProvider.notifier).sendOtp(formattedPhone);
+    if (!mounted) return;
+
+    if (vid != null) {
+      HapticFeedback.mediumImpact();
+      context.push(AppRoutes.otp, extra: formattedPhone);
+    } else {
+      final error = ref.read(authProvider).error;
+      _showErrorSnack(
+        error?.isNotEmpty == true
+            ? error!
+            : 'Unable to send SMS verification code. Please try again.',
+      );
     }
   }
 
@@ -311,26 +353,79 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       debugPrint('[TigerBay Auth] Duplicate check notice: $e');
     }
 
-    // ── Proceed to Dual-Factor Verification (SMS OTP + Email OTP) ───────────
-    if (!mounted) return;
-    ref.read(registrationDraftProvider.notifier).setDraft(
-          fullName: fullName,
-          email: email,
-          phone: formattedPhone,
-          password: password,
-          homeSite: chosenHomeSite!,
-          stage: 0,
-        );
-    context.go(
-      AppRoutes.registrationVerification,
-      extra: {
-        'fullName': fullName,
-        'email': email,
-        'phone': formattedPhone,
-        'password': password,
-        'homeSite': chosenHomeSite!,
-      },
-    );
+    // ── Direct Frictionless Registration (No OTP Required) ─────────────────
+    try {
+      final authNotifier = ref.read(authProvider.notifier);
+
+      final success = await authNotifier.signUpWithEmail(
+        email: email,
+        password: password,
+        fullName: fullName,
+        homeSite: chosenHomeSite!,
+        phone: formattedPhone,
+      );
+
+      if (!success) {
+        final err = ref.read(authProvider).error ?? 'Registration could not be completed.';
+        _showErrorSnack(err);
+        return;
+      }
+
+      // Ensure active session & profile row upsert
+      var currentUser = Supabase.instance.client.auth.currentUser;
+      if (currentUser == null) {
+        try {
+          final signRes = await Supabase.instance.client.auth.signInWithPassword(
+            email: email,
+            password: password,
+          );
+          currentUser = signRes.user;
+        } catch (_) {}
+      }
+
+      if (currentUser != null) {
+        try {
+          await Supabase.instance.client.from('profiles').upsert({
+            'id': currentUser.id,
+            'email': email,
+            'full_name': fullName,
+            'phone': formattedPhone,
+            'home_branch': chosenHomeSite!.title,
+            'membership_status': 'inactive',
+            'created_at': DateTime.now().toIso8601String(),
+            'updated_at': DateTime.now().toIso8601String(),
+          });
+        } catch (e) {
+          debugPrint('[TigerBay Auth] Direct register profile upsert notice: $e');
+        }
+      }
+
+      // Mark registration verified and refresh profile
+      ref.read(authProvider.notifier).markRegistrationVerified(email: email, userId: currentUser?.id);
+      await ref.read(profileStateProvider.notifier).loadProfile();
+
+      if (!mounted) return;
+      HapticFeedback.mediumImpact();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Welcome to TigerBay International, $fullName!',
+            style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600),
+          ),
+          backgroundColor: AppColors.gold,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      // Direct entry: route new member straight to membership selection
+      context.go(AppRoutes.membershipPaywall);
+    } catch (e) {
+      if (mounted) {
+        _showErrorSnack('Registration error: ${e.toString()}');
+      }
+    } finally {
+      if (mounted) setState(() => _registerSubmitted = false);
+    }
   }
 
   void _showAccountAlreadyExistsDialog({
@@ -460,155 +555,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     );
   }
 
-  void _showEmailUnconfirmedDialog({
-    required String email,
-    required String password,
-  }) {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (modalContext) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFF16161A),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-            border: Border(
-              top: BorderSide(color: Color(0xFF33333D), width: 1.2),
-            ),
-          ),
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 36),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF3A3A42),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 24),
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.gold.withValues(alpha: 0.15),
-                  border: Border.all(color: AppColors.gold.withValues(alpha: 0.35)),
-                ),
-                child: const Icon(
-                  CupertinoIcons.mail_solid,
-                  color: AppColors.gold,
-                  size: 28,
-                ),
-              ),
-              const SizedBox(height: 18),
-              Text(
-                'Email Verification Required',
-                style: GoogleFonts.poppins(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Your account for $email was registered, but your email address has not been confirmed yet. Enter your verification code to complete sign in.',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.poppins(
-                  fontSize: 13,
-                  color: AppColors.textSecondary,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 28),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: () async {
-                    Navigator.of(modalContext).pop();
-                    try {
-                      await Supabase.instance.client.auth.resend(
-                        type: OtpType.signup,
-                        email: email,
-                      );
-                    } catch (_) {}
 
-                    ref.read(registrationDraftProvider.notifier).setDraft(
-                          fullName: '',
-                          email: email,
-                          phone: '',
-                          password: password,
-                          homeSite: chosenHomeSite ??
-                              const Branch(
-                                id: 1,
-                                title: 'TigerBay Kingsbury',
-                                imageUrl: '',
-                                address: 'Kingsbury, London',
-                                isActive: true,
-                              ),
-                          stage: 1,
-                        );
-
-                    if (!mounted) return;
-                    context.go(
-                      AppRoutes.registrationVerification,
-                      extra: {
-                        'email': email,
-                        'password': password,
-                      },
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.gold,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(25),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: Text(
-                    'ENTER VERIFICATION CODE',
-                    style: GoogleFonts.poppins(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFF16161A),
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: OutlinedButton(
-                  onPressed: () => Navigator.of(modalContext).pop(),
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Color(0xFF33333D)),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(25),
-                    ),
-                  ),
-                  child: Text(
-                    'CANCEL',
-                    style: GoogleFonts.poppins(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textSecondary,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
 
   Future<void> _socialSignIn(SocialProvider provider) async {
     final notifier = ref.read(authProvider.notifier);
@@ -933,110 +880,264 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Email ───────────────────────────────────────────────────────────
-              _buildFieldLabel('EMAIL ADDRESS'),
-              const SizedBox(height: 8),
-              _buildTextField(
-                controller: _loginEmailController,
-                hint: 'your@email.com',
-                inputType: TextInputType.emailAddress,
-                autofillHints: const [AutofillHints.email, AutofillHints.username],
-                prefixIcon: CupertinoIcons.mail,
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) return 'Email is required';
-                  if (!v.contains('@')) return 'Enter a valid email address';
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 18),
-
-              // ── Password ────────────────────────────────────────────────────────
-              _buildFieldLabel('PASSWORD'),
-              const SizedBox(height: 8),
-              _buildTextField(
-                controller: _loginPasswordController,
-                hint: 'Enter your password',
-                obscure: _loginPasswordObscured,
-                autofillHints: const [AutofillHints.password],
-                prefixIcon: CupertinoIcons.lock,
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    _loginPasswordObscured
-                        ? CupertinoIcons.eye
-                        : CupertinoIcons.eye_slash,
-                    size: 20,
-                    color: AppColors.textHint,
-                  ),
-                  onPressed: () => setState(
-                      () => _loginPasswordObscured = !_loginPasswordObscured),
-                ),
-                validator: (v) {
-                  if (v == null || v.isEmpty) return 'Password is required';
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 8),
-
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: _openForgotPassword,
-                  style: TextButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  child: Text(
-                    'Forgot password?',
-                    style: AppTypography.caption1.copyWith(
-                      color: AppColors.champagneGold,
-                      fontWeight: FontWeight.w600,
-                    ),
+              // ── Sign In Mode Switcher (Email vs Phone) ─────────────────────────
+              Container(
+                margin: const EdgeInsets.only(bottom: 22),
+                padding: const EdgeInsets.all(3.5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF141418),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: const Color(0xFF282830),
+                    width: 0.8,
                   ),
                 ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // ── Security Lockout Banner (Brute-Force Protection) ─────────────
-              if (_lockoutSecondsRemaining > 0) ...[
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: AppColors.error.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: AppColors.error.withValues(alpha: 0.4)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(CupertinoIcons.lock_shield_fill, color: AppColors.error, size: 20),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Security lockout active. Try again in ${_lockoutSecondsRemaining}s',
-                          style: GoogleFonts.poppins(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.error,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: AppleTouchFeedback(
+                        onTap: () {
+                          if (_isPhoneLogin) {
+                            setState(() => _isPhoneLogin = false);
+                          }
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: !_isPhoneLogin
+                                ? AppColors.gold.withValues(alpha: 0.16)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: !_isPhoneLogin
+                                  ? AppColors.gold.withValues(alpha: 0.4)
+                                  : Colors.transparent,
+                              width: 0.8,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                CupertinoIcons.mail_solid,
+                                size: 15,
+                                color: !_isPhoneLogin
+                                    ? AppColors.champagneGold
+                                    : AppColors.textSecondary,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Email',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12.5,
+                                  fontWeight: !_isPhoneLogin
+                                      ? FontWeight.w600
+                                      : FontWeight.w400,
+                                  color: !_isPhoneLogin
+                                      ? Colors.white
+                                      : AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                    ],
+                    ),
+                    Expanded(
+                      child: AppleTouchFeedback(
+                        onTap: () {
+                          if (!_isPhoneLogin) {
+                            setState(() => _isPhoneLogin = true);
+                          }
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: _isPhoneLogin
+                                ? AppColors.gold.withValues(alpha: 0.16)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: _isPhoneLogin
+                                  ? AppColors.gold.withValues(alpha: 0.4)
+                                  : Colors.transparent,
+                              width: 0.8,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                CupertinoIcons.phone_fill,
+                                size: 15,
+                                color: _isPhoneLogin
+                                    ? AppColors.champagneGold
+                                    : AppColors.textSecondary,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Phone Number',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12.5,
+                                  fontWeight: _isPhoneLogin
+                                      ? FontWeight.w600
+                                      : FontWeight.w400,
+                                  color: _isPhoneLogin
+                                      ? Colors.white
+                                      : AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              if (_isPhoneLogin) ...[
+                // ── Phone Input ──────────────────────────────────────────────────
+                _buildFieldLabel('MOBILE PHONE NUMBER'),
+                const SizedBox(height: 8),
+                PhoneInputField(
+                  controller: _loginPhoneController,
+                  selectedCountry: _loginPhoneCountry,
+                  hasError: _phoneLoginSubmitted &&
+                      PhoneNumberHelper.validate(
+                            country: _loginPhoneCountry,
+                            nationalInput: _loginPhoneController.text,
+                          ) !=
+                          null,
+                  onCountryChanged: (chosen) {
+                    setState(() => _loginPhoneCountry = chosen);
+                  },
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'We will send a 6-digit SMS verification code to sign into your account.',
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: AppColors.textHint,
+                    height: 1.35,
                   ),
                 ),
-                const SizedBox(height: 16),
-              ],
+                const SizedBox(height: 24),
+                _buildPrimaryButton(
+                  label: _lockoutSecondsRemaining > 0
+                      ? 'LOCKED (${_lockoutSecondsRemaining}s)'
+                      : 'Send Verification Code',
+                  isLoading: authState.isLoading,
+                  onTap: _lockoutSecondsRemaining > 0 ? () {} : _submitPhoneLogin,
+                ),
+              ] else ...[
+                // ── Email ───────────────────────────────────────────────────────────
+                _buildFieldLabel('EMAIL ADDRESS'),
+                const SizedBox(height: 8),
+                _buildTextField(
+                  controller: _loginEmailController,
+                  hint: 'your@email.com',
+                  inputType: TextInputType.emailAddress,
+                  autofillHints: const [AutofillHints.email, AutofillHints.username],
+                  prefixIcon: CupertinoIcons.mail,
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return 'Email is required';
+                    if (!v.contains('@')) return 'Enter a valid email address';
+                    return null;
+                  },
+                ),
 
-              // ── Sign In button ──────────────────────────────────────────────────
-              _buildPrimaryButton(
-                label: _lockoutSecondsRemaining > 0
-                    ? 'LOCKED (${_lockoutSecondsRemaining}s)'
-                    : 'Sign In',
-                isLoading: authState.isLoading,
-                onTap: _lockoutSecondsRemaining > 0 ? () {} : _submitLogin,
-              ),
+                const SizedBox(height: 18),
+
+                // ── Password ────────────────────────────────────────────────────────
+                _buildFieldLabel('PASSWORD'),
+                const SizedBox(height: 8),
+                _buildTextField(
+                  controller: _loginPasswordController,
+                  hint: 'Enter your password',
+                  obscure: _loginPasswordObscured,
+                  autofillHints: const [AutofillHints.password],
+                  prefixIcon: CupertinoIcons.lock,
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _loginPasswordObscured
+                          ? CupertinoIcons.eye
+                          : CupertinoIcons.eye_slash,
+                      size: 20,
+                      color: AppColors.textHint,
+                    ),
+                    onPressed: () => setState(
+                        () => _loginPasswordObscured = !_loginPasswordObscured),
+                  ),
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Password is required';
+                    return null;
+                  },
+                ),
+
+                const SizedBox(height: 8),
+
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: _openForgotPassword,
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(
+                      'Forgot password?',
+                      style: AppTypography.caption1.copyWith(
+                        color: AppColors.champagneGold,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                // ── Security Lockout Banner (Brute-Force Protection) ─────────────
+                if (_lockoutSecondsRemaining > 0) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: AppColors.error.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppColors.error.withValues(alpha: 0.4)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(CupertinoIcons.lock_shield_fill, color: AppColors.error, size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Security lockout active. Try again in ${_lockoutSecondsRemaining}s',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.error,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                // ── Sign In button ──────────────────────────────────────────────────
+                _buildPrimaryButton(
+                  label: _lockoutSecondsRemaining > 0
+                      ? 'LOCKED (${_lockoutSecondsRemaining}s)'
+                      : 'Sign In',
+                  isLoading: authState.isLoading,
+                  onTap: _lockoutSecondsRemaining > 0 ? () {} : _submitLogin,
+                ),
+              ],
 
               const SizedBox(height: 24),
               _buildSocialDivider(),

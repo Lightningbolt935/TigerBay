@@ -4,10 +4,12 @@ import 'dart:math' as dart_math;
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:tigerbay_app/core/config/env_config.dart';
 import 'package:tigerbay_app/data/models/user_model.dart';
 import 'package:tigerbay_app/core/utils/device_binding.dart';
 import 'package:tigerbay_app/services/twilio_notification_service.dart';
+import 'package:tigerbay_app/services/firebase_phone_auth_service.dart';
 
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -94,9 +96,8 @@ class AuthRepository {
 
   User? get currentUser => _client.auth.currentUser;
 
-  /// True only when the current session user has confirmed their email.
-  bool get isEmailConfirmed =>
-      _client.auth.currentUser?.emailConfirmedAt != null;
+  /// True as email verification is removed from registration pipeline.
+  bool get isEmailConfirmed => true;
 
   /// Raw auth state change stream — consumers should prefer the typed
   /// [onAuthStateChange] method below for state-machine routing.
@@ -104,21 +105,12 @@ class AuthRepository {
 
   // ── Email Confirmation Guard ───────────────────────────────────────────────
 
-  /// Throws [UnconfirmedEmailException] if the current session user has not
-  /// yet confirmed their email address. Call this guard at the top of any
-  /// method that reads or writes to public.profiles or any downstream table
-  /// that references it via FK.
-  ///
-  /// UNCONFIRMED_READ_ATTEMPT categorisation:
-  ///   email_confirmed_at IS NULL → block all DB reads → surface verification
-  ///   pending UI. No data should flow until the user clicks the email link.
+  /// Guard to check for valid authenticated session.
+  /// Email verification is bypassed as phone SMS OTP is the primary security factor.
   void _guardEmailConfirmed() {
     final user = _client.auth.currentUser;
     if (user == null) {
       throw const AuthException('No authenticated session found.');
-    }
-    if (user.emailConfirmedAt == null) {
-      throw UnconfirmedEmailException(user.email ?? 'unknown');
     }
   }
 
@@ -365,29 +357,152 @@ class AuthRepository {
 
   // ── OTP / Phone ─────────────────────────────────────────────────────────────
 
-  Future<void> sendOtp(String phone) async {
+  /// Stores verification IDs for Firebase Phone Auth
+  /// Key: phone number, Value: verification ID from Firebase
+  final Map<String, String> _verificationIds = {};
+
+  /// Sends an OTP to the provided phone number
+  /// Returns the verification ID that can be used to verify the OTP
+  Future<String> sendOtp(String phone) async {
+    debugPrint('[TigerBay Auth] Sending OTP to $phone');
+    
+    // ALWAYS use Twilio first (Firebase has region restrictions)
+    debugPrint('[TigerBay Auth] Using Twilio Verify API (primary)...');
     try {
-      await _client.auth.signInWithOtp(phone: phone);
-    } catch (e) {
-      debugPrint('[TigerBay Auth] Supabase signInWithOtp notice ($e). Attempting Twilio Verify API...');
       final twilio = TwilioNotificationService();
       final res = await twilio.sendVerificationCode(to: phone);
+      
       if (res['status'] == 'error') {
-        final errText = res['error']?.toString() ?? e.toString();
-        debugPrint('[TigerBay Auth] Twilio send verification error: $errText');
-        throw AuthException(errText);
+        debugPrint('[TigerBay Auth] Twilio failed: ${res['error']}');
+        // Don't throw yet, try fallbacks
+      } else {
+        debugPrint('[TigerBay Auth] ✅ Twilio OTP sent to $phone successfully');
+        return 'TWILIO_OTP_SENT';
       }
+    } catch (e) {
+      debugPrint('[TigerBay Auth] Twilio exception: $e');
+    }
+    
+    // Fallback 1: Supabase SMS (configured with your Twilio Message Service)
+    debugPrint('[TigerBay Auth] Trying Supabase SMS (fallback 1)...');
+    try {
+      await _client.auth.signInWithOtp(phone: phone);
+      debugPrint('[TigerBay Auth] ✅ Supabase OTP sent to $phone');
+      return 'SUPABASE_OTP_SENT';
+    } catch (supabaseError) {
+      debugPrint('[TigerBay Auth] Supabase failed: $supabaseError');
+    }
+    
+    // Fallback 2: Firebase (last resort - has region restrictions)
+    debugPrint('[TigerBay Auth] Trying Firebase (fallback 2 - may fail due to region)...');
+    try {
+      final firebaseService = FirebasePhoneAuthService();
+      final verificationId = await firebaseService.sendOtp(
+        phoneNumber: phone,
+        timeout: const Duration(seconds: 60),
+      );
+      
+      if (verificationId == 'AUTO_VERIFIED') {
+        debugPrint('[TigerBay Auth] Firebase auto-verification completed');
+        return verificationId;
+      }
+      
+      // Store the verification ID for later use
+      _verificationIds[phone] = verificationId;
+      debugPrint('[TigerBay Auth] ✅ Firebase OTP sent to $phone');
+      return verificationId;
+    } on firebase_auth.FirebaseAuthException catch (firebaseError) {
+      debugPrint('[TigerBay Auth] Firebase failed (${firebaseError.code}): ${firebaseError.message}');
+      
+      // All providers failed
+      throw const AuthException('Unable to send verification code at this time. Please try again later or contact support.');
+    } catch (e) {
+      debugPrint('[TigerBay Auth] All SMS providers failed: $e');
+      throw const AuthException('SMS service temporarily unavailable. Please try again.');
     }
   }
 
+  /// Gets the stored verification ID for a phone number
+  String? getVerificationId(String phone) => _verificationIds[phone];
+
+  /// Verifies the OTP code using Firebase Phone Auth
   Future<AuthResponse> verifyOtp({
     required String phone,
     required String token,
+    String? verificationId,
   }) async {
     final cleanDigits = phone.replaceAll(RegExp(r'[^0-9]'), '');
     final syntheticEmail = 'phone_$cleanDigits@phone.tigerbay.vip';
     final syntheticPassword = 'TB_Phone_${cleanDigits}_Secure2026!';
 
+    // Try Firebase Phone Auth verification first
+    final storedVerificationId = verificationId ?? _verificationIds[phone];
+    if (storedVerificationId != null && storedVerificationId != 'AUTO_VERIFIED') {
+      try {
+        final firebaseService = FirebasePhoneAuthService();
+        final userCredential = await firebaseService.verifyOtp(
+          verificationId: storedVerificationId,
+          smsCode: token,
+        );
+        
+        if (userCredential.user != null) {
+          debugPrint('[TigerBay Auth] Firebase Phone Auth verified successfully');
+          
+          // Create or sign in to Supabase with synthetic email
+          AuthResponse authRes;
+          try {
+            authRes = await _client.auth.signInWithPassword(
+              email: syntheticEmail,
+              password: syntheticPassword,
+            );
+          } catch (_) {
+            // First-time phone user: register them automatically
+            authRes = await _client.auth.signUp(
+              email: syntheticEmail,
+              password: syntheticPassword,
+              data: {
+                'phone': phone,
+                'full_name': 'Member $cleanDigits',
+              },
+            );
+          }
+
+          if (authRes.user != null) {
+            unawaited(_bindDevice(authRes.user!.id));
+            try {
+              final existing = await _client
+                  .from('profiles')
+                  .select('id, membership_status')
+                  .eq('id', authRes.user!.id)
+                  .maybeSingle();
+              if (existing != null) {
+                await _client.from('profiles').update({
+                  'phone': phone,
+                  'updated_at': DateTime.now().toIso8601String(),
+                }).eq('id', authRes.user!.id);
+              } else {
+                await _client.from('profiles').upsert({
+                  'id': authRes.user!.id,
+                  'phone': phone,
+                  'membership_status': 'inactive',
+                  'updated_at': DateTime.now().toIso8601String(),
+                });
+              }
+            } catch (_) {}
+          }
+
+          // Clear stored verification ID
+          _verificationIds.remove(phone);
+          
+          return authRes;
+        }
+      } on firebase_auth.FirebaseAuthException catch (e) {
+        debugPrint('[TigerBay Auth] Firebase OTP verification failed (${e.code}): ${e.message}');
+        // Continue to fallback methods
+      }
+    }
+
+    // Fallback: Try Supabase OTP verification
     try {
       final response = await _client.auth.verifyOTP(
         phone: phone,
@@ -406,6 +521,8 @@ class AuthRepository {
       return response;
     } catch (e) {
       debugPrint('[TigerBay Auth] Supabase verifyOTP notice ($e). Checking Twilio Verify directly...');
+      
+      // Final fallback: Twilio Verify API
       final twilio = TwilioNotificationService();
       final approved = await twilio.verifyCode(to: phone, code: token);
       if (!approved) {
@@ -434,12 +551,24 @@ class AuthRepository {
       if (authRes.user != null) {
         unawaited(_bindDevice(authRes.user!.id));
         try {
-          await _client.from('profiles').upsert({
-            'id': authRes.user!.id,
-            'phone': phone,
-            'membership_status': 'inactive',
-            'updated_at': DateTime.now().toIso8601String(),
-          });
+          final existing = await _client
+              .from('profiles')
+              .select('id, membership_status')
+              .eq('id', authRes.user!.id)
+              .maybeSingle();
+          if (existing != null) {
+            await _client.from('profiles').update({
+              'phone': phone,
+              'updated_at': DateTime.now().toIso8601String(),
+            }).eq('id', authRes.user!.id);
+          } else {
+            await _client.from('profiles').upsert({
+              'id': authRes.user!.id,
+              'phone': phone,
+              'membership_status': 'inactive',
+              'updated_at': DateTime.now().toIso8601String(),
+            });
+          }
         } catch (_) {}
       }
 
@@ -628,22 +757,7 @@ class AuthRepository {
             return const TigerBayAuthEvent.signedOut();
           }
 
-          // ── UNCONFIRMED_READ_ATTEMPT guard ─────────────────────────────
-          // If email_confirmed_at is null, the user has not yet clicked the
-          // verification link. Block ALL downstream DB reads here.
-          if (user.emailConfirmedAt == null) {
-            debugPrint(
-              '[TigerBay AuthStateChange] UNCONFIRMED_READ_ATTEMPT: '
-              'email_confirmed_at is null for ${user.email}. '
-              'All DB reads blocked. Surfacing verification pending state.',
-            );
-            return TigerBayAuthEvent.pendingVerification(
-              email: user.email ?? '',
-              userId: user.id,
-            );
-          }
-
-          // Email confirmed — safe to read public.profiles.
+          // Safe to read public.profiles.
           try {
             // ── Register-First Guard (OAuth redirect flows) ──────────────
             // For Apple/Facebook OAuth, the sign-in completes via browser
@@ -662,12 +776,6 @@ class AuthRepository {
               message:
                   'No account exists with this credential. Please register first.',
               errorCode: 'NO_PROFILE_EXISTS',
-            );
-          } on UnconfirmedEmailException catch (_) {
-            // Concurrent email state change — surface pending.
-            return TigerBayAuthEvent.pendingVerification(
-              email: user.email ?? '',
-              userId: user.id,
             );
           } on PostgrestException catch (pgErr) {
             debugPrint(
@@ -689,13 +797,6 @@ class AuthRepository {
         case AuthChangeEvent.tokenRefreshed:
           if (user == null) return const TigerBayAuthEvent.signedOut();
 
-          if (user.emailConfirmedAt == null) {
-            return TigerBayAuthEvent.pendingVerification(
-              email: user.email ?? '',
-              userId: user.id,
-            );
-          }
-
           try {
             final profile = await getCurrentProfile();
             return TigerBayAuthEvent.authenticated(
@@ -715,19 +816,11 @@ class AuthRepository {
 
         case AuthChangeEvent.userUpdated:
           if (user == null) return const TigerBayAuthEvent.signedOut();
-          if (user.emailConfirmedAt == null) {
-            return TigerBayAuthEvent.pendingVerification(
-              email: user.email ?? '',
-              userId: user.id,
-            );
-          }
           try {
             final profile = await getCurrentProfile();
             return TigerBayAuthEvent.authenticated(
                 user: user, profile: profile);
           } catch (_) {
-            // If profile load fails after user update, still emit authenticated
-            // with null profile so UI can show degraded state gracefully.
             return TigerBayAuthEvent.authenticated(user: user, profile: null);
           }
 

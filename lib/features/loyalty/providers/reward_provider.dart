@@ -91,10 +91,14 @@ class RedeemNotifier extends StateNotifier<RedeemState> {
         rewardTitle: reward.title,
       );
 
-      // Refresh profile to get updated strips_balance
-      await _ref.read(profileStateProvider.notifier).refreshProfile();
-      // Refresh ledger
+      // Refresh ledger to show the new transaction
       _ref.invalidate(stripsLedgerProvider);
+      // Refresh profile but don't throw on error to avoid navigation
+      try {
+        await _ref.read(profileStateProvider.notifier).refreshProfile();
+      } catch (e) {
+        // Silent catch to avoid navigation errors
+      }
 
       state = state.copyWith(
         isProcessing: false,

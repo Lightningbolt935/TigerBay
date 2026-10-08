@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_stripe/flutter_stripe.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:tigerbay_app/core/config/env_config.dart';
+import 'firebase_options.dart';
 import 'app.dart';
 
 Future<void> main() async {
@@ -98,6 +100,16 @@ Future<void> main() async {
       statusBarIconBrightness: Brightness.light, // Android: light icons
       statusBarBrightness: Brightness.dark, // iOS: light icons
     ));
+  }
+
+  // ── Init Firebase ──────────────────────────────────────────────────────────
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (e) {
+    debugPrint('[TigerBay] Firebase initialization failed: $e');
+    // Continue without Firebase - fallback to Supabase/Twilio
   }
 
   // ── Init Supabase (works on all platforms: Web, Android, iOS, Windows) ─────

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "593841551014",
+    "project_id": "tigerbay-159eb",
+    "storage_bucket": "tigerbay-159eb.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:593841551014:android:3b95a47c5b2b0d52fda667",
+        "android_client_info": {
+          "package_name": "com.tigerbay.tigerbay_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDmFsLu-awMEpKCS-jJRtYfOky6pJHace4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

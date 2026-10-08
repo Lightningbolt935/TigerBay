@@ -199,7 +199,7 @@ class NewsFeedItem {
       branchId: json['branch_id'] as int?,
       imageUrl: formatImageUrl(json['image_url'] ?? json['banner_url']),
       title: json['title'] as String? ?? '',
-      previewText: json['preview_text'] as String? ?? '',
+      previewText: (json['preview_text'] ?? json['subtitle'] ?? json['content'] ?? '') as String? ?? '',
       createdAt: DateTime.tryParse(json['created_at'] as String? ?? '') ??
           DateTime.now(),
     );

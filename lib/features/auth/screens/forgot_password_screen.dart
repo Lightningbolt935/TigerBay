@@ -60,7 +60,6 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
 
   bool _obscureNewPassword = true;
   bool _obscureConfirmPassword = true;
-  bool _isMasterOtpUsed = false;
 
   @override
   void initState() {
@@ -268,18 +267,6 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     });
 
     try {
-      if (code == '000000') {
-        debugPrint('[ForgotPassword] Master OTP 000000 accepted for password recovery testing.');
-        _isMasterOtpUsed = true;
-        HapticFeedback.mediumImpact();
-        setState(() {
-          _isLoading = false;
-          _currentStep = _ResetStep.newPassword;
-        });
-        return;
-      }
-
-      _isMasterOtpUsed = false;
       if (_selectedChannel == _OtpChannel.email) {
         final email = _resolvedEmail ?? _emailController.text.trim();
         await ref.read(authRepositoryProvider).verifyRecoveryOtp(
@@ -343,11 +330,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     });
 
     try {
-      if (_isMasterOtpUsed) {
-        debugPrint('[ForgotPassword] Master OTP test bypass: password updated locally for test.');
-      } else {
-        await ref.read(authRepositoryProvider).updatePassword(newPass);
-      }
+      await ref.read(authRepositoryProvider).updatePassword(newPass);
       TextInput.finishAutofillContext();
 
       setState(() {

@@ -36,6 +36,27 @@ class StripsLedgerEntry {
     return '-$amount Strips';
   }
 
+  /// Default voucher expiration: 30 days from redemption
+  DateTime get voucherExpiresAt => createdAt.add(const Duration(days: 30));
+
+  /// Whether this voucher has auto-expired
+  bool get isVoucherExpired => DateTime.now().isAfter(voucherExpiresAt);
+
+  /// Days remaining for this voucher
+  int get voucherDaysRemaining {
+    final diff = voucherExpiresAt.difference(DateTime.now()).inDays;
+    return diff < 0 ? 0 : diff;
+  }
+
+  /// Formatted expiry text
+  String get voucherExpiryText {
+    if (isVoucherExpired) return 'EXPIRED';
+    final days = voucherDaysRemaining;
+    if (days == 0) return 'Expires Today';
+    if (days == 1) return 'Expires Tomorrow';
+    return 'Expires in $days days';
+  }
+
   /// Formatted timestamp for list display.
   String get formattedDate {
     final d = createdAt;

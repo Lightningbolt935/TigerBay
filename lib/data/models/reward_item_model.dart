@@ -11,6 +11,9 @@ class RewardItem {
   final int stripsCost;
   final String imageUrl;
   final bool isActive;
+  final DateTime? expiresAt;
+  final int? validDays;
+  final DateTime? createdAt;
 
   const RewardItem({
     required this.id,
@@ -19,9 +22,48 @@ class RewardItem {
     required this.stripsCost,
     this.imageUrl = '',
     this.isActive = true,
+    this.expiresAt,
+    this.validDays,
+    this.createdAt,
   });
 
+  /// The effective expiration DateTime for this reward
+  DateTime get effectiveExpiresAt {
+    if (expiresAt != null) return expiresAt!;
+    final base = createdAt ?? DateTime.now();
+    final days = validDays ?? 30; // default 30-day auto expiry
+    return base.add(Duration(days: days));
+  }
+
+  /// Whether this reward is expired
+  bool get isExpired => DateTime.now().isAfter(effectiveExpiresAt);
+
+  /// Number of whole days remaining until expiration
+  int get daysRemaining {
+    final diff = effectiveExpiresAt.difference(DateTime.now()).inDays;
+    return diff < 0 ? 0 : diff;
+  }
+
+  /// Human-readable auto-expiry status badge
+  String get expiryBadgeText {
+    if (isExpired) return 'EXPIRED';
+    final days = daysRemaining;
+    if (days == 0) return 'EXPIRES TODAY';
+    if (days == 1) return 'EXPIRES TOMORROW';
+    if (days <= 7) return '$days DAYS LEFT';
+    return '$days-DAY VALIDITY';
+  }
+
   factory RewardItem.fromMap(Map<String, dynamic> map) {
+    DateTime? parseDate(dynamic val) {
+      if (val == null) return null;
+      if (val is DateTime) return val;
+      if (val is String && val.isNotEmpty) {
+        return DateTime.tryParse(val);
+      }
+      return null;
+    }
+
     return RewardItem(
       id: _safeInt(map['id']) ?? 0,
       title: (map['title'] as String?) ?? (map['name'] as String?) ?? 'Reward',
@@ -35,6 +77,9 @@ class RewardItem {
           (map['image_url'] as String?) ?? (map['imageUrl'] as String?) ?? '',
       isActive:
           (map['is_active'] as bool?) ?? (map['isActive'] as bool?) ?? true,
+      expiresAt: parseDate(map['expires_at'] ?? map['expiry_date']),
+      validDays: _safeInt(map['valid_days'] ?? map['validity_days']),
+      createdAt: parseDate(map['created_at']),
     );
   }
 
@@ -45,6 +90,9 @@ class RewardItem {
         'strips_cost': stripsCost,
         'image_url': imageUrl,
         'is_active': isActive,
+        'expires_at': expiresAt?.toIso8601String(),
+        'valid_days': validDays,
+        'created_at': createdAt?.toIso8601String(),
       };
 
   RewardItem copyWith({
@@ -54,6 +102,9 @@ class RewardItem {
     int? stripsCost,
     String? imageUrl,
     bool? isActive,
+    DateTime? expiresAt,
+    int? validDays,
+    DateTime? createdAt,
   }) {
     return RewardItem(
       id: id ?? this.id,
@@ -62,6 +113,9 @@ class RewardItem {
       stripsCost: stripsCost ?? this.stripsCost,
       imageUrl: imageUrl ?? this.imageUrl,
       isActive: isActive ?? this.isActive,
+      expiresAt: expiresAt ?? this.expiresAt,
+      validDays: validDays ?? this.validDays,
+      createdAt: createdAt ?? this.createdAt,
     );
   }
 

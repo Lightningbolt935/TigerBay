@@ -50,6 +50,12 @@ import 'package:tigerbay_app/features/profile/screens/profile_screen.dart';
 import 'package:tigerbay_app/features/profile/screens/edit_profile_screen.dart';
 import 'package:tigerbay_app/features/profile/screens/notification_prefs_screen.dart';
 
+// ── 9. Venue, Events, Packages & Enquiries ────────────────────────────────────
+import 'package:tigerbay_app/features/contact/screens/contact_us_screen.dart';
+import 'package:tigerbay_app/features/events/screens/whats_on_screen.dart';
+import 'package:tigerbay_app/features/packages/screens/packages_screen.dart';
+import 'package:tigerbay_app/features/venue/screens/venue_landing_screen.dart';
+
 /// ═══════════════════════════════════════════════════════════════════════════
 /// GoRouter Refresh Stream Notifier
 /// ═══════════════════════════════════════════════════════════════════════════
@@ -177,17 +183,18 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       final isAuthenticated = authStatus == AuthStatus.authenticated;
       final isPendingEmail = authStatus == AuthStatus.pendingEmailVerification;
-
-      // ── Gate 1: Email Verification Pending ─────────────────────────────
-      // TigerBay uses 2-step OTP verification on RegistrationVerificationScreen.
-      // NEVER redirect to the old link-based pendingVerification screen!
+      // ── Gate 1: Email Verification Bypassed ───────────────────────────
+      // Email verification is removed in favor of direct registration.
       if (isPendingEmail) {
         if (loc == AppRoutes.registrationVerification ||
             loc == AppRoutes.forgotPassword ||
-            loc == AppRoutes.membershipPaywall) {
+            loc == AppRoutes.membershipPaywall ||
+            loc == AppRoutes.home) {
           return null;
         }
-        return AppRoutes.registrationVerification;
+        return (isMembershipActive && !isMembershipExpired)
+            ? AppRoutes.home
+            : AppRoutes.membershipPaywall;
       }
 
       // ── Gate 1.5: Password Recovery Event ─────────────────────────────
@@ -204,6 +211,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             loc == AppRoutes.pendingVerification ||
             loc == AppRoutes.forgotPassword ||
             loc == AppRoutes.registrationVerification ||
+            loc == AppRoutes.contactUs ||
             loc == AppRoutes.membershipPaywall;
 
         return isOnAuthRoute ? null : AppRoutes.login;
@@ -219,6 +227,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           return (!isMembershipActive || isMembershipExpired)
               ? AppRoutes.membershipPaywall
               : AppRoutes.home;
+        }
+        // If the user already has a loaded profile (in-app session) and is just refreshing in the background,
+        // NEVER boot them out to splash or home!
+        if (profileState.profile != null) {
+          return null;
         }
         if (profileState.loadStatus == ProfileLoadStatus.error) {
           debugPrint(
@@ -236,8 +249,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (!isMembershipActive || isMembershipExpired) {
         if (loc == AppRoutes.membershipPaywall ||
             loc == AppRoutes.forgotPassword ||
-            loc == AppRoutes.registrationVerification) {
-          return null; // Stay on paywall, forgot password, or registration verification
+            loc == AppRoutes.registrationVerification ||
+            loc == AppRoutes.contactUs) {
+          return null; // Stay on paywall, forgot password, registration verification, or contact us
         }
         debugPrint(
           '[TigerBay Router] Inactive/expired member (active=$isMembershipActive, expired=$isMembershipExpired) '
@@ -425,33 +439,72 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
 
+      // ── Contact Us & Venue Landing (Modal / Fullscreen Overlays) ───────────
+      GoRoute(
+        path: AppRoutes.contactUs,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) {
+          final venue = state.extra is Branch ? state.extra as Branch : null;
+          return ContactUsScreen(initialVenue: venue);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.venueLanding,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) {
+          final venue = state.extra is Branch ? state.extra as Branch : null;
+          return VenueLandingScreen(venue: venue);
+        },
+      ),
+      GoRoute(
+        path: '${AppRoutes.venueLanding}/:id',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) {
+          final id = int.tryParse(state.pathParameters['id'] ?? '');
+          final venue = state.extra is Branch ? state.extra as Branch : null;
+          return VenueLandingScreen(venue: venue, branchId: id);
+        },
+      ),
+
       // ── Main Shell with Bottom Nav Dock ─────────────────────────────
       ShellRoute(
         navigatorKey: shellNavigatorKey,
         builder: (context, state, child) => MainShell(child: child),
         routes: [
-          // Home / Feed
+          // 1. Lounges / Venues
           GoRoute(
             path: AppRoutes.home,
             builder: (_, __) => const HomeScreen(),
+          ),
+
+          // 2. What's On
+          GoRoute(
+            path: AppRoutes.whatsOn,
+            builder: (_, __) => const WhatsOnScreen(),
+          ),
+
+          // 3. Menu
+          GoRoute(
+            path: AppRoutes.menu,
+            builder: (_, __) => const MenuScreen(),
+          ),
+
+          // 4. Packages
+          GoRoute(
+            path: AppRoutes.packages,
+            builder: (_, __) => const PackagesScreen(),
+          ),
+
+          // 5. Wallet / Loyalty
+          GoRoute(
+            path: AppRoutes.loyalty,
+            builder: (_, __) => const LoyaltyScreen(),
           ),
 
           // Dashboard (Strips Wallet)
           GoRoute(
             path: AppRoutes.dashboard,
             builder: (_, __) => const DashboardScreen(),
-          ),
-
-          // Menu
-          GoRoute(
-            path: AppRoutes.menu,
-            builder: (_, __) => const MenuScreen(),
-          ),
-
-          // Wallet / Loyalty
-          GoRoute(
-            path: AppRoutes.loyalty,
-            builder: (_, __) => const LoyaltyScreen(),
           ),
 
           // Reward Store
@@ -473,6 +526,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
         ],
       ),
+
     ],
   );
 });

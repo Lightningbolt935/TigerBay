@@ -138,6 +138,8 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
 
     if (success && mounted) {
       HapticFeedback.mediumImpact();
+      await ref.read(profileStateProvider.notifier).loadProfile();
+      if (!mounted) return;
       final profile = ref.read(profileStateProvider).profile;
       if (profile?.isMembershipActive == true) {
         context.go(AppRoutes.home);

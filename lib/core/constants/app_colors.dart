@@ -32,6 +32,9 @@ class AppColors {
   /// Secondary containers, inner card sections, divider-adjacent areas.
   static const Color surfaceLight = Color(0xFF2C2C2E);
 
+  /// Elevated card surfaces
+  static const Color surfaceElevated = Color(0xFF262628);
+
   // ── Text ──────────────────────────────────────────────────────────────────
   /// All primary body text, card titles, menu item names on dark backgrounds.
   static const Color textPrimary = Color(0xFFFFFFFF);

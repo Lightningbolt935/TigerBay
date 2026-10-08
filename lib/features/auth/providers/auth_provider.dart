@@ -63,12 +63,12 @@ class AuthState {
     this.pendingEmail,
   });
 
-  /// Whether the user has a confirmed email address.
-  bool get isEmailConfirmed => user?.emailConfirmedAt != null;
+  /// Email verification is bypassed/removed in favor of Phone SMS security verification.
+  bool get isEmailConfirmed => true;
 
-  /// Convenience — is the user fully authenticated with confirmed email.
+  /// Convenience — is the user fully authenticated.
   bool get isFullyAuthenticated =>
-      status == AuthStatus.authenticated && user != null && isEmailConfirmed;
+      status == AuthStatus.authenticated && user != null;
 
   AuthState copyWith({
     AuthStatus? status,
@@ -109,19 +109,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     // Seed initial state from the existing session (app cold-start).
     final currentUser = _repo.currentUser;
     if (currentUser != null) {
-      if (currentUser.emailConfirmedAt == null) {
-        // Existing session but unconfirmed — block DB reads on launch.
-        state = state.copyWith(
-          status: AuthStatus.pendingEmailVerification,
-          user: currentUser,
-          pendingEmail: currentUser.email,
-        );
-      } else {
-        state = state.copyWith(
-          status: AuthStatus.authenticated,
-          user: currentUser,
-        );
-      }
+      state = state.copyWith(
+        status: AuthStatus.authenticated,
+        user: currentUser,
+      );
     } else {
       state = state.copyWith(status: AuthStatus.unauthenticated);
     }
@@ -220,16 +211,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
         return false;
       }
 
-      // Set state to pending verification. The onAuthStateChange listener
-      // will also fire and confirm this state via _handleAuthEvent.
-      // We set it here eagerly so the UI transitions immediately without
-      // waiting for the stream event.
+      // Eagerly set state to authenticated so user can proceed into the app.
       state = state.copyWith(
-        status: AuthStatus.pendingEmailVerification,
+        status: AuthStatus.authenticated,
         user: user,
-        pendingEmail: email,
         isLoading: false,
-        clearProfile: true,
         clearError: true,
       );
 
@@ -303,26 +289,56 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   // ── OTP / Phone ────────────────────────────────────────────────────────────
 
-  Future<void> sendOtp(String phone) async {
+  /// Stores the verification ID from Firebase Phone Auth
+  String? _currentVerificationId;
+
+  /// Gets the current verification ID for Firebase Phone Auth
+  String? get currentVerificationId => _currentVerificationId;
+
+  /// Sends an OTP to the provided phone number
+  /// Returns the verification ID (for Firebase) or a status string
+  Future<String?> sendOtp(String phone) async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      await _repo.sendOtp(phone);
-    } on AuthException catch (e) {
-      state = state.copyWith(error: _localizeAuthError(e.message));
-    } catch (e) {
-      state = state.copyWith(error: ErrorSanitizer.format(e));
-    } finally {
+      final verificationId = await _repo.sendOtp(phone);
+      
+      // Store verification ID if it's from Firebase
+      if (verificationId != 'SUPABASE_OTP_SENT' && 
+          verificationId != 'TWILIO_OTP_SENT' && 
+          verificationId != 'AUTO_VERIFIED') {
+        _currentVerificationId = verificationId;
+      }
+      
       state = state.copyWith(isLoading: false);
+      return verificationId;
+    } on AuthException catch (e) {
+      state = state.copyWith(error: _localizeAuthError(e.message), isLoading: false);
+      return null;
+    } catch (e) {
+      state = state.copyWith(error: ErrorSanitizer.format(e), isLoading: false);
+      return null;
     }
   }
 
   Future<bool> verifyOtp({
     required String phone,
     required String token,
+    String? verificationId,
   }) async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      final response = await _repo.verifyOtp(phone: phone, token: token);
+      // Use provided verification ID or stored one
+      final vid = verificationId ?? _currentVerificationId;
+      
+      final response = await _repo.verifyOtp(
+        phone: phone, 
+        token: token,
+        verificationId: vid,
+      );
+      
+      // Clear stored verification ID after use
+      _currentVerificationId = null;
+      
       if (response.user != null) {
         // ── Register-First Guard ────────────────────────────────────────
         await _repo.checkProfileExistsOrSignOut();
@@ -453,19 +469,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await _repo.refreshSession();
       final user = _repo.currentUser;
       if (user != null) {
-        if (user.emailConfirmedAt != null) {
-          state = state.copyWith(
-            status: AuthStatus.authenticated,
-            user: user,
-            clearPendingEmail: true,
-          );
-        } else {
-          state = state.copyWith(
-            status: AuthStatus.pendingEmailVerification,
-            user: user,
-            pendingEmail: user.email,
-          );
-        }
+        state = state.copyWith(
+          status: AuthStatus.authenticated,
+          user: user,
+          clearPendingEmail: true,
+        );
       } else {
         state = const AuthState(status: AuthStatus.unauthenticated);
       }

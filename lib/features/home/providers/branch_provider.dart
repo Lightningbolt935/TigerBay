@@ -198,7 +198,9 @@ class SelectedBranchNotifier extends Notifier<Branch?> {
             if (branch.id == homeSiteId) return branch;
           }
         }
-        return branchList.isNotEmpty ? branchList.first : null;
+        // If user has no specific branch saved, default to null (All Venues)
+        // so all dishes across all branches are immediately accessible!
+        return null;
       }
     } catch (e, stack) {
       debugPrint('🚨 CRITICAL INIT ERROR: $e');
@@ -210,6 +212,16 @@ class SelectedBranchNotifier extends Notifier<Branch?> {
   void changeBranch(Branch newBranch) {
     _isInitialized = true;
     state = newBranch;
+  }
+
+  void setBranch(Branch? branch) {
+    _isInitialized = true;
+    state = branch;
+  }
+
+  void selectAllVenues() {
+    _isInitialized = true;
+    state = null;
   }
 }
 
