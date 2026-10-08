@@ -16,11 +16,10 @@ import 'package:tigerbay_app/shared/widgets/apple_touch_feedback.dart';
 /// ═══════════════════════════════════════════════════════════════════════════
 /// TigerBay International — Ultra-Luxury Editorial Menu Screen
 /// ═══════════════════════════════════════════════════════════════════════════
-/// Inspired by elite Mayfair London lounges and Michelin dining apps (Nobu, Dishoom):
-/// - Brushed champagne gold segmented capsule (FOOD / DRINKS / SHISHA).
-/// - Dynamic category rail driven 100% by Supabase `menu_categories`.
-/// - Instant vanishing of hidden categories (is_active == false).
-/// - Seamless browsing with luxury editorial dish cards.
+/// Fully dynamic:
+/// - Menu Type capsule is driven by `menu_categories` for the active venue.
+/// - Venue branches display only the menu types they offer (e.g. Food, Drinks, Shisha, Dessert).
+/// - Category rail updates seamlessly.
 class MenuScreen extends ConsumerWidget {
   const MenuScreen({super.key});
 
@@ -28,6 +27,7 @@ class MenuScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final selectedBranch = ref.watch(selectedBranchProvider);
     final searchQuery = ref.watch(menuSearchQueryProvider);
+    final availableMenuTypesAsync = ref.watch(availableMenuTypesProvider);
     final selectedMenuType = ref.watch(selectedMenuTypeProvider);
     final currentNode = ref.watch(currentCategoryNodeProvider);
     final categoriesAsync = ref.watch(hierarchicalCategoriesProvider);
@@ -114,6 +114,9 @@ class MenuScreen extends ConsumerWidget {
                             .read(selectedBranchProvider.notifier)
                             .changeBranch(b);
                       }
+                      ref
+                          .read(categoryNavigationStackProvider.notifier)
+                          .selectCategory(null);
                     },
                   ),
                   loading: () => Container(
@@ -132,69 +135,75 @@ class MenuScreen extends ConsumerWidget {
 
           const SizedBox(height: 12),
 
-          // ── 2. Segmented Menu Capsule (FOOD / DRINKS / SHISHA) ─────────────
+          // ── 2. DYNAMIC Segmented Menu Capsule (Venue Isolated) ────────────
           if (searchQuery.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18),
-              child: Container(
+            availableMenuTypesAsync.when(
+              data: (types) {
+                if (types.isEmpty) return const SizedBox.shrink();
+
+                // If currently selected type is not in available venue types, select first
+                if (!types.contains(selectedMenuType.toLowerCase())) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    ref.read(selectedMenuTypeProvider.notifier).state =
+                        types.first;
+                  });
+                }
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
+                  child: Container(
+                    height: 48,
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Color(0xFF17171C),
+                          Color(0xFF0F0F12),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: AppColors.gold.withValues(alpha: 0.35),
+                        width: 1.0,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.6),
+                          blurRadius: 14,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: types.map((type) {
+                        final isSelected =
+                            selectedMenuType.toLowerCase() == type.toLowerCase();
+                        return _buildLuxurySegmentTab(
+                          ref: ref,
+                          label: type.toUpperCase(),
+                          icon: _iconForMenuType(type),
+                          type: type,
+                          isSelected: isSelected,
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                );
+              },
+              loading: () => Container(
+                margin: const EdgeInsets.symmetric(horizontal: 18),
                 height: 48,
-                padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color(0xFF17171C),
-                      Color(0xFF0F0F12),
-                    ],
-                  ),
+                  color: const Color(0xFF17171C),
                   borderRadius: BorderRadius.circular(24),
-                  border: Border.all(
-                    color: AppColors.gold.withValues(alpha: 0.35),
-                    width: 1.0,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.6),
-                      blurRadius: 14,
-                      offset: const Offset(0, 4),
-                    ),
-                    BoxShadow(
-                      color: AppColors.gold.withValues(alpha: 0.08),
-                      blurRadius: 10,
-                      spreadRadius: -2,
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    _buildLuxurySegmentTab(
-                      ref: ref,
-                      label: 'FOOD',
-                      icon: Icons.restaurant_rounded,
-                      type: 'food',
-                      isSelected: selectedMenuType == 'food',
-                    ),
-                    _buildLuxurySegmentTab(
-                      ref: ref,
-                      label: 'DRINKS',
-                      icon: Icons.local_bar_rounded,
-                      type: 'drinks',
-                      isSelected: selectedMenuType == 'drinks',
-                    ),
-                    _buildLuxurySegmentTab(
-                      ref: ref,
-                      label: 'SHISHA',
-                      icon: Icons.cloud_rounded,
-                      type: 'shisha',
-                      isSelected: selectedMenuType == 'shisha',
-                    ),
-                  ],
                 ),
               ),
+              error: (_, __) => const SizedBox.shrink(),
             ),
 
-          // ── 3. Dynamic Category Filter Rail (Supabase Controlled) ──────────
+          // ── 3. Dynamic Category Filter Rail ────────────────────────────────
           if (searchQuery.isEmpty) ...[
             const SizedBox(height: 10),
             _buildSupabaseCategoryRail(ref, categoriesAsync, currentNode),
@@ -235,7 +244,24 @@ class MenuScreen extends ConsumerWidget {
     );
   }
 
-  // ── Segmented Tab Capsule Helper ───────────────────────────────────────────
+  IconData _iconForMenuType(String type) {
+    switch (type.toLowerCase()) {
+      case 'food':
+        return Icons.restaurant_rounded;
+      case 'drinks':
+        return Icons.local_bar_rounded;
+      case 'shisha':
+        return Icons.cloud_rounded;
+      case 'dessert':
+      case 'desserts':
+        return Icons.cake_rounded;
+      case 'packages':
+        return Icons.card_giftcard_rounded;
+      default:
+        return Icons.menu_book_rounded;
+    }
+  }
+
   Widget _buildLuxurySegmentTab({
     required WidgetRef ref,
     required String label,
@@ -284,17 +310,17 @@ class MenuScreen extends ConsumerWidget {
               children: [
                 Icon(
                   icon,
-                  size: 14,
+                  size: 13,
                   color: isSelected ? Colors.black : const Color(0xFF8E8B85),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 5),
                 Text(
                   label,
                   style: GoogleFonts.outfit(
-                    fontSize: 12,
+                    fontSize: 11,
                     fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
                     color: isSelected ? Colors.black : const Color(0xFFC2BEB6),
-                    letterSpacing: 1.5,
+                    letterSpacing: 1.2,
                   ),
                 ),
               ],
@@ -305,7 +331,6 @@ class MenuScreen extends ConsumerWidget {
     );
   }
 
-  // ── Supabase-Controlled Category Rail ──────────────────────────────────────
   Widget _buildSupabaseCategoryRail(
     WidgetRef ref,
     AsyncValue<List<MenuCategoryNode>> categoriesAsync,
@@ -340,11 +365,10 @@ class MenuScreen extends ConsumerWidget {
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 18),
-            itemCount: categories.length + 1, // +1 for "ALL"
+            itemCount: categories.length + 1,
             separatorBuilder: (_, __) => const SizedBox(width: 8),
             itemBuilder: (context, index) {
               if (index == 0) {
-                // "ALL" Category Chip
                 final isSelected = currentNode == null;
                 return _CategoryPillChip(
                   label: 'ALL',
@@ -372,7 +396,6 @@ class MenuScreen extends ConsumerWidget {
     );
   }
 
-  // ── Luxury Empty Dishes State ──────────────────────────────────────────────
   Widget _buildEmptyDishesView(WidgetRef ref, MenuCategoryNode? currentNode) {
     return Center(
       child: Padding(
@@ -390,12 +413,6 @@ class MenuScreen extends ConsumerWidget {
                   color: AppColors.gold.withValues(alpha: 0.35),
                   width: 1.0,
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.gold.withValues(alpha: 0.1),
-                    blurRadius: 20,
-                  ),
-                ],
               ),
               child: const Icon(
                 Icons.restaurant_menu_rounded,
@@ -481,16 +498,14 @@ class MenuScreen extends ConsumerWidget {
       child: ListView.builder(
         padding: const EdgeInsets.all(18),
         itemCount: 4,
-        itemBuilder: (_, __) {
-          return Container(
-            margin: const EdgeInsets.only(bottom: 16),
-            height: 165,
-            decoration: BoxDecoration(
-              color: const Color(0xFF141418),
-              borderRadius: BorderRadius.circular(20),
-            ),
-          );
-        },
+        itemBuilder: (_, __) => Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          height: 165,
+          decoration: BoxDecoration(
+            color: const Color(0xFF141418),
+            borderRadius: BorderRadius.circular(20),
+          ),
+        ),
       ),
     );
   }
@@ -513,8 +528,9 @@ class MenuScreen extends ConsumerWidget {
           const SizedBox(height: 14),
           OutlinedButton(
             onPressed: () {
+              ref.invalidate(availableMenuTypesProvider);
               ref.invalidate(hierarchicalCategoriesProvider);
-              ref.invalidate(dishesForCurrentHierarchyProvider);
+              ref.invalidate(dishesForBranchStreamProvider);
             },
             style: OutlinedButton.styleFrom(
               foregroundColor: AppColors.champagneGold,
@@ -537,7 +553,6 @@ class MenuScreen extends ConsumerWidget {
   }
 }
 
-// ── Luxury Category Pill Chip ────────────────────────────────────────────────
 class _CategoryPillChip extends StatelessWidget {
   final String label;
   final bool isSelected;
@@ -576,15 +591,6 @@ class _CategoryPillChip extends StatelessWidget {
                 : AppColors.gold.withValues(alpha: 0.22),
             width: 0.8,
           ),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: AppColors.gold.withValues(alpha: 0.35),
-                    blurRadius: 10,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : null,
         ),
         child: Center(
           child: Text(
@@ -602,7 +608,6 @@ class _CategoryPillChip extends StatelessWidget {
   }
 }
 
-/// ── High-Resolution Dish Detail Modal with Variants & Add-ons ──────────────
 class _DishDetailModalSheet extends StatefulWidget {
   final MenuItemModel item;
 
@@ -643,7 +648,6 @@ class _DishDetailModalSheetState extends State<_DishDetailModalSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Drag handle
             Center(
               child: Container(
                 margin: const EdgeInsets.symmetric(vertical: 10),
@@ -655,8 +659,6 @@ class _DishDetailModalSheetState extends State<_DishDetailModalSheet> {
                 ),
               ),
             ),
-
-            // Enlarged Multi-Image Gallery
             if (images.isNotEmpty)
               SizedBox(
                 height: 250,
@@ -739,7 +741,6 @@ class _DishDetailModalSheetState extends State<_DishDetailModalSheet> {
                   ],
                 ),
               ),
-
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
               child: Column(
@@ -758,182 +759,28 @@ class _DishDetailModalSheetState extends State<_DishDetailModalSheet> {
                           ),
                         ),
                       ),
-                      if (widget.item.hasDiscount)
-                        Text(
-                          widget.item.discountedPriceFormatted,
-                          style: GoogleFonts.poppins(
-                            fontSize: 19,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.champagneGold,
-                          ),
-                        )
-                      else
-                        Text(
-                          widget.item.formattedPrice,
-                          style: GoogleFonts.poppins(
-                            fontSize: 19,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.champagneGold,
-                          ),
+                      Text(
+                        widget.item.displayPrice,
+                        style: GoogleFonts.poppins(
+                          fontSize: 19,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.champagneGold,
                         ),
+                      ),
                     ],
                   ),
-                  if (widget.item.hasDiscount) ...[
-                    const SizedBox(height: 2),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Text(
-                          widget.item.formattedPrice,
-                          style: GoogleFonts.poppins(
-                            fontSize: 13,
-                            color: AppColors.textHint,
-                            decoration: TextDecoration.lineThrough,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppColors.brandRed,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            '${widget.item.discountPercentage}% OFF',
-                            style: GoogleFonts.poppins(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                  const SizedBox(height: 12),
-                  Text(
-                    widget.item.description,
-                    style: GoogleFonts.poppins(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
-                      height: 1.5,
-                    ),
-                  ),
-
-                  // Variants Section (e.g. 175ml, 250ml, Bottle)
-                  if (widget.item.variants.isNotEmpty) ...[
-                    const SizedBox(height: 16),
+                  if (widget.item.description.isNotEmpty) ...[
+                    const SizedBox(height: 8),
                     Text(
-                      'Options / Sizes',
+                      widget.item.description,
                       style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                        height: 1.5,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: widget.item.variants.map((v) {
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1E1E26),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: AppColors.gold.withValues(alpha: 0.4),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                v.name,
-                                style: GoogleFonts.poppins(
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                v.formattedPrice,
-                                style: GoogleFonts.poppins(
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.champagneGold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                    ),
                   ],
-
-                  // Addons Section
-                  if (widget.item.addons.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    Text(
-                      'Available Extras & Add-ons',
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: widget.item.addons.map((a) {
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1E1E26),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.1),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                a.name,
-                                style: GoogleFonts.poppins(
-                                  fontSize: 12,
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                '+${a.formattedPrice}',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.champagneGold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ],
-
-
                   const SizedBox(height: 24),
-
-                  // Close button
                   SizedBox(
                     width: double.infinity,
                     height: 48,
@@ -965,7 +812,6 @@ class _DishDetailModalSheetState extends State<_DishDetailModalSheet> {
   }
 }
 
-/// ── Menu Branch Selector Capsule ──────────────────────────────────────────
 class _MenuBranchSelector extends StatelessWidget {
   final List<Branch> branches;
   final Branch? selected;
@@ -1067,8 +913,6 @@ class _MenuBranchSelector extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 14),
-
-              // All Sites option
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Container(
@@ -1101,7 +945,6 @@ class _MenuBranchSelector extends StatelessWidget {
                 },
               ),
               const Divider(color: Color(0xFF262630), height: 1),
-
               ...branches.map((b) {
                 final isSelected = selected?.id == b.id;
                 return ListTile(
@@ -1131,7 +974,7 @@ class _MenuBranchSelector extends StatelessWidget {
                     ),
                   ),
                   subtitle: Text(
-                    b.city ?? 'London',
+                    b.city,
                     style: GoogleFonts.poppins(
                       fontSize: 12,
                       color: AppColors.textSecondary,
