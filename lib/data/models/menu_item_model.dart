@@ -59,8 +59,6 @@ class ItemAddon {
 /// ═══════════════════════════════════════════════════════════════════════════
 /// TigerBay International — MenuItem Model
 /// ═══════════════════════════════════════════════════════════════════════════
-/// Maps to `public.dishes` (or `public.menu_items`). Includes admin-driven
-/// percentage discount, variants (e.g. 175ml/250ml/Bottle) and add-ons support.
 class MenuItemModel {
   final String id;
   final String name;
@@ -71,6 +69,7 @@ class MenuItemModel {
   final String category;
   final String? subcategory;
   final String? categoryId;
+  final int? branchId;
   final bool isAvailable;
   final int discountPercentage;
   final List<ItemVariant> variants;
@@ -87,6 +86,7 @@ class MenuItemModel {
     required this.category,
     this.subcategory,
     this.categoryId,
+    this.branchId,
     this.isAvailable = true,
     this.discountPercentage = 0,
     this.variants = const [],
@@ -94,54 +94,30 @@ class MenuItemModel {
     this.createdAt,
   });
 
-  /// Backward compatibility alias for images list
   List<String> get imageUrls => images;
-
-  /// Whether this item has multiple images for carousel sliding.
   bool get hasMultipleImages => images.length > 1;
-
-  /// Primary display image (first in image list, or single imageUrl fallback).
   String? get primaryImage => images.isNotEmpty ? images.first : imageUrl;
-
-  /// Whether this item has variants (e.g., wine sizes or spirit doubles).
   bool get hasVariants => variants.isNotEmpty;
-
-  /// Whether this item has optional add-ons (e.g., fruit head upgrade, cheese).
   bool get hasAddons => addons.isNotEmpty;
-
-  /// Whether this item has an admin-set discount.
   bool get hasDiscount => discountPercentage > 0;
-
-  /// Calculated discounted price: originalPrice × (1 - discount/100).
   double get discountedPrice => price * (1 - discountPercentage / 100);
-
-  /// Formatted original price.
   String get formattedPrice => '£${price.toStringAsFixed(2)}';
-
-  /// Formatted discounted price.
   String get discountedPriceFormatted =>
       '£${discountedPrice.toStringAsFixed(2)}';
-
-  /// The effective display price (discounted if applicable, else original).
   String get displayPrice =>
       hasDiscount ? discountedPriceFormatted : formattedPrice;
-
-  /// Map the raw category string into a MenuCategory enum for filtering.
   MenuCategory get menuCategory => MenuCategory.fromString(category);
 
   factory MenuItemModel.fromJson(Map<String, dynamic> json) {
     final rawImageUrl = json['image_url']?.toString().trim();
     List<String> parsedImages = [];
 
-    // 1. If stored as a Postgres array or list
     if (json['images'] != null && json['images'] is List) {
       parsedImages = (json['images'] as List)
           .map((e) => e.toString().trim())
           .where((e) => e.isNotEmpty)
           .toList();
-    }
-    // 2. Parse comma-separated string or stringified JSON from image_url
-    else if (rawImageUrl != null && rawImageUrl.isNotEmpty) {
+    } else if (rawImageUrl != null && rawImageUrl.isNotEmpty) {
       if (rawImageUrl.startsWith('[') && rawImageUrl.endsWith(']')) {
         try {
           final decoded = jsonDecode(rawImageUrl);
@@ -168,7 +144,6 @@ class MenuItemModel {
     final primaryUrl =
         parsedImages.isNotEmpty ? parsedImages.first : rawImageUrl;
 
-    // Parse nested variants if present
     List<ItemVariant> parsedVariants = [];
     if (json['variants'] != null && json['variants'] is List) {
       parsedVariants = (json['variants'] as List)
@@ -177,7 +152,6 @@ class MenuItemModel {
           .toList();
     }
 
-    // Parse nested add-ons if present
     List<ItemAddon> parsedAddons = [];
     if (json['addons'] != null && json['addons'] is List) {
       parsedAddons = (json['addons'] as List)
@@ -196,6 +170,9 @@ class MenuItemModel {
       category: (json['category'] as String?) ?? 'food',
       subcategory: json['subcategory'] as String?,
       categoryId: json['category_id']?.toString(),
+      branchId: json['branch_id'] is int
+          ? json['branch_id'] as int
+          : int.tryParse(json['branch_id']?.toString() ?? ''),
       isAvailable: (json['is_available'] as bool?) ?? true,
       discountPercentage: safeInt(json['discount_percentage']) ?? 0,
       variants: parsedVariants,
@@ -216,6 +193,7 @@ class MenuItemModel {
         'category': category,
         'subcategory': subcategory,
         'category_id': categoryId,
+        'branch_id': branchId,
         'is_available': isAvailable,
         'discount_percentage': discountPercentage,
         'variants': variants.map((v) => v.toJson()).toList(),
@@ -232,6 +210,7 @@ class MenuItemModel {
     String? category,
     String? subcategory,
     String? categoryId,
+    int? branchId,
     bool? isAvailable,
     int? discountPercentage,
     List<ItemVariant>? variants,
@@ -247,6 +226,7 @@ class MenuItemModel {
       category: category ?? this.category,
       subcategory: subcategory ?? this.subcategory,
       categoryId: categoryId ?? this.categoryId,
+      branchId: branchId ?? this.branchId,
       isAvailable: isAvailable ?? this.isAvailable,
       discountPercentage: discountPercentage ?? this.discountPercentage,
       variants: variants ?? this.variants,
@@ -284,7 +264,6 @@ enum MenuCategory {
 
   static MenuCategory fromString(String s) {
     final lower = s.toLowerCase().trim();
-    // Starters and food are seamlessly combined into the Food category!
     if (lower == 'starters' || lower == 'starter' || lower == 'food') {
       return MenuCategory.food;
     }
