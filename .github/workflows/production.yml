@@ -288,6 +288,7 @@ jobs:
         env:
           APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
           APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          API_PRIVATE_KEYS_DIR: ${{ runner.temp }}/appstoreconnect/private_keys
         run: |
           python3 - << 'EOF'
           import os, base64
@@ -302,6 +303,7 @@ jobs:
                   pass
           filename = f"AuthKey_{key_id}.p8"
           dirs = [
+              os.path.abspath(os.environ.get('API_PRIVATE_KEYS_DIR', '').strip()),
               os.path.expanduser("~/.private_keys"),
               os.path.expanduser("~/.appstoreconnect/private_keys"),
               os.path.expanduser("~/private_keys"),
@@ -315,6 +317,7 @@ jobs:
               os.chmod(target, 0o600)
               print(f"Created: {target} ({os.path.getsize(target)} bytes)")
           EOF
+          ls -la "${API_PRIVATE_KEYS_DIR}"/
           ls -la private_keys/
           ls -la ~/.private_keys/
 
@@ -370,6 +373,7 @@ jobs:
         env:
           APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          API_PRIVATE_KEYS_DIR: ${{ runner.temp }}/appstoreconnect/private_keys
         run: |
           IPA_PATH=$(find $RUNNER_TEMP/TigerBay_IPA -name "*.ipa" | head -n 1)
           echo "Found signed IPA at: $IPA_PATH"
@@ -377,7 +381,7 @@ jobs:
           ISSUER_ID=$(echo "${APP_STORE_CONNECT_ISSUER_ID}" | tr -d '[:space:]')
           echo "Using Key ID: ${KEY_ID}"
           echo "Available private key locations:"
-          ls -la private_keys/ ~/.private_keys/ 2>/dev/null || true
+          ls -la "${API_PRIVATE_KEYS_DIR}"/ private_keys/ ~/.private_keys/ 2>/dev/null || true
           xcrun altool --upload-app \
             -f "$IPA_PATH" \
             -t ios \
