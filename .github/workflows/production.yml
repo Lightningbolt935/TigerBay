@@ -311,8 +311,9 @@ jobs:
 
       - name: Xcode Archive (sign with our certificate)
         run: |
+          cd loyalty_app
           xcodebuild archive \
-            -workspace loyalty_app/ios/Runner.xcworkspace \
+            -workspace ios/Runner.xcworkspace \
             -scheme Runner \
             -configuration Release \
             -archivePath $RUNNER_TEMP/TigerBay.xcarchive \
@@ -326,10 +327,11 @@ jobs:
 
       - name: Xcode Export IPA
         run: |
+          cd loyalty_app
           xcodebuild -exportArchive \
             -archivePath $RUNNER_TEMP/TigerBay.xcarchive \
             -exportPath $RUNNER_TEMP/TigerBay_IPA \
-            -exportOptionsPlist loyalty_app/ios/ExportOptions.plist \
+            -exportOptionsPlist ios/ExportOptions.plist \
             -allowProvisioningUpdates
 
       - name: Upload iOS Signed IPA Artifact
