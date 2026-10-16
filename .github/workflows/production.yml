@@ -289,11 +289,34 @@ jobs:
           APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
           APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
         run: |
-          mkdir -p ~/.private_keys
-          mkdir -p ~/.appstoreconnect/private_keys
-          python3 -c "import os; raw = os.environ.get('APP_STORE_CONNECT_API_KEY', '').strip().encode('utf-8').decode('utf-8-sig').strip(); open(os.path.expanduser('~/.private_keys/AuthKey_' + os.environ['APP_STORE_CONNECT_KEY_ID'] + '.p8'), 'w').write(raw + '\n'); open(os.path.expanduser('~/.appstoreconnect/private_keys/AuthKey_' + os.environ['APP_STORE_CONNECT_KEY_ID'] + '.p8'), 'w').write(raw + '\n')"
-          chmod 600 ~/.private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8
-          chmod 600 ~/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8
+          python3 - << 'EOF'
+          import os, base64
+          key_id = os.environ.get('APP_STORE_CONNECT_KEY_ID', '').strip()
+          raw = os.environ.get('APP_STORE_CONNECT_API_KEY', '').strip().encode('utf-8').decode('utf-8-sig').strip()
+          if not raw.startswith('-----BEGIN'):
+              try:
+                  decoded = base64.b64decode(raw).decode('utf-8')
+                  if 'BEGIN PRIVATE KEY' in decoded:
+                      raw = decoded
+              except Exception:
+                  pass
+          filename = f"AuthKey_{key_id}.p8"
+          dirs = [
+              os.path.expanduser("~/.private_keys"),
+              os.path.expanduser("~/.appstoreconnect/private_keys"),
+              os.path.expanduser("~/private_keys"),
+              os.path.abspath("private_keys"),
+          ]
+          for d in dirs:
+              os.makedirs(d, exist_ok=True)
+              target = os.path.join(d, filename)
+              with open(target, "w") as f:
+                  f.write(raw.strip() + "\n")
+              os.chmod(target, 0o600)
+              print(f"Created: {target} ({os.path.getsize(target)} bytes)")
+          EOF
+          ls -la private_keys/
+          ls -la ~/.private_keys/
 
       - name: Flutter Build iOS (compile only, no codesign)
         env:
@@ -350,9 +373,14 @@ jobs:
         run: |
           IPA_PATH=$(find $RUNNER_TEMP/TigerBay_IPA -name "*.ipa" | head -n 1)
           echo "Found signed IPA at: $IPA_PATH"
+          KEY_ID=$(echo "${APP_STORE_CONNECT_KEY_ID}" | tr -d '[:space:]')
+          ISSUER_ID=$(echo "${APP_STORE_CONNECT_ISSUER_ID}" | tr -d '[:space:]')
+          echo "Using Key ID: ${KEY_ID}"
+          echo "Available private key locations:"
+          ls -la private_keys/ ~/.private_keys/ 2>/dev/null || true
           xcrun altool --upload-app \
             -f "$IPA_PATH" \
             -t ios \
-            --apiKey "${APP_STORE_CONNECT_KEY_ID}" \
-            --apiIssuer "${APP_STORE_CONNECT_ISSUER_ID}" \
+            --apiKey "$KEY_ID" \
+            --apiIssuer "$ISSUER_ID" \
             --show-progress
