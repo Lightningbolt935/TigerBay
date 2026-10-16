@@ -58,7 +58,7 @@ class _LiveLoyaltyCardState extends State<LiveLoyaltyCard>
       onTap: widget.onTap,
       child: Container(
         width: double.infinity,
-        height: 215,
+        height: 228,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
@@ -233,7 +233,78 @@ class _LiveLoyaltyCardState extends State<LiveLoyaltyCard>
                       ],
                     ),
 
-                    const Spacer(),
+                    const SizedBox(height: 8),
+
+                    // Tier Progression Bar
+                    Builder(
+                      builder: (context) {
+                        double progress = 1.0;
+                        String progressLabel = 'Top VIP Tier';
+                        final int balance = widget.balance;
+                        if (balance < 1000) {
+                          progress = (balance / 1000.0).clamp(0.05, 1.0);
+                          progressLabel = '$balance / 1,000 to Silver';
+                        } else if (balance < 5000) {
+                          progress = ((balance - 1000) / 4000.0).clamp(0.05, 1.0);
+                          progressLabel = '$balance / 5,000 to Gold';
+                        } else if (balance < 10000) {
+                          progress = ((balance - 5000) / 5000.0).clamp(0.05, 1.0);
+                          progressLabel = '$balance / 10,000 to Platinum';
+                        } else {
+                          progress = 1.0;
+                          progressLabel = 'Elite Platinum VIP';
+                        }
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'TIER PROGRESS',
+                                  style: AppTypography.sectionHeader.copyWith(
+                                    color: Colors.white54,
+                                    fontSize: 8.5,
+                                    letterSpacing: 1.2,
+                                  ),
+                                ),
+                                Text(
+                                  progressLabel,
+                                  style: AppTypography.caption2.copyWith(
+                                    color: AppColors.champagneGold,
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(3),
+                              child: Container(
+                                height: 3.5,
+                                width: double.infinity,
+                                color: Colors.black.withValues(alpha: 0.4),
+                                child: FractionallySizedBox(
+                                  alignment: Alignment.centerLeft,
+                                  widthFactor: progress,
+                                  child: Container(
+                                    decoration: const BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [Color(0xFFE5C07B), Color(0xFFC9A84C)],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+
+                    const SizedBox(height: 12),
 
                     // Bottom Row: Live Member Name + 6-Digit ID
                     Row(

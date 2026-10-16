@@ -8,6 +8,7 @@ import '../../../core/constants/app_routes.dart';
 import '../../../core/services/stripe_service.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/apple_touch_feedback.dart';
+import '../../../shared/widgets/luxury_celebration_dialog.dart';
 import '../providers/booking_provider.dart';
 
 // Re-export BookingDetailScreen so any consumer importing from here keeps working
@@ -334,94 +335,29 @@ class _BookingConfirmScreenState extends ConsumerState<BookingConfirmScreen> {
   }
 
   void _showSuccess() {
-    showModalBottomSheet(
+    ref.invalidate(userBookingsStreamProvider);
+    final partySize = widget.bookingData['partySize']?.toString() ?? '2';
+    final branchName = widget.bookingData['branchName']?.toString() ?? 'TigerBay Lounge';
+
+    LuxuryCelebrationDialog.show(
       context: context,
-      isDismissible: false,
-      enableDrag: false,
-      backgroundColor: Colors.transparent,
-      builder: (dialogContext) => Container(
-        padding: const EdgeInsets.fromLTRB(24, 28, 24, 34),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
-          border: Border.all(
-            color: AppColors.gold.withValues(alpha: 0.3),
-            width: 1.2,
-          ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 70,
-              height: 70,
-              decoration: BoxDecoration(
-                color: AppColors.success.withValues(alpha: 0.14),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: AppColors.success.withValues(alpha: 0.4),
-                  width: 1.5,
-                ),
-              ),
-              child: const Icon(
-                CupertinoIcons.check_mark_circled_solid,
-                color: AppColors.success,
-                size: 40,
-              ),
-            ),
-            const SizedBox(height: 18),
-            const Text(
-              'Reservation Confirmed!',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-                letterSpacing: 0.2,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Your table is reserved. A confirmation receipt and calendar invite have been sent to your email.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 13,
-                color: AppColors.textSecondary,
-                height: 1.45,
-              ),
-            ),
-            const SizedBox(height: 24),
-            AppleTouchFeedback(
-              onTap: () {
-                HapticFeedback.lightImpact();
-                ref.invalidate(userBookingsStreamProvider);
-                Navigator.pop(dialogContext);
-                if (context.mounted) {
-                  context.go(AppRoutes.myBookings);
-                }
-              },
-              child: Container(
-                width: double.infinity,
-                height: 50,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [AppColors.gold, AppColors.champagneGold],
-                  ),
-                  borderRadius: BorderRadius.circular(25),
-                ),
-                alignment: Alignment.center,
-                child: const Text(
-                  'View My Reservations',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.black,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+      title: 'Reservation Confirmed!',
+      subtitle:
+          'Your table at $branchName is guaranteed. Confirmation receipt and calendar invite have been sent to your email.',
+      badgeText: 'Table Reserved',
+      primaryButtonText: 'VIEW MY RESERVATIONS',
+      icon: CupertinoIcons.calendar_badge_plus,
+      benefits: [
+        'Table reserved for $partySize guests with VIP service',
+        'Deposit credited directly towards your final lounge bill',
+        'Instant check-in by showing your digital pass at entry',
+      ],
+      onPrimaryPressed: () {
+        Navigator.of(context, rootNavigator: true).pop();
+        if (mounted) {
+          context.go(AppRoutes.myBookings);
+        }
+      },
     );
   }
 }

@@ -81,13 +81,18 @@ class EnvConfig {
   /// For production (pk_live_...), this strictly returns empty string so that
   /// real production secret keys are NEVER embedded in client binaries.
   static String get stripeSecretKey {
+    // SECURITY: In production/release builds, client binaries MUST NEVER embed real live secret keys.
+    // Real PaymentIntents are generated server-side via Supabase Edge Function `create-payment-intent`.
+    if (kReleaseMode || isProduction) {
+      return '';
+    }
+
     const compileTime = String.fromEnvironment('STRIPE_SECRET_KEY');
     if (compileTime.isNotEmpty) return compileTime;
 
     return _resolve(
       'STRIPE_SECRET_KEY',
-      defaultValue:
-          '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',
+      defaultValue: 'sk_test_placeholder_dev_mode_only',
     );
   }
 
@@ -122,10 +127,11 @@ class EnvConfig {
   }
 
   static String get twilioAuthToken {
+    // SECURITY: Twilio tokens are handled server-side and never bundled in release binaries
+    if (kReleaseMode) return '';
     const compileTime = String.fromEnvironment('TWILIO_AUTH_TOKEN');
     if (compileTime.isNotEmpty) return compileTime;
-    return _resolve('TWILIO_AUTH_TOKEN',
-        defaultValue: '3abb0f1815db0aa456c108e1788b0292');
+    return _resolve('TWILIO_AUTH_TOKEN', defaultValue: '');
   }
 
   static String get twilioApiKeySid {

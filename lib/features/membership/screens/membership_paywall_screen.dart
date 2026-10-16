@@ -12,6 +12,7 @@ import 'package:tigerbay_app/features/auth/providers/auth_provider.dart';
 import 'package:tigerbay_app/features/auth/providers/profile_state_provider.dart';
 import 'package:tigerbay_app/features/profile/providers/membership_provider.dart';
 import 'package:tigerbay_app/shared/widgets/apple_touch_feedback.dart';
+import 'package:tigerbay_app/shared/widgets/luxury_celebration_dialog.dart';
 
 /// ═══════════════════════════════════════════════════════════════════════════
 /// TigerBay International — Membership Paywall Screen
@@ -127,28 +128,25 @@ class _MembershipPaywallScreenState
       }
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '${tier.name} membership activated!',
-            style: GoogleFonts.poppins(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: Colors.white,
-            ),
-          ),
-          backgroundColor: AppColors.success,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
+      await LuxuryCelebrationDialog.show(
+        context: context,
+        title: '${tier.name} Membership Active',
+        subtitle:
+            'Welcome to TigerBay VIP Lounge. Your member privileges, earning rates, and digital pass are now ready.',
+        badgeText: 'VIP Status Unlocked',
+        primaryButtonText: 'ENTER TIGERBAY LOUNGE',
+        benefits: [
+          '${tier.stripsPerBooking} Strips awarded on every table reservation',
+          'Priority table reservations and VIP lounge entry',
+          'Exclusive invitations to private member events & tastings',
+        ],
+        onPrimaryPressed: () {
+          Navigator.of(context, rootNavigator: true).pop();
+          if (mounted) {
+            context.go(AppRoutes.home);
+          }
+        },
       );
-      // Auto return home after brief delay
-      await Future.delayed(const Duration(milliseconds: 600));
-      if (mounted) {
-        context.go(AppRoutes.home);
-      }
     } else {
       final error = ref.read(membershipActivationNotifierProvider).error;
       ScaffoldMessenger.of(context).showSnackBar(

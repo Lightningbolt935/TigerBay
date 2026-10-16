@@ -5,6 +5,7 @@
 *.swp
 *.apk
 *.aab
+*.ipa
 .DS_Store
 .atom/
 .build/
