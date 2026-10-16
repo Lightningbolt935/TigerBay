@@ -286,7 +286,7 @@ jobs:
           python3 -c "import os; raw = os.environ.get('APP_STORE_CONNECT_API_KEY', '').strip().encode('utf-8').decode('utf-8-sig').strip(); open(os.path.expanduser('~/.private_keys/AuthKey_' + os.environ['APP_STORE_CONNECT_KEY_ID'] + '.p8'), 'w').write(raw + '\n')"
           chmod 600 ~/.private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8
 
-      - name: Build Signed iOS IPA
+      - name: Flutter Build iOS (compile only, no codesign)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
@@ -297,8 +297,7 @@ jobs:
           GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
           APP_SCHEME: ${{ secrets.APP_SCHEME }}
         run: |
-          flutter build ipa --release \
-            --export-options-plist=ios/ExportOptions.plist \
+          flutter build ios --release --no-codesign \
             --build-number=${{ github.run_number }} \
             --dart-define=SUPABASE_URL="${SUPABASE_URL}" \
             --dart-define=SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY}" \
@@ -308,21 +307,46 @@ jobs:
             --dart-define=PAYPAL_MODE="${PAYPAL_MODE:-live}" \
             --dart-define=GOOGLE_WEB_CLIENT_ID="${GOOGLE_WEB_CLIENT_ID}" \
             --dart-define=APP_SCHEME="${APP_SCHEME:-io.tigerbay.app}" \
-            --dart-define=APP_ENV=production \
-            --build-ipa-flags="CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY='Apple Distribution' PROVISIONING_PROFILE_SPECIFIER='TigerBay AppStore' DEVELOPMENT_TEAM=ZDZ58YL7Y3"
+            --dart-define=APP_ENV=production
+
+      - name: Xcode Archive (sign with our certificate)
+        run: |
+          xcodebuild archive \
+            -workspace loyalty_app/ios/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -archivePath $RUNNER_TEMP/TigerBay.xcarchive \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="TigerBay AppStore" \
+            DEVELOPMENT_TEAM=ZDZ58YL7Y3 \
+            -allowProvisioningUpdates \
+            SKIP_INSTALL=NO \
+            BUILD_LIBRARY_FOR_DISTRIBUTION=YES
+
+      - name: Xcode Export IPA
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath $RUNNER_TEMP/TigerBay.xcarchive \
+            -exportPath $RUNNER_TEMP/TigerBay_IPA \
+            -exportOptionsPlist loyalty_app/ios/ExportOptions.plist \
+            -allowProvisioningUpdates
 
       - name: Upload iOS Signed IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: tigerbay-ios-signed-ipa
-          path: build/ios/ipa/*.ipa
+          path: ${{ runner.temp }}/TigerBay_IPA/*.ipa
 
       - name: Upload to Apple TestFlight
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
-          IPA_PATH=$(find build/ios/ipa -name "*.ipa" | head -n 1)
+          IPA_PATH=$(find $RUNNER_TEMP/TigerBay_IPA -name "*.ipa" | head -n 1)
           echo "Found signed IPA at: $IPA_PATH"
           xcrun altool --upload-app \
             -f "$IPA_PATH" \
             -t ios \
-            --apiKey "${{ secrets.APP_STORE_CONNECT_KEY_ID }}" \
-            --apiIssuer "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}"
+            --apiKey "${APP_STORE_CONNECT_KEY_ID}" \
+            --apiIssuer "${APP_STORE_CONNECT_ISSUER_ID}"
