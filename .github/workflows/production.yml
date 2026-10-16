@@ -308,7 +308,8 @@ jobs:
             --dart-define=PAYPAL_MODE="${PAYPAL_MODE:-live}" \
             --dart-define=GOOGLE_WEB_CLIENT_ID="${GOOGLE_WEB_CLIENT_ID}" \
             --dart-define=APP_SCHEME="${APP_SCHEME:-io.tigerbay.app}" \
-            --dart-define=APP_ENV=production
+            --dart-define=APP_ENV=production \
+            --build-ipa-flags="CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY='Apple Distribution' PROVISIONING_PROFILE_SPECIFIER='TigerBay AppStore' DEVELOPMENT_TEAM=ZDZ58YL7Y3"
 
       - name: Upload iOS Signed IPA Artifact
         uses: actions/upload-artifact@v4
