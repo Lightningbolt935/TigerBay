@@ -1,7 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as dart_math;
 
-import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
+import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart'
+    show kIsWeb, debugPrint, defaultTargetPlatform, TargetPlatform;
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
@@ -602,17 +606,29 @@ class AuthRepository {
     return false;
   }
 
-  // ── Google ──────────────────────────────────────────────────────────────────
-
-  /// Signs in with Google using Supabase OAuth with an in-app browser sheet
-  /// (Chrome Custom Tab on Android). This avoids the native GoogleSignIn
   // ── Google ───────────────────────────────────────────────────────────────────
 
-  /// In-app native Google Account Chooser using google_sign_in and Supabase signInWithIdToken.
-  /// Shows the official Google Play Services account picker directly inside the app,
-  /// with seamless fallback to inAppBrowserView if needed.
+  /// Signs in with Google.
+  /// On iOS, uses Supabase OAuth in-app browser view (Chrome/Safari sheet)
+  /// which is pre-configured and reliable. On Android, attempts native Google Play
+  /// Services account picker first, with seamless fallback to inAppBrowserView if needed.
   Future<void> signInWithGoogle() async {
+    final appScheme = EnvConfig.appScheme;
     final webClientId = EnvConfig.googleWebClientId;
+
+    // On iOS, native google_sign_in requires an iOS Client ID in GoogleService-Info.plist
+    // and reversed client ID in Info.plist. Supabase OAuth inAppBrowserView is fully supported
+    // and requires zero client-side Google iOS SDK setup.
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+      debugPrint('[TigerBay Auth] Using Supabase Google OAuth inAppBrowserView for iOS.');
+      await _client.auth.signInWithOAuth(
+        OAuthProvider.google,
+        redirectTo: '$appScheme://login-callback',
+        authScreenLaunchMode: LaunchMode.inAppBrowserView,
+      );
+      return;
+    }
+
     try {
       final googleSignIn = GoogleSignIn(
         serverClientId: webClientId.isNotEmpty ? webClientId : null,
@@ -643,26 +659,99 @@ class AuthRepository {
         unawaited(_bindDevice(authResponse.user!.id));
       }
     } catch (e) {
-      debugPrint('[TigerBay Auth] Native Google sign-in error: $e');
+      debugPrint('[TigerBay Auth] Native Google sign-in error: $e. Falling back to Supabase OAuth...');
       final errStr = e.toString();
       if (errStr.toLowerCase().contains('cancel') ||
           errStr.toLowerCase().contains('abort') ||
           (e is AuthException && e.message.toLowerCase().contains('cancel'))) {
         return;
       }
-      if (errStr.contains('10') || errStr.contains('12500')) {
-        throw const AuthException(
-          'Google Sign-In configuration error (ApiException 10): The release SHA-1 fingerprint must be added to Google Cloud Console under Android OAuth Client ID.',
+
+      // Seamless fallback to Supabase OAuth in-app browser sheet
+      try {
+        await _client.auth.signInWithOAuth(
+          OAuthProvider.google,
+          redirectTo: '$appScheme://login-callback',
+          authScreenLaunchMode: LaunchMode.inAppBrowserView,
         );
+      } catch (fallbackError) {
+        debugPrint('[TigerBay Auth] Fallback Google OAuth error: $fallbackError');
+        throw AuthException('Google Sign-In failed: $fallbackError');
       }
-      throw AuthException('Google Sign-In failed: $e');
     }
   }
 
   // ── Apple ───────────────────────────────────────────────────────────────────
 
+  /// Signs in with Apple.
+  /// On iOS/macOS, invokes the native system Apple ID dialog via sign_in_with_apple
+  /// and exchanges the identity token securely with Supabase.
   Future<void> signInWithApple() async {
     final appScheme = EnvConfig.appScheme;
+
+    if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.macOS)) {
+      try {
+        final rawNonce = _client.auth.generateRawNonce();
+        final hashedNonce = sha256.convert(utf8.encode(rawNonce)).toString();
+
+        final credential = await SignInWithApple.getAppleIDCredential(
+          scopes: [
+            AppleIDAuthorizationScopes.email,
+            AppleIDAuthorizationScopes.fullName,
+          ],
+          nonce: hashedNonce,
+        );
+
+        final idToken = credential.identityToken;
+        if (idToken == null) {
+          throw const AuthException('Could not obtain identity token from Apple.');
+        }
+
+        final authResponse = await _client.auth.signInWithIdToken(
+          provider: OAuthProvider.apple,
+          idToken: idToken,
+          nonce: rawNonce,
+        );
+
+        if (authResponse.user != null) {
+          unawaited(_bindDevice(authResponse.user!.id));
+
+          // Save user full name if provided by Apple on initial sign-in
+          final givenName = credential.givenName;
+          final familyName = credential.familyName;
+          if (givenName != null || familyName != null) {
+            final fullName = [givenName, familyName]
+                .where((s) => s != null && s.trim().isNotEmpty)
+                .join(' ')
+                .trim();
+            if (fullName.isNotEmpty) {
+              try {
+                await _client.auth.updateUser(
+                  UserAttributes(data: {'full_name': fullName}),
+                );
+              } catch (_) {}
+            }
+          }
+        }
+        return;
+      } on SignInWithAppleAuthorizationException catch (e) {
+        if (e.code == AuthorizationErrorCode.canceled) {
+          debugPrint('[TigerBay Auth] Apple sign-in canceled by user.');
+          return;
+        }
+        debugPrint('[TigerBay Auth] Native Apple Sign-In error: ${e.message} (${e.code})');
+        throw AuthException('Apple Sign-In failed: ${e.message}');
+      } catch (e) {
+        debugPrint('[TigerBay Auth] Native Apple Sign-In error: $e');
+        final errStr = e.toString().toLowerCase();
+        if (errStr.contains('cancel') || errStr.contains('abort')) {
+          return;
+        }
+        throw AuthException('Apple Sign-In failed: $e');
+      }
+    }
+
+    // Fallback for web / Android
     await _client.auth.signInWithOAuth(
       OAuthProvider.apple,
       redirectTo: '$appScheme://login-callback',
