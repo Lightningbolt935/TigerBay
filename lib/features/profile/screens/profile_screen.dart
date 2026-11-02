@@ -1,4 +1,6 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, TargetPlatform, debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -15,6 +17,7 @@ import '../../../shared/widgets/safe_network_image.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../home/providers/home_provider.dart';
 import '../../../services/biometric_service.dart';
+import '../../../services/firebase_phone_auth_service.dart';
 import '../../bookings/providers/booking_provider.dart';
 import '../../../data/models/booking_model.dart';
 import '../providers/profile_provider.dart';
@@ -46,7 +49,8 @@ class ProfileScreen extends ConsumerWidget {
       return const Scaffold(
         backgroundColor: AppColors.brandBlack,
         body: Center(
-          child: CircularProgressIndicator(color: AppColors.gold, strokeWidth: 2),
+          child:
+              CircularProgressIndicator(color: AppColors.gold, strokeWidth: 2),
         ),
       );
     }
@@ -64,8 +68,8 @@ class ProfileScreen extends ConsumerWidget {
               profile: profile,
               branches: branches,
               selectedBranch: selectedBranch,
-              onBranchTap: () => _showBranchPicker(context, ref,
-                  branches.asData?.value ?? []),
+              onBranchTap: () =>
+                  _showBranchPicker(context, ref, branches.asData?.value ?? []),
               onEditTap: () => context.push(AppRoutes.editProfile),
             ),
           ),
@@ -193,19 +197,22 @@ class ProfileScreen extends ConsumerWidget {
                   icon: CupertinoIcons.shield_lefthalf_fill,
                   label: 'Privacy Policy',
                   labelColor: AppColors.gold,
-                  onTap: () => _launch('https://www.tigerbayshisha.co.uk/privacy-policy.html'),
+                  onTap: () => _launch(
+                      'https://www.tigerbayshisha.co.uk/privacy-policy.html'),
                 ),
                 _SettingsTile(
                   icon: CupertinoIcons.doc_text_fill,
                   label: 'Terms & Conditions',
                   labelColor: AppColors.gold,
-                  onTap: () => _launch('https://www.tigerbayshisha.co.uk/terms-conditions.html'),
+                  onTap: () => _launch(
+                      'https://www.tigerbayshisha.co.uk/terms-conditions.html'),
                 ),
                 _SettingsTile(
                   icon: CupertinoIcons.house_fill,
                   label: 'House Rules',
                   labelColor: AppColors.gold,
-                  onTap: () => _launch('https://www.tigerbayshisha.co.uk/house-rules.html'),
+                  onTap: () => _launch(
+                      'https://www.tigerbayshisha.co.uk/house-rules.html'),
                 ),
               ],
             ),
@@ -218,6 +225,16 @@ class ProfileScreen extends ConsumerWidget {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: _SignOutButton(onTap: () => _confirmSignOut(context, ref)),
+            ),
+          ),
+
+          // Delete Account
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+              child: _DeleteAccountButton(
+                onTap: () => _showDeleteAccountDialog(context, ref),
+              ),
             ),
           ),
 
@@ -389,6 +406,64 @@ class ProfileScreen extends ConsumerWidget {
       ),
     );
   }
+
+  /// Shows the "type DELETE" confirmation dialog.
+  ///
+  /// The dialog performs the deletion itself and calls [onAccountDeleted]
+  /// as soon as the server-side deletion succeeded. Session clearing is
+  /// triggered through that callback (not through the dialog's return value),
+  /// so the user is always signed out locally even if the dialog was
+  /// dismissed or disposed while the deletion was running.
+  Future<void> _showDeleteAccountDialog(
+      BuildContext context, WidgetRef ref) async {
+    // Grab the notifier up-front so we never touch `ref` after this widget
+    // might have been disposed.
+    final authNotifier = ref.read(authProvider.notifier);
+
+    await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _DeleteAccountDialog(
+        onAccountDeleted: () {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _clearSessionAfterDeletion(() => authNotifier.signOut());
+          });
+        },
+      ),
+    );
+  }
+
+  /// Clears every local session after the account has been purged server-side.
+  ///
+  /// The auth user no longer exists, so a normal (global) sign-out can fail
+  /// with an AuthException (session / user not found). Each step is therefore
+  /// isolated in its own try/catch so a failure in one never prevents the
+  /// others — the user always ends up signed out and routed to login.
+  Future<void> _clearSessionAfterDeletion(
+      Future<void> Function() appSignOut) async {
+    // 1) Wipe the local Supabase session only. `SignOutScope.local` does not
+    //    call the server, so it cannot fail because the user is gone.
+    try {
+      await Supabase.instance.client.auth.signOut(scope: SignOutScope.local);
+    } catch (e) {
+      debugPrint('[DeleteAccount] Local Supabase sign-out failed: $e');
+    }
+
+    // 2) App-level sign-out (your authProvider: clears state, tokens,
+    //    biometric flags, triggers the router redirect to login).
+    try {
+      await appSignOut();
+    } catch (e) {
+      debugPrint('[DeleteAccount] App sign-out failed: $e');
+    }
+
+    // 3) Make sure no Firebase session lingers either.
+    try {
+      await FirebasePhoneAuthService().signOut();
+    } catch (e) {
+      debugPrint('[DeleteAccount] Firebase sign-out failed: $e');
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -463,10 +538,8 @@ class _ProfileHero extends StatelessWidget {
                       label: selectedBranch?.title ?? 'Select Branch',
                       onTap: onBranchTap,
                     ),
-                    loading: () =>
-                        const _BranchPill(label: 'Loading...'),
-                    error: (_, __) =>
-                        const _BranchPill(label: 'Select Branch'),
+                    loading: () => const _BranchPill(label: 'Loading...'),
+                    error: (_, __) => const _BranchPill(label: 'Select Branch'),
                   ),
                 ],
               ),
@@ -522,8 +595,7 @@ class _ProfileHero extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: AppColors.gold,
                       shape: BoxShape.circle,
-                      border: Border.all(
-                          color: AppColors.brandBlack, width: 2),
+                      border: Border.all(color: AppColors.brandBlack, width: 2),
                     ),
                     child: const Icon(CupertinoIcons.camera_fill,
                         size: 14, color: Colors.black),
@@ -659,57 +731,57 @@ class _StripsCard extends StatelessWidget {
           width: 1,
         ),
       ),
-          child: Row(
-            children: [
-              // Icon
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  gradient: AppColors.goldGradient,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Icon(
-                  Icons.toll_rounded,
-                  color: Colors.black,
-                  size: 26,
-                ),
-              ),
-              const SizedBox(width: 16),
-              // Balance info
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'STRIPS BALANCE',
-                      style: GoogleFonts.poppins(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 1.4,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '$stripsBalance Strips',
-                      style: GoogleFonts.poppins(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.gold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // Redeem arrow
-              Icon(
-                Icons.arrow_forward_ios_rounded,
-                size: 16,
-                color: AppColors.gold.withValues(alpha: 0.6),
-              ),
-            ],
+      child: Row(
+        children: [
+          // Icon
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              gradient: AppColors.goldGradient,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(
+              Icons.toll_rounded,
+              color: Colors.black,
+              size: 26,
+            ),
           ),
+          const SizedBox(width: 16),
+          // Balance info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'STRIPS BALANCE',
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.4,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '$stripsBalance Strips',
+                  style: GoogleFonts.poppins(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.gold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Redeem arrow
+          Icon(
+            Icons.arrow_forward_ios_rounded,
+            size: 16,
+            color: AppColors.gold.withValues(alpha: 0.6),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -952,6 +1024,307 @@ class _SignOutButton extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Delete Account Button (below Sign Out)
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _DeleteAccountButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _DeleteAccountButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return AppleTouchFeedback(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: AppColors.brandRed.withValues(alpha: 0.2),
+            width: 0.8,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(CupertinoIcons.trash,
+                color: AppColors.brandRed.withValues(alpha: 0.8), size: 17),
+            const SizedBox(width: 10),
+            Text(
+              'Delete Account',
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: AppColors.brandRed.withValues(alpha: 0.8),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Delete Account Dialog (type DELETE to confirm)
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _DeleteAccountDialog extends StatefulWidget {
+  /// Called once the server-side deletion has succeeded. It is invoked even if
+  /// the dialog was disposed in the meantime, so the session is always cleared.
+  final VoidCallback onAccountDeleted;
+
+  const _DeleteAccountDialog({required this.onAccountDeleted});
+
+  @override
+  State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
+  static const String _confirmWord = 'DELETE';
+  static const String _appVersion = '1.0.0';
+
+  final TextEditingController _controller = TextEditingController();
+  bool _isDeleting = false;
+  String? _error;
+
+  bool get _canDelete =>
+      !_isDeleting && _controller.text.trim() == _confirmWord;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _deleteAccount() async {
+    if (!_canDelete) return;
+
+    // Capture everything that depends on `context` / `widget` BEFORE any
+    // `await`, so nothing context-related is read across async gaps.
+    final navigator = Navigator.of(context);
+    final onDeleted = widget.onAccountDeleted;
+
+    setState(() {
+      _isDeleting = true;
+      _error = null;
+    });
+
+    // 1) Server side: log the request + delete the user (RPC)
+    try {
+      final platform =
+          defaultTargetPlatform == TargetPlatform.iOS ? 'iOS' : 'Android';
+
+      await Supabase.instance.client.rpc(
+        'delete_my_account',
+        params: {
+          'p_deletion_reason': 'User requested via app profile',
+          'p_metadata': {
+            'platform': platform,
+            'app_version': _appVersion,
+            'confirmation_text': _confirmWord,
+          },
+        },
+      );
+    } catch (e) {
+      debugPrint('[DeleteAccount] Supabase deletion failed: $e');
+      if (!mounted) return;
+      setState(() {
+        _isDeleting = false;
+        _error = 'Could not delete your account. Please check your '
+            'connection and try again.';
+      });
+      return;
+    }
+
+    // 2) Firebase (phone auth) user — best effort, never blocks the flow
+    try {
+      await FirebasePhoneAuthService().deleteCurrentUser();
+    } catch (e) {
+      debugPrint('[DeleteAccount] Firebase user deletion failed: $e');
+      try {
+        await FirebasePhoneAuthService().signOut();
+      } catch (_) {}
+    }
+
+    // 3) Close the dialog using the navigator captured before the awaits.
+    //    `navigator.mounted` guards against the route having been removed.
+    if (navigator.mounted) {
+      navigator.pop(true);
+    }
+
+    // 4) The account is gone: always clear the local session, regardless of
+    //    whether this dialog is still mounted.
+    onDeleted();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: !_isDeleting,
+      child: AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(
+            color: AppColors.brandRed.withValues(alpha: 0.35),
+            width: 1,
+          ),
+        ),
+        title: Row(
+          children: [
+            const Icon(CupertinoIcons.exclamationmark_triangle_fill,
+                color: AppColors.brandRed, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Delete Account?',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'This will permanently delete your account, membership, '
+                'Strips balance and all associated data. This action '
+                'cannot be undone.',
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 16),
+              RichText(
+                text: TextSpan(
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                  children: [
+                    const TextSpan(text: 'To confirm, type '),
+                    TextSpan(
+                      text: _confirmWord,
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.brandRed,
+                      ),
+                    ),
+                    const TextSpan(text: ' below.'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _controller,
+                enabled: !_isDeleting,
+                autocorrect: false,
+                enableSuggestions: false,
+                textCapitalization: TextCapitalization.characters,
+                textInputAction: TextInputAction.done,
+                onChanged: (_) => setState(() {}),
+                onSubmitted: (_) => _deleteAccount(),
+                style: GoogleFonts.poppins(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.2,
+                ),
+                cursorColor: AppColors.brandRed,
+                decoration: InputDecoration(
+                  hintText: 'Type DELETE',
+                  hintStyle: GoogleFonts.poppins(
+                    color: AppColors.textHint,
+                    fontWeight: FontWeight.w400,
+                    letterSpacing: 0,
+                  ),
+                  filled: true,
+                  fillColor: AppColors.surfaceLight,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.12),
+                    ),
+                  ),
+                  disabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.08),
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(
+                      color: AppColors.brandRed,
+                      width: 1.4,
+                    ),
+                  ),
+                ),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  _error!,
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: AppColors.brandRed,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed:
+                _isDeleting ? null : () => Navigator.of(context).pop(false),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.poppins(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: _canDelete ? _deleteAccount : null,
+            child: _isDeleting
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.brandRed,
+                    ),
+                  )
+                : Text(
+                    'Delete',
+                    style: GoogleFonts.poppins(
+                      color: _canDelete
+                          ? AppColors.brandRed
+                          : AppColors.brandRed.withValues(alpha: 0.35),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Branch Pill (top-right location selector)
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -1058,9 +1431,8 @@ class _BranchTile extends StatelessWidget {
                     Text(
                       name,
                       style: GoogleFonts.poppins(
-                        color: isSelected
-                            ? Colors.white
-                            : const Color(0xFFE4E4E7),
+                        color:
+                            isSelected ? Colors.white : const Color(0xFFE4E4E7),
                         fontWeight:
                             isSelected ? FontWeight.w700 : FontWeight.w500,
                         fontSize: 15,
