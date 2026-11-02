@@ -123,7 +123,7 @@ Future<void> main() async {
   final stripeKey = EnvConfig.stripePublishableKey;
   if (stripeKey.startsWith('pk_')) {
     Stripe.publishableKey = stripeKey;
-    Stripe.merchantIdentifier = 'merchant.io.tigerbay.app';
+    Stripe.merchantIdentifier = 'merchant.com.tigerbay.tigerbayApp';
     Stripe.urlScheme = EnvConfig.appScheme;
     Stripe.setReturnUrlSchemeOnAndroid = true;
     if (!kIsWeb) {

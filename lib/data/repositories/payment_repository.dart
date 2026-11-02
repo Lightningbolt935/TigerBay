@@ -16,7 +16,7 @@ class PaymentRepository {
   static Future<void> init(String publishableKey) async {
     if (publishableKey.startsWith('pk_')) {
       Stripe.publishableKey = publishableKey;
-      Stripe.merchantIdentifier = 'merchant.io.tigerbay.app';
+      Stripe.merchantIdentifier = 'merchant.com.tigerbay.tigerbayApp';
       await Stripe.instance.applySettings();
       debugPrint('[PaymentRepository] Stripe initialized successfully.');
     }
