@@ -82,6 +82,7 @@ class StripeService {
           ),
           googlePay: PaymentSheetGooglePay(
             merchantCountryCode: StripeConfig.merchantCountryCode,
+            currencyCode: currency.toUpperCase(),
             testEnv: StripeConfig.isTestMode,
           ),
           billingDetailsCollectionConfiguration: const BillingDetailsCollectionConfiguration(
@@ -228,6 +229,7 @@ class StripeService {
           ),
           googlePay: PaymentSheetGooglePay(
             merchantCountryCode: StripeConfig.merchantCountryCode,
+            currencyCode: currency.toUpperCase(),
             testEnv: StripeConfig.isTestMode,
           ),
           billingDetailsCollectionConfiguration: const BillingDetailsCollectionConfiguration(

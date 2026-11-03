@@ -47,7 +47,14 @@ class PaymentRepository {
               ? merchantName
               : StripeConfig.merchantDisplayName,
           returnURL: StripeConfig.returnURL,
-          paymentMethodOrder: const ['card'],
+          applePay: const PaymentSheetApplePay(
+            merchantCountryCode: StripeConfig.merchantCountryCode,
+          ),
+          googlePay: PaymentSheetGooglePay(
+            merchantCountryCode: StripeConfig.merchantCountryCode,
+            currencyCode: currency.toUpperCase(),
+            testEnv: StripeConfig.isTestMode,
+          ),
           style: ThemeMode.dark,
         ),
       );

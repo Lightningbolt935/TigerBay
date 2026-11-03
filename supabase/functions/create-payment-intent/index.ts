@@ -67,7 +67,8 @@ export default {
     const stripeBody: Record<string, string> = {
       amount: String(amount),
       currency: currency.toLowerCase(),
-      "payment_method_types[0]": "card",
+      "automatic_payment_methods[enabled]": "true",
+      "automatic_payment_methods[allow_redirects]": "never",
     };
 
     if (booking_id) {
