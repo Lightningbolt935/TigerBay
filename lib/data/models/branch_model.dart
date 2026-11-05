@@ -260,12 +260,8 @@ class Branch {
 
   /// Effective 3-image carousel URLs for showcasing the venue
   List<String> get effectiveImages {
-    if (id == 2) {
-      // Flagship Kingsbury: Premium Mayfair VIP lounge imagery
-      return kingsburyLuxuryImages;
-    }
-    // Filter out unwanted spa/meeting room placeholders
-    final filtered = images.where((u) => !u.contains('1544161515')).toList();
+    // 1. Prioritize backend gallery images if available
+    final filtered = images.where((u) => u.isNotEmpty && !u.contains('1544161515')).toList();
     if (filtered.isNotEmpty) {
       if (filtered.length >= 3) return filtered.take(3).toList();
       final list = List<String>.from(filtered);
@@ -274,12 +270,20 @@ class Branch {
       }
       return list;
     }
+
+    // 2. Prioritize backend single cover image if available
     if (imageUrl.isNotEmpty) {
+      final defaults = _defaultImagesForVenue(id);
       return [
         imageUrl,
-        _defaultImagesForVenue(id)[1],
-        _defaultImagesForVenue(id)[2],
+        defaults.length > 1 ? defaults[1] : imageUrl,
+        defaults.length > 2 ? defaults[2] : imageUrl,
       ];
+    }
+
+    // 3. Fall back to hardcoded defaults only if the backend returns no images
+    if (id == 2) {
+      return kingsburyLuxuryImages;
     }
     return _defaultImagesForVenue(id);
   }
