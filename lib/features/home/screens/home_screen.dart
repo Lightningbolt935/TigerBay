@@ -21,14 +21,6 @@ import 'package:tigerbay_app/shared/widgets/apple_touch_feedback.dart';
 /// ═══════════════════════════════════════════════════════════════════════════
 /// TigerBay International — Decluttered Luxury Lounges & Venue Hub
 /// ═══════════════════════════════════════════════════════════════════════════
-/// Replaces the cluttered multi-carousel dashboard with a focused, elite
-/// Mayfair London lounge showcase:
-/// - 3-Image auto-sliding venue hero with live status badge.
-/// - 4 Direct actions: Call Reception, WhatsApp Concierge, Directions, Contact Us.
-/// - Operating hours & official website access.
-/// - Interactive London Lounges Map with live pins for Kingsbury, Enfield,
-///   Hanger Lane, and Hounslow.
-/// - Curated luxury shortcuts to dedicated "What's On" & "VIP Packages" tabs.
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
@@ -37,10 +29,13 @@ class HomeScreen extends ConsumerWidget {
     final branchesAsync = ref.watch(branchesProvider);
     final selectedBranch = ref.watch(selectedBranchProvider);
 
+    // Filter strictly for future upcoming bookings and sort by earliest first
     final bookingsAsync = ref.watch(userBookingsStreamProvider);
-    final upcomingBooking = bookingsAsync.valueOrNull
-        ?.where((b) => b.status == BookingStatus.upcoming)
-        .firstOrNull;
+    final upcomingList = bookingsAsync.valueOrNull
+        ?.where((b) => b.isUpcomingFuture)
+        .toList()
+      ?..sort((a, b) => a.fullDateTime.compareTo(b.fullDateTime));
+    final upcomingBooking = upcomingList?.firstOrNull;
 
     return Scaffold(
       backgroundColor: const Color(0xFF09090B),
@@ -249,7 +244,7 @@ class HomeScreen extends ConsumerWidget {
               ),
             ),
 
-            // ── 4. Upcoming Booking Pass (If active) ────────────────────────
+            // ── 4. Upcoming Booking Pass (If active and in the future) ───────
             if (upcomingBooking != null) ...[
               const SliverToBoxAdapter(child: SizedBox(height: 16)),
               SliverToBoxAdapter(
@@ -357,244 +352,243 @@ class _VenueHeroCarouselCardState extends State<_VenueHeroCarouselCard> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(24),
           border: Border.all(
-          color: AppColors.gold.withValues(alpha: 0.3),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.6),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
+            color: AppColors.gold.withValues(alpha: 0.3),
+            width: 1,
           ),
-          BoxShadow(
-            color: AppColors.gold.withValues(alpha: 0.08),
-            blurRadius: 16,
-            spreadRadius: -2,
-          ),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Auto-sliding 3-Image Gallery
-          PageView.builder(
-            controller: _pageController,
-            itemCount: images.length,
-            onPageChanged: (idx) => setState(() => _currentPage = idx),
-            itemBuilder: (context, idx) {
-              return CachedNetworkImage(
-                imageUrl: images[idx],
-                fit: BoxFit.cover,
-                placeholder: (_, __) => Container(
-                  color: const Color(0xFF141418),
-                  child: const Center(
-                    child: CircularProgressIndicator(
-                      color: AppColors.gold,
-                      strokeWidth: 2,
-                    ),
-                  ),
-                ),
-                errorWidget: (_, __, ___) => Container(
-                  color: const Color(0xFF141418),
-                  child: const Icon(Icons.storefront, color: AppColors.gold),
-                ),
-              );
-            },
-          ),
-
-          // Cinematic Vignette Overlay
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.black.withValues(alpha: 0.35),
-                  Colors.black.withValues(alpha: 0.1),
-                  Colors.black.withValues(alpha: 0.92),
-                ],
-                stops: const [0.0, 0.38, 1.0],
-              ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.6),
+              blurRadius: 24,
+              offset: const Offset(0, 10),
             ),
-          ),
-
-          // Top Floating Bar: Status Pill + Switch Venue Button
-          Positioned(
-            top: 14,
-            left: 14,
-            right: 14,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                buildLiveStatusPill(widget.venue),
-                AppleTouchFeedback(
-                  onTap: widget.onSwitchVenue,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.65),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: AppColors.gold.withValues(alpha: 0.5),
-                        width: 0.8,
+            BoxShadow(
+              color: AppColors.gold.withValues(alpha: 0.08),
+              blurRadius: 16,
+              spreadRadius: -2,
+            ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Auto-sliding 3-Image Gallery
+            PageView.builder(
+              controller: _pageController,
+              itemCount: images.length,
+              onPageChanged: (idx) => setState(() => _currentPage = idx),
+              itemBuilder: (context, idx) {
+                return CachedNetworkImage(
+                  imageUrl: images[idx],
+                  fit: BoxFit.cover,
+                  placeholder: (_, __) => Container(
+                    color: const Color(0xFF141418),
+                    child: const Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.gold,
+                        strokeWidth: 2,
                       ),
                     ),
-                    child: Row(
+                  ),
+                  errorWidget: (_, __, ___) => Container(
+                    color: const Color(0xFF141418),
+                    child: const Icon(Icons.storefront, color: AppColors.gold),
+                  ),
+                );
+              },
+            ),
+
+            // Cinematic Vignette Overlay
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.35),
+                    Colors.black.withValues(alpha: 0.1),
+                    Colors.black.withValues(alpha: 0.92),
+                  ],
+                  stops: const [0.0, 0.38, 1.0],
+                ),
+              ),
+            ),
+
+            // Top Floating Bar: Status Pill + Switch Venue Button
+            Positioned(
+              top: 14,
+              left: 14,
+              right: 14,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  buildLiveStatusPill(widget.venue),
+                  AppleTouchFeedback(
+                    onTap: widget.onSwitchVenue,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.65),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppColors.gold.withValues(alpha: 0.5),
+                          width: 0.8,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Switch Venue',
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.champagneGold,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            color: AppColors.champagneGold,
+                            size: 15,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Bottom Bar: Title, Address, Hours Badge, and 3-Image Indicators
+            Positioned(
+              bottom: 12,
+              left: 16,
+              right: 16,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          'Switch Venue',
-                          style: GoogleFonts.poppins(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.champagneGold,
+                          'Tiger Bay ${widget.venue.title}',
+                          style: GoogleFonts.playfairDisplay(
+                            fontSize: 21,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                            letterSpacing: 0.4,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(width: 4),
-                        const Icon(
-                          Icons.keyboard_arrow_down_rounded,
-                          color: AppColors.champagneGold,
-                          size: 15,
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.location_on_rounded,
+                              size: 13,
+                              color: AppColors.champagneGold,
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                widget.venue.addressFormatted,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 11.5,
+                                  color: Colors.white.withValues(alpha: 0.85),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        AppleTouchFeedback(
+                          onTap: () => showVenueWeeklyHoursModal(context, widget.venue),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 9,
+                              vertical: 3.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.65),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: AppColors.gold.withValues(alpha: 0.4),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.schedule_rounded,
+                                  size: 12,
+                                  color: AppColors.champagneGold,
+                                ),
+                                const SizedBox(width: 5),
+                                Text(
+                                  'Hours: ${widget.venue.todayHoursFormatted}',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.white.withValues(alpha: 0.95),
+                                  ),
+                                ),
+                                const SizedBox(width: 5),
+                                Text(
+                                  '• Schedule ›',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.champagneGold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ],
                     ),
                   ),
-                ),
-              ],
-            ),
-          ),
 
-          // Bottom Bar: Title, Address, Hours Badge, and 3-Image Indicators
-          Positioned(
-            bottom: 12,
-            left: 16,
-            right: 16,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Tiger Bay ${widget.venue.title}',
-                        style: GoogleFonts.playfairDisplay(
-                          fontSize: 21,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                          letterSpacing: 0.4,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 2),
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.location_on_rounded,
-                            size: 13,
-                            color: AppColors.champagneGold,
-                          ),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              widget.venue.addressFormatted,
-                              style: GoogleFonts.poppins(
-                                fontSize: 11.5,
-                                color: Colors.white.withValues(alpha: 0.85),
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                  // Indicator dots
+                  if (images.length > 1)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4, left: 8),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: List.generate(
+                          images.length,
+                          (idx) => AnimatedContainer(
+                            duration: const Duration(milliseconds: 250),
+                            margin: const EdgeInsets.only(left: 4),
+                            width: _currentPage == idx ? 16 : 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: _currentPage == idx
+                                  ? AppColors.champagneGold
+                                  : Colors.white54,
+                              borderRadius: BorderRadius.circular(3),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      // Operating Hours interactive badge inside the Hero Card
-                      AppleTouchFeedback(
-                        onTap: () => showVenueWeeklyHoursModal(context, widget.venue),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 9,
-                            vertical: 3.5,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.65),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: AppColors.gold.withValues(alpha: 0.4),
-                              width: 0.8,
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.schedule_rounded,
-                                size: 12,
-                                color: AppColors.champagneGold,
-                              ),
-                              const SizedBox(width: 5),
-                              Text(
-                                'Hours: ${widget.venue.todayHoursFormatted}',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.white.withValues(alpha: 0.95),
-                                ),
-                              ),
-                              const SizedBox(width: 5),
-                              Text(
-                                '• Schedule ›',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.champagneGold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Indicator dots
-                if (images.length > 1)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 4, left: 8),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: List.generate(
-                        images.length,
-                        (idx) => AnimatedContainer(
-                          duration: const Duration(milliseconds: 250),
-                          margin: const EdgeInsets.only(left: 4),
-                          width: _currentPage == idx ? 16 : 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: _currentPage == idx
-                                ? AppColors.champagneGold
-                                : Colors.white54,
-                            borderRadius: BorderRadius.circular(3),
                           ),
                         ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
     );
   }
 }
@@ -610,7 +604,7 @@ class _FourDirectActionsRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        // 1. Reserve Table (Primary Luxury Action)
+        // 1. Reserve Table
         Expanded(
           child: _ActionButton(
             icon: CupertinoIcons.calendar_today,
@@ -631,7 +625,7 @@ class _FourDirectActionsRow extends StatelessWidget {
         ),
         const SizedBox(width: 8),
 
-        // 3. WhatsApp Concierge (Luxury Sleek Action)
+        // 3. WhatsApp Concierge
         Expanded(
           child: _ActionButton(
             icon: Icons.chat_bubble_rounded,
@@ -737,7 +731,7 @@ class _GallerySection extends ConsumerWidget {
 
   const _GallerySection({required this.venue});
 
-  static const List<Map<String, String>> defaultShowcase = [
+  static const List> defaultShowcase = [
     {
       'title': 'Signature Cocktails & Mixology',
       'category': 'DRINKS',
@@ -787,7 +781,6 @@ class _GallerySection extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header: Renamed to simply "GALLERY" with luxury typography
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
@@ -1219,7 +1212,7 @@ class _UpcomingBookingPass extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '${booking.formattedDate} at ${booking.bookingTime}',
+                    '${booking.formattedDate} at ${booking.formattedTime}',
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
