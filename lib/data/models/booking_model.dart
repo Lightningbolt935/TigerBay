@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 /// ═══════════════════════════════════════════════════════════════════════════
 /// TigerBay International — BookingModel
 /// ═══════════════════════════════════════════════════════════════════════════
@@ -85,13 +87,55 @@ class BookingModel {
     );
   }
 
-  /// Formatted date for display.
+  /// Formatted date for display (e.g., "30 Sep 2026").
   String get formattedDate {
     final months = [
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
     ];
     return '${bookingDate.day} ${months[bookingDate.month - 1]} ${bookingDate.year}';
+  }
+
+  /// Formatted time displaying only hours and minutes (e.g., "20:00" or "8:00 PM").
+  String get formattedTime {
+    if (bookingTime.trim().isEmpty) return '';
+    final parts = bookingTime.trim().split(':');
+    if (parts.length >= 2) {
+      final hour = int.tryParse(parts[0]) ?? 0;
+      final minute = parts[1].padLeft(2, '0');
+      // For 24-hr format:
+      return '${hour.toString().padLeft(2, '0')}:$minute';
+      
+      // If you prefer 12-hour AM/PM format (e.g., "8:00 PM"), uncomment below:
+      // final period = hour >= 12 ? 'PM' : 'AM';
+      // final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+      // return '$displayHour:$minute $period';
+    }
+    return bookingTime;
+  }
+
+  /// Combines `bookingDate` and `bookingTime` into a single DateTime.
+  DateTime get fullDateTime {
+    int hour = 0;
+    int minute = 0;
+    if (bookingTime.isNotEmpty) {
+      final parts = bookingTime.split(':');
+      if (parts.isNotEmpty) hour = int.tryParse(parts[0]) ?? 0;
+      if (parts.length > 1) minute = int.tryParse(parts[1]) ?? 0;
+    }
+    return DateTime(
+      bookingDate.year,
+      bookingDate.month,
+      bookingDate.day,
+      hour,
+      minute,
+    );
+  }
+
+  /// Verifies both status and that the reservation timestamp is strictly in the future.
+  bool get isUpcomingFuture {
+    if (status != BookingStatus.upcoming) return false;
+    return fullDateTime.isAfter(DateTime.now());
   }
 
   @override
