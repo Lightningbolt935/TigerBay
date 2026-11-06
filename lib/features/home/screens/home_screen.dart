@@ -731,7 +731,7 @@ class _GallerySection extends ConsumerWidget {
 
   const _GallerySection({required this.venue});
 
-  static const List> defaultShowcase = [
+  static const List<Map<String, String>> defaultShowcase = [
     {
       'title': 'Signature Cocktails & Mixology',
       'category': 'DRINKS',
