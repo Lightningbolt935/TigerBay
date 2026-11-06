@@ -613,7 +613,7 @@ class _FourDirectActionsRow extends StatelessWidget {
             onTap: () => context.push(AppRoutes.booking),
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 6),
 
         // 2. Call Reception
         Expanded(
@@ -623,7 +623,7 @@ class _FourDirectActionsRow extends StatelessWidget {
             onTap: () => launchVenueCall(context, venue),
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 6),
 
         // 3. WhatsApp Concierge
         Expanded(
@@ -633,9 +633,19 @@ class _FourDirectActionsRow extends StatelessWidget {
             onTap: () => launchVenueWhatsApp(context, venue),
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 6),
 
-        // 4. Directions / Map
+        // 4. Socials (Instagram)
+        Expanded(
+          child: _ActionButton(
+            icon: Icons.camera_alt_rounded,
+            label: 'Socials',
+            onTap: () => launchVenueSocials(context, venue),
+          ),
+        ),
+        const SizedBox(width: 6),
+
+        // 5. Directions / Map
         Expanded(
           child: _ActionButton(
             icon: Icons.directions_rounded,

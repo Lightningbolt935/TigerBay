@@ -428,7 +428,7 @@ class _VenueLandingScreenState extends ConsumerState<VenueLandingScreen> {
                               onTap: () => launchVenueCall(context, venue),
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 6),
                           Expanded(
                             child: _LuxuryConciergeTile(
                               icon: Icons.chat_bubble_rounded,
@@ -436,7 +436,15 @@ class _VenueLandingScreenState extends ConsumerState<VenueLandingScreen> {
                               onTap: () => launchVenueWhatsApp(context, venue),
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: _LuxuryConciergeTile(
+                              icon: Icons.camera_alt_rounded,
+                              label: 'Socials',
+                              onTap: () => launchVenueSocials(context, venue),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
                           Expanded(
                             child: _LuxuryConciergeTile(
                               icon: Icons.directions_rounded,
@@ -444,7 +452,7 @@ class _VenueLandingScreenState extends ConsumerState<VenueLandingScreen> {
                               onTap: () => launchVenueDirections(context, venue),
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 6),
                           Expanded(
                             child: _LuxuryConciergeTile(
                               icon: Icons.email_outlined,

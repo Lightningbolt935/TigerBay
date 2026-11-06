@@ -687,6 +687,18 @@ Future<void> launchVenueWhatsApp(
   } catch (_) {}
 }
 
+// ── Global Helper: Open Socials (Instagram) ──────────────────────────────────
+Future<void> launchVenueSocials(BuildContext context, Branch venue) async {
+  final urlStr = venue.instagramUrl;
+  final uri = Uri.parse(urlStr);
+  try {
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+      return;
+    }
+  } catch (_) {}
+}
+
 // ── Global Helper: Customer Support Concierge Modal (Call + Msg) ──────────────
 void showCustomerSupportModal(BuildContext context, Branch venue) {
   showModalBottomSheet<void>(
@@ -796,6 +808,19 @@ void showCustomerSupportModal(BuildContext context, Branch venue) {
                 if (await canLaunchUrl(smsUri)) {
                   await launchUrl(smsUri);
                 }
+              },
+            ),
+            const SizedBox(height: 10),
+
+            // 4. Socials & Instagram
+            _SupportOptionTile(
+              icon: Icons.camera_alt_rounded,
+              iconColor: const Color(0xFFE1306C),
+              title: 'Instagram & Socials',
+              subtitle: 'View photos, vibe & follow ${venue.title}',
+              onTap: () async {
+                Navigator.of(sheetCtx).pop();
+                await launchVenueSocials(context, venue);
               },
             ),
             const SizedBox(height: 10),

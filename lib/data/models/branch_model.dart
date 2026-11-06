@@ -148,6 +148,21 @@ class Branch {
     return 'https://api.whatsapp.com/send/?phone=$phone&text=$encoded&type=phone_number&app_absent=0';
   }
 
+  /// Official Instagram / Socials URL per venue
+  String get instagramUrl {
+    final t = title.toLowerCase();
+    if (t.contains('hanger') || id == 3) {
+      return 'https://www.instagram.com/tigerbayhangerlane/?hl=en';
+    } else if (t.contains('hounslow') || id == 1) {
+      return 'https://www.instagram.com/tigerbayhounslow/?hl=en';
+    } else if (t.contains('enfield') || id == 4) {
+      return 'https://www.instagram.com/tigerbayenfield/?hl=en';
+    } else {
+      // Default / Kingsbury
+      return 'https://www.instagram.com/tigerbayshishalounge/?hl=en';
+    }
+  }
+
   /// Official Website URL
   String get effectiveWebsite {
     if (websiteUrl != null && websiteUrl!.trim().isNotEmpty) {
