@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:tigerbay_app/core/config/env_config.dart';
 import 'package:tigerbay_app/core/config/stripe_config.dart';
 import 'package:tigerbay_app/core/constants/app_colors.dart';
 
@@ -71,45 +72,11 @@ class StripeService {
         );
       }
 
-      // 2. Initialize the official Stripe Payment Sheet with full options
-      await Stripe.instance.initPaymentSheet(
-        paymentSheetParameters: SetupPaymentSheetParameters(
-          paymentIntentClientSecret: clientSecret,
-          merchantDisplayName: StripeConfig.merchantDisplayName,
-          returnURL: StripeConfig.returnURL,
-          applePay: const PaymentSheetApplePay(
-            merchantCountryCode: StripeConfig.merchantCountryCode,
-          ),
-          googlePay: PaymentSheetGooglePay(
-            merchantCountryCode: StripeConfig.merchantCountryCode,
-            currencyCode: currency.toUpperCase(),
-            testEnv: StripeConfig.isTestMode,
-          ),
-          billingDetailsCollectionConfiguration: const BillingDetailsCollectionConfiguration(
-            name: CollectionMode.automatic,
-            phone: CollectionMode.automatic,
-            email: CollectionMode.automatic,
-            address: AddressCollectionMode.never,
-          ),
-          style: ThemeMode.dark,
-          appearance: const PaymentSheetAppearance(
-            colors: PaymentSheetAppearanceColors(
-              primary: AppColors.gold,
-              background: Color(0xFF141418),
-              componentBackground: Color(0xFF1C1C22),
-              componentBorder: Color(0xFF2E2E38),
-              componentDivider: Color(0xFF2E2E38),
-              primaryText: Colors.white,
-              secondaryText: Color(0xFF9E9EA8),
-              placeholderText: Color(0xFF6E6E78),
-              icon: AppColors.gold,
-            ),
-          ),
-        ),
+      // 2. Initialize and present the official Stripe Payment Sheet
+      await _initAndPresentPaymentSheet(
+        clientSecret: clientSecret,
+        currency: currency,
       );
-
-      // 3. Present the official Stripe Payment Sheet
-      await Stripe.instance.presentPaymentSheet();
 
       debugPrint('[Stripe] ✅ Booking deposit payment completed: $paymentIntentId');
       return StripePaymentResult(
@@ -218,45 +185,11 @@ class StripeService {
         );
       }
 
-      // 2. Initialize the official Stripe Payment Sheet with full options
-      await Stripe.instance.initPaymentSheet(
-        paymentSheetParameters: SetupPaymentSheetParameters(
-          paymentIntentClientSecret: clientSecret,
-          merchantDisplayName: StripeConfig.merchantDisplayName,
-          returnURL: StripeConfig.returnURL,
-          applePay: const PaymentSheetApplePay(
-            merchantCountryCode: StripeConfig.merchantCountryCode,
-          ),
-          googlePay: PaymentSheetGooglePay(
-            merchantCountryCode: StripeConfig.merchantCountryCode,
-            currencyCode: currency.toUpperCase(),
-            testEnv: StripeConfig.isTestMode,
-          ),
-          billingDetailsCollectionConfiguration: const BillingDetailsCollectionConfiguration(
-            name: CollectionMode.automatic,
-            phone: CollectionMode.automatic,
-            email: CollectionMode.automatic,
-            address: AddressCollectionMode.never,
-          ),
-          style: ThemeMode.dark,
-          appearance: const PaymentSheetAppearance(
-            colors: PaymentSheetAppearanceColors(
-              primary: AppColors.gold,
-              background: Color(0xFF141418),
-              componentBackground: Color(0xFF1C1C22),
-              componentBorder: Color(0xFF2E2E38),
-              componentDivider: Color(0xFF2E2E38),
-              primaryText: Colors.white,
-              secondaryText: Color(0xFF9E9EA8),
-              placeholderText: Color(0xFF6E6E78),
-              icon: AppColors.gold,
-            ),
-          ),
-        ),
+      // 2. Initialize and present the official Stripe Payment Sheet
+      await _initAndPresentPaymentSheet(
+        clientSecret: clientSecret,
+        currency: currency,
       );
-
-      // 3. Present the official Stripe Payment Sheet
-      await Stripe.instance.presentPaymentSheet();
 
       debugPrint('[Stripe] ✅ Membership payment completed: $paymentIntentId');
       return StripePaymentResult(
@@ -463,6 +396,75 @@ class StripeService {
     debugPrint('[Stripe] ❌ PaymentIntent $intentId not confirmed '
         'after $_maxVerifyAttempts attempts.');
     return false;
+  }
+
+  /// Initializes and presents the official Stripe Payment Sheet.
+  ///
+  /// On iOS, if initializing with Apple Pay encounters an issue (such as
+  /// unconfigured device wallet or certificate mismatch), this gracefully
+  /// falls back to initializing without Apple Pay so Credit/Debit cards,
+  /// Link 1-click checkout, and all other payment methods ALWAYS pop up.
+  static Future<void> _initAndPresentPaymentSheet({
+    required String clientSecret,
+    required String currency,
+  }) async {
+    if (Stripe.publishableKey.isEmpty) {
+      Stripe.publishableKey = StripeConfig.publishableKey;
+    }
+    Stripe.merchantIdentifier = 'merchant.com.tigerbay.tigerbayApp';
+    Stripe.urlScheme = EnvConfig.appScheme;
+
+    SetupPaymentSheetParameters buildParameters({required bool withApplePay}) {
+      return SetupPaymentSheetParameters(
+        paymentIntentClientSecret: clientSecret,
+        merchantDisplayName: StripeConfig.merchantDisplayName,
+        returnURL: StripeConfig.returnURL,
+        applePay: withApplePay
+            ? const PaymentSheetApplePay(
+                merchantCountryCode: StripeConfig.merchantCountryCode,
+              )
+            : null,
+        googlePay: PaymentSheetGooglePay(
+          merchantCountryCode: StripeConfig.merchantCountryCode,
+          currencyCode: currency.toUpperCase(),
+          testEnv: StripeConfig.isTestMode,
+        ),
+        billingDetailsCollectionConfiguration:
+            const BillingDetailsCollectionConfiguration(
+          name: CollectionMode.automatic,
+          phone: CollectionMode.automatic,
+          email: CollectionMode.automatic,
+          address: AddressCollectionMode.never,
+        ),
+        style: ThemeMode.dark,
+        appearance: const PaymentSheetAppearance(
+          colors: PaymentSheetAppearanceColors(
+            primary: AppColors.gold,
+            background: Color(0xFF141418),
+            componentBackground: Color(0xFF1C1C22),
+            componentBorder: Color(0xFF2E2E38),
+            componentDivider: Color(0xFF2E2E38),
+            primaryText: Colors.white,
+            secondaryText: Color(0xFF9E9EA8),
+            placeholderText: Color(0xFF6E6E78),
+            icon: AppColors.gold,
+          ),
+        ),
+      );
+    }
+
+    try {
+      await Stripe.instance.initPaymentSheet(
+        paymentSheetParameters: buildParameters(withApplePay: Platform.isIOS),
+      );
+    } catch (e) {
+      debugPrint('[Stripe] ⚠️ initPaymentSheet with Apple Pay failed ($e). Retrying without Apple Pay...');
+      await Stripe.instance.initPaymentSheet(
+        paymentSheetParameters: buildParameters(withApplePay: false),
+      );
+    }
+
+    await Stripe.instance.presentPaymentSheet();
   }
 }
 

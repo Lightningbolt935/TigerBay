@@ -39,25 +39,43 @@ class PaymentRepository {
         ? clientSecret.split('_secret_').first
         : '';
 
-    try {
-      await Stripe.instance.initPaymentSheet(
-        paymentSheetParameters: SetupPaymentSheetParameters(
-          paymentIntentClientSecret: clientSecret,
-          merchantDisplayName: merchantName.isNotEmpty
-              ? merchantName
-              : StripeConfig.merchantDisplayName,
-          returnURL: StripeConfig.returnURL,
-          applePay: const PaymentSheetApplePay(
-            merchantCountryCode: StripeConfig.merchantCountryCode,
-          ),
-          googlePay: PaymentSheetGooglePay(
-            merchantCountryCode: StripeConfig.merchantCountryCode,
-            currencyCode: currency.toUpperCase(),
-            testEnv: StripeConfig.isTestMode,
-          ),
-          style: ThemeMode.dark,
+    if (Stripe.publishableKey.isEmpty) {
+      Stripe.publishableKey = StripeConfig.publishableKey;
+    }
+    Stripe.merchantIdentifier = 'merchant.com.tigerbay.tigerbayApp';
+
+    SetupPaymentSheetParameters buildParameters({required bool withApplePay}) {
+      return SetupPaymentSheetParameters(
+        paymentIntentClientSecret: clientSecret,
+        merchantDisplayName: merchantName.isNotEmpty
+            ? merchantName
+            : StripeConfig.merchantDisplayName,
+        returnURL: StripeConfig.returnURL,
+        applePay: withApplePay
+            ? const PaymentSheetApplePay(
+                merchantCountryCode: StripeConfig.merchantCountryCode,
+              )
+            : null,
+        googlePay: PaymentSheetGooglePay(
+          merchantCountryCode: StripeConfig.merchantCountryCode,
+          currencyCode: currency.toUpperCase(),
+          testEnv: StripeConfig.isTestMode,
         ),
+        style: ThemeMode.dark,
       );
+    }
+
+    try {
+      try {
+        await Stripe.instance.initPaymentSheet(
+          paymentSheetParameters: buildParameters(withApplePay: Platform.isIOS),
+        );
+      } catch (e) {
+        debugPrint('[PaymentRepository] ⚠️ initPaymentSheet with Apple Pay failed ($e). Retrying without Apple Pay...');
+        await Stripe.instance.initPaymentSheet(
+          paymentSheetParameters: buildParameters(withApplePay: false),
+        );
+      }
 
       await Stripe.instance.presentPaymentSheet();
       return PaymentResult(success: true, paymentIntentId: paymentIntentId);
