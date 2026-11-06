@@ -1,7 +1,7 @@
 name: tigerbay_app
 description: TigerBay International Member Loyalty App
 publish_to: 'none'
-version: 1.0.3+93
+version: 1.0.3+94
 
 environment:
   sdk: '>=3.2.0 <4.0.0'
