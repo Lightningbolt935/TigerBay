@@ -1,4 +1,4 @@
-name: Build iOS IPA
+name: Build & Deploy iOS App (TestFlight)
 
 on:
   push:
@@ -38,7 +38,7 @@ jobs:
         run: flutter test
 
   build-ios:
-    name: Build iOS IPA
+    name: Build & Upload iOS to TestFlight
     needs: [code-quality]
     runs-on: macos-15
     steps:
@@ -76,19 +76,60 @@ jobs:
       - name: Install Dependencies
         run: flutter pub get
 
-      - name: Build iOS App (No codesign for testing)
+      - name: Install Apple Certificate
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          p12-password: ${{ secrets.P12_PASSWORD }}
+
+      - name: Install Provisioning Profile
+        env:
+          PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
+        run: |
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          python3 -c "import os, base64; raw = os.environ.get('PROVISION_PROFILE_BASE64', '').strip().encode('utf-8').decode('utf-8-sig').strip(); data = base64.b64decode(raw); p = os.path.expanduser('~/Library/MobileDevice/Provisioning Profiles'); open(os.path.join(p, 'TigerBay_AppStore.mobileprovision'), 'wb').write(data); open(os.path.join(p, '2109fcf1-25d1-4895-9c6b-a800a20f3c63.mobileprovision'), 'wb').write(data)"
+          ls -la ~/Library/MobileDevice/Provisioning\ Profiles/
+
+      - name: Flutter Build iOS (compile only, no codesign)
         run: flutter build ios --release --no-codesign
 
-      - name: Package .ipa File
+      - name: Xcode Archive (sign with our certificate)
         run: |
-          mkdir -p build/ios/ipa_out/Payload
-          cp -r build/ios/iphoneos/Runner.app build/ios/ipa_out/Payload/
-          cd build/ios/ipa_out
-          zip -qr TigerBay.ipa Payload
-          cd ../../..
+          xcodebuild archive \
+            -workspace ios/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath $RUNNER_TEMP/TigerBay.xcarchive \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="TigerBay AppStore" \
+            DEVELOPMENT_TEAM=ZDZ58YL7Y3 \
+            COMPILER_INDEX_STORE_ENABLE=NO
 
-      - name: Upload iOS IPA Artifact (.ipa)
+      - name: Xcode Export IPA
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath $RUNNER_TEMP/TigerBay.xcarchive \
+            -exportPath $RUNNER_TEMP/TigerBay_IPA \
+            -exportOptionsPlist ios/ExportOptions.plist
+
+      - name: Locate Exported IPA
+        run: |
+          IPA_FILE=$(find $RUNNER_TEMP/TigerBay_IPA -name "*.ipa" | head -n 1)
+          echo "Found IPA at: $IPA_FILE"
+          echo "IPA_PATH=$IPA_FILE" >> $GITHUB_ENV
+
+      - name: Upload iOS Signed IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tigerbay-ios-ipa
-          path: build/ios/ipa_out/TigerBay.ipa
+          name: tigerbay-ios-signed-ipa
+          path: ${{ env.IPA_PATH }}
+
+      - name: Upload to Apple TestFlight
+        uses: apple-actions/upload-testflight-build@v3
+        with:
+          app-path: ${{ env.IPA_PATH }}
+          issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          api-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          api-private-key: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
