@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:tigerbay_app/core/config/env_config.dart';
+import 'package:tigerbay_app/core/config/stripe_config.dart';
 import 'firebase_options.dart';
 import 'app.dart';
 
@@ -82,53 +83,64 @@ Future<void> main() async {
     );
   };
 
-  // ── Load Environment Configuration (Safe for CI/Docker/Azure/Local) ────────
+  // ── Load Environment Configuration ───────────────────────────────────────
   await EnvConfig.initialize();
 
-  // ── Mobile-only system chrome settings ─────────────────────────────────────
-  // SystemChrome APIs are not supported on web and will throw if called.
+  // ── Mobile-only system chrome settings ───────────────────────────────────
   if (!kIsWeb) {
-    // Lock to portrait
     await SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
     ]);
 
-    // Transparent status bar (light icons for dark luxury background)
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light, // Android: light icons
-      statusBarBrightness: Brightness.dark, // iOS: light icons
+      statusBarIconBrightness: Brightness.light,
+      statusBarBrightness: Brightness.dark,
     ));
   }
 
-  // ── Init Firebase ──────────────────────────────────────────────────────────
+  // ── Init Firebase ────────────────────────────────────────────────────────
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
   } catch (e) {
     debugPrint('[TigerBay] Firebase initialization failed: $e');
-    // Continue without Firebase - fallback to Supabase/Twilio
   }
 
-  // ── Init Supabase (works on all platforms: Web, Android, iOS, Windows) ─────
+  // ── Init Supabase ────────────────────────────────────────────────────────
   await Supabase.initialize(
     url: EnvConfig.supabaseUrl,
-    // ignore: deprecated_member_use
     anonKey: EnvConfig.supabaseAnonKey,
   );
 
-  // ── Init Stripe ────────────────────────────────────────────────────────────
-  final stripeKey = EnvConfig.stripePublishableKey;
-  if (stripeKey.startsWith('pk_')) {
-    Stripe.publishableKey = stripeKey;
-    Stripe.merchantIdentifier = 'merchant.com.tigerbay.tigerbayApp';
-    Stripe.urlScheme = EnvConfig.appScheme;
-    Stripe.setReturnUrlSchemeOnAndroid = true;
-    if (!kIsWeb) {
-      await Stripe.instance.applySettings();
+  // ── Init Stripe ──────────────────────────────────────────────────────────
+  try {
+    final stripeKey = EnvConfig.stripePublishableKey.isNotEmpty
+        ? EnvConfig.stripePublishableKey
+        : StripeConfig.publishableKey;
+
+    if (stripeKey.startsWith('pk_')) {
+      Stripe.publishableKey = stripeKey;
+      StripeConfig.updatePublishableKey(stripeKey);
+
+      if (EnvConfig.appScheme.isNotEmpty) {
+        Stripe.urlScheme = EnvConfig.appScheme;
+      }
+      Stripe.setReturnUrlSchemeOnAndroid = true;
+
+      // Note: merchantIdentifier is omitted until Apple Pay credentials
+      // are provisioned in Xcode to prevent iOS Simulator presentation blocks.
+      if (!kIsWeb) {
+        await Stripe.instance.applySettings();
+        debugPrint('[TigerBay] ✅ Stripe initialized (${stripeKey.substring(0, 10)}...)');
+      }
+    } else {
+      debugPrint('[TigerBay] ⚠️ Stripe key missing or does not start with pk_: "$stripeKey"');
     }
+  } catch (e) {
+    debugPrint('[TigerBay] ❌ Stripe initialization error in main: $e');
   }
 
   runApp(

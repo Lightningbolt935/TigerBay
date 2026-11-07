@@ -33,6 +33,7 @@ class _MembershipPaywallScreenState
   final PageController _pageController =
       PageController(viewportFraction: 0.85);
   int _currentPage = 0;
+  bool _isProcessing = false; // Added: local loading state
 
   @override
   void dispose() {
@@ -43,7 +44,9 @@ class _MembershipPaywallScreenState
   Future<void> _handleBack() async {
     HapticFeedback.lightImpact();
     final profile = ref.read(profileStateProvider).profile;
-    final isActive = profile != null && profile.isMembershipActive && !profile.isMembershipExpired;
+    final isActive = profile != null &&
+        profile.isMembershipActive &&
+        !profile.isMembershipExpired;
     if (isActive) {
       if (context.canPop()) {
         context.pop();
@@ -57,111 +60,134 @@ class _MembershipPaywallScreenState
   }
 
   Future<void> _activateMembership(MembershipTier tier) async {
-    final activator = ref.read(membershipActivationNotifierProvider.notifier);
-    final userId = ref.read(supabaseClientProvider).auth.currentUser?.id;
+    if (_isProcessing) return;
+    setState(() => _isProcessing = true);
 
-    // ── Step 1: Collect payment via Stripe ────────────────────────────────
-    final paymentResult = await StripeService.presentMembershipPayment(
-      context: context,
-      tierName: tier.name,
-      amountGbp: tier.price,
-      tierId: tier.id.toString(),
-      userId: userId,
-    );
+    try {
+      final activator = ref.read(membershipActivationNotifierProvider.notifier);
+      final userId = ref.read(supabaseClientProvider).auth.currentUser?.id;
 
-    if (!mounted) return;
-
-    // User cancelled — soft message, no activation.
-    if (paymentResult.cancelled) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Payment cancelled. No charge was made.',
-            style: GoogleFonts.poppins(fontSize: 14, color: Colors.white),
-          ),
-          backgroundColor: AppColors.textSecondary,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
-        ),
+      // ── Step 1: Collect payment via Stripe ────────────────────────────────
+      final paymentResult = await StripeService.presentMembershipPayment(
+        context: context,
+        tierName: tier.name,
+        amountGbp: tier.price,
+        tierId: tier.id.toString(),
+        userId: userId,
       );
-      return;
-    }
-
-    // Payment failed — surface the error and allow retry.
-    if (!paymentResult.success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            paymentResult.error ?? 'Payment failed. Please try again.',
-            style: GoogleFonts.poppins(fontSize: 14, color: Colors.white),
-          ),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
-        ),
-      );
-      return;
-    }
-
-    // ── Step 2: Payment confirmed — activate membership in Supabase ────────
-    final success = await activator.activateMembership(tier);
-
-    if (!mounted) return;
-
-    if (success) {
-      // ── Step 3: Record Stripe payment ID for audit trail ──────────────────
-      if (paymentResult.paymentIntentId != null &&
-          paymentResult.paymentIntentId!.isNotEmpty) {
-        try {
-          final supabase = ref.read(supabaseClientProvider);
-          if (userId != null) {
-            await supabase.from('profiles').update({
-              'paypal_order_id': paymentResult.paymentIntentId,
-              'updated_at': DateTime.now().toIso8601String(),
-            }).eq('id', userId);
-          }
-        } catch (e) {
-          debugPrint('[MembershipPaywall] stripe payment intent record failed: $e');
-        }
-      }
 
       if (!mounted) return;
-      await LuxuryCelebrationDialog.show(
-        context: context,
-        title: '${tier.name} Membership Active',
-        subtitle:
-            'Welcome to TigerBay VIP Lounge. Your member privileges, earning rates, and digital pass are now ready.',
-        badgeText: 'VIP Status Unlocked',
-        primaryButtonText: 'ENTER TIGERBAY LOUNGE',
-        benefits: [
-          '${tier.stripsPerBooking} Strips awarded on every table reservation',
-          'Priority table reservations and VIP lounge entry',
-          'Exclusive invitations to private member events & tastings',
-        ],
-        onPrimaryPressed: () {
-          Navigator.of(context, rootNavigator: true).pop();
-          if (mounted) {
-            context.go(AppRoutes.home);
+
+      // User cancelled — soft message, no activation.
+      if (paymentResult.cancelled) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Payment cancelled. No charge was made.',
+              style: GoogleFonts.poppins(fontSize: 14, color: Colors.white),
+            ),
+            backgroundColor: AppColors.textSecondary,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+        return;
+      }
+
+      // Payment failed — surface the error and allow retry.
+      if (!paymentResult.success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              paymentResult.error ?? 'Payment failed. Please try again.',
+              style: GoogleFonts.poppins(fontSize: 14, color: Colors.white),
+            ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+        return;
+      }
+
+      // ── Step 2: Payment confirmed — activate membership in Supabase ────────
+      final success = await activator.activateMembership(tier);
+      if (!mounted) return;
+
+      if (success) {
+        // ── Step 3: Record Stripe payment ID for audit trail ──────────────────
+        if (paymentResult.paymentIntentId != null &&
+            paymentResult.paymentIntentId!.isNotEmpty) {
+          try {
+            final supabase = ref.read(supabaseClientProvider);
+            if (userId != null) {
+              await supabase.from('profiles').update({
+                'paypal_order_id': paymentResult.paymentIntentId,
+                'updated_at': DateTime.now().toIso8601String(),
+              }).eq('id', userId);
+            }
+          } catch (e) {
+            debugPrint(
+                '[MembershipPaywall] stripe payment intent record failed: $e');
           }
-        },
-      );
-    } else {
-      final error = ref.read(membershipActivationNotifierProvider).error;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            error ?? 'Could not activate membership. Please try again.',
-            style: GoogleFonts.poppins(fontSize: 14, color: Colors.white),
+        }
+
+        if (!mounted) return;
+        await LuxuryCelebrationDialog.show(
+          context: context,
+          title: '${tier.name} Membership Active',
+          subtitle:
+              'Welcome to TigerBay VIP Lounge. Your member privileges, earning rates, and digital pass are now ready.',
+          badgeText: 'VIP Status Unlocked',
+          primaryButtonText: 'ENTER TIGERBAY LOUNGE',
+          benefits: [
+            '${tier.stripsPerBooking} Strips awarded on every table reservation',
+            'Priority table reservations and VIP lounge entry',
+            'Exclusive invitations to private member events & tastings',
+          ],
+          onPrimaryPressed: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            if (mounted) {
+              context.go(AppRoutes.home);
+            }
+          },
+        );
+      } else {
+        final error = ref.read(membershipActivationNotifierProvider).error;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              error ?? 'Could not activate membership. Please try again.',
+              style: GoogleFonts.poppins(fontSize: 14, color: Colors.white),
+            ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+        );
+      }
+    } catch (e, stack) {
+      debugPrint('[MembershipPaywall] Error in _activateMembership: $e\n$stack');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Payment error: ${e.toString()}',
+              style: GoogleFonts.poppins(fontSize: 13, color: Colors.white),
+            ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12)),
           ),
-        ),
-      );
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
     }
   }
 
@@ -172,6 +198,7 @@ class _MembershipPaywallScreenState
     final profile = ref.watch(profileStateProvider).profile;
     final isMembershipActive = profile?.isMembershipActive ?? false;
     final isMembershipExpired = profile?.isMembershipExpired ?? false;
+    final bool isBusy = _isProcessing || activationState.isProcessing;
 
     return PopScope(
       canPop: false,
@@ -182,253 +209,254 @@ class _MembershipPaywallScreenState
         backgroundColor: AppColors.brandBlack,
         body: SafeArea(
           child: tiersAsync.when(
-          loading: () => const Center(
-            child: CircularProgressIndicator(
-              color: AppColors.gold,
-              strokeWidth: 2,
-            ),
-          ),
-          error: (err, __) => Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.error_outline,
-                      size: 48, color: AppColors.textSecondary),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Could not load membership tiers',
-                    style: GoogleFonts.poppins(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '$err',
-                    style: GoogleFonts.poppins(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 24),
-                  OutlinedButton(
-                    onPressed: () =>
-                        ref.invalidate(membershipTiersProvider),
-                    child: Text(
-                      'Retry',
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.gold,
-                      ),
-                    ),
-                  ),
-                ],
+            loading: () => const Center(
+              child: CircularProgressIndicator(
+                color: AppColors.gold,
+                strokeWidth: 2,
               ),
             ),
-          ),
-          data: (tiers) {
-            if (tiers.isEmpty) {
-              return Center(
-                child: Text(
-                  'No membership tiers available',
-                  style: GoogleFonts.poppins(
-                    fontSize: 15,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              );
-            }
-
-            final safeIndex = _currentPage.clamp(0, tiers.length - 1);
-            final selectedTier = tiers[safeIndex];
-
-            MembershipTier? currentTier;
-            for (final t in tiers) {
-              if (t.id == profile?.membershipTierId) {
-                currentTier = t;
-                break;
-              }
-            }
-
-            final bool isCurrentSelected =
-                selectedTier.id == currentTier?.id;
-            // Downgrade guard: user cannot switch to a lower tier level if active.
-            final bool isDowngrade = isMembershipActive &&
-                currentTier != null &&
-                !isCurrentSelected &&
-                selectedTier.tierLevel < currentTier.tierLevel;
-
-            final String ctaLabel = isCurrentSelected
-                ? 'RENEW ${selectedTier.name.toUpperCase()}'
-                : isDowngrade
-                    ? 'CANNOT DOWNGRADE PLAN'
-                    : isMembershipActive
-                        ? 'UPGRADE TO ${selectedTier.name.toUpperCase()}'
-                        : isMembershipExpired
-                            ? (currentTier != null && selectedTier.tierLevel > currentTier.tierLevel
-                                ? 'UPGRADE TO ${selectedTier.name.toUpperCase()}'
-                                : 'RENEW ${selectedTier.name.toUpperCase()}')
-                            : 'ACTIVATE ${selectedTier.name.toUpperCase()}';
-
-            return Column(
-              children: [
-                const SizedBox(height: 16),
-
-                // ── Brand Header ─────────────────────────────────────────
-                _buildBrandHeader(),
-
-                if (currentTier != null) ...[
-                  const SizedBox(height: 16),
-                  _buildCurrentPlanBanner(currentTier, profile, isMembershipExpired),
-                ],
-
-                const SizedBox(height: 24),
-
-                // ── Title ────────────────────────────────────────────────
-                Text(
-                  isMembershipExpired
-                      ? 'MEMBERSHIP EXPIRED'
-                      : isMembershipActive
-                          ? 'MANAGE YOUR MEMBERSHIP'
-                          : 'CHOOSE YOUR MEMBERSHIP',
-                  style: GoogleFonts.poppins(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    color: isMembershipExpired
-                        ? AppColors.champagneGold
-                        : AppColors.textPrimary,
-                    letterSpacing: 2,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  isMembershipExpired
-                      ? 'Your club membership has expired. Renew your plan below to restore access.'
-                      : isMembershipActive
-                          ? 'Renew your current plan or upgrade to a higher tier'
-                          : 'Unlock exclusive rewards across every TigerBay venue',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.poppins(
-                    fontSize: 13,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-
-                // ── Swipeable Tier Cards ─────────────────────────────────
-                Expanded(
-                  child: PageView.builder(
-                    controller: _pageController,
-                    itemCount: tiers.length,
-                    onPageChanged: (i) {
-                      HapticFeedback.selectionClick();
-                      setState(() => _currentPage = i);
-                    },
-                    itemBuilder: (_, index) {
-                      final isSelected = index == safeIndex;
-                      return _TierCard(
-                        tier: tiers[index],
-                        isSelected: isSelected,
-                        isCurrentTier: tiers[index].id == currentTier?.id,
-                      );
-                    },
-                  ),
-                ),
-
-                const SizedBox(height: 12),
-
-                // ── Page Dots ────────────────────────────────────────────
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(tiers.length, (index) {
-                    final isActive = index == safeIndex;
-                    return AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      margin: const EdgeInsets.symmetric(horizontal: 4),
-                      width: isActive ? 24 : 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: isActive
-                            ? AppColors.gold
-                            : AppColors.border,
-                        borderRadius: BorderRadius.circular(4),
+            error: (err, __) => Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline,
+                        size: 48, color: AppColors.textSecondary),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Could not load membership tiers',
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
                       ),
-                    );
-                  }),
-                ),
-
-                const SizedBox(height: 24),
-
-                // ── CTA Button ───────────────────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: SizedBox(
-                    width: double.infinity,
-                    height: 54,
-                    child: ElevatedButton(
-                      onPressed: activationState.isProcessing || isDowngrade
-                          ? null
-                          : () => _activateMembership(selectedTier),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor:
-                            isDowngrade ? AppColors.surfaceLight : AppColors.gold,
-                        disabledBackgroundColor: isDowngrade
-                            ? AppColors.surfaceLight
-                            : AppColors.gold.withValues(alpha: 0.4),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(30),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '$err',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 24),
+                    OutlinedButton(
+                      onPressed: () => ref.invalidate(membershipTiersProvider),
+                      child: Text(
+                        'Retry',
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.gold,
                         ),
-                        elevation: 0,
                       ),
-                      child: activationState.isProcessing
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                if (isDowngrade) ...[
-                                  const Icon(Icons.lock_outline_rounded,
-                                      size: 16, color: AppColors.textHint),
-                                  const SizedBox(width: 8),
-                                ],
-                                Text(
-                                  ctaLabel,
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                    color: isDowngrade
-                                        ? AppColors.textHint
-                                        : Colors.white,
-                                    letterSpacing: 1,
-                                  ),
-                                ),
-                              ],
-                            ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            data: (tiers) {
+              if (tiers.isEmpty) {
+                return Center(
+                  child: Text(
+                    'No membership tiers available',
+                    style: GoogleFonts.poppins(
+                      fontSize: 15,
+                      color: AppColors.textSecondary,
                     ),
                   ),
-                ),
+                );
+              }
 
-                const SizedBox(height: 20),
-              ],
-            );
-          },
+              final safeIndex = _currentPage.clamp(0, tiers.length - 1);
+              final selectedTier = tiers[safeIndex];
+
+              MembershipTier? currentTier;
+              for (final t in tiers) {
+                if (t.id == profile?.membershipTierId) {
+                  currentTier = t;
+                  break;
+                }
+              }
+
+              final bool isCurrentSelected =
+                  selectedTier.id == currentTier?.id;
+              // Downgrade guard: user cannot switch to a lower tier level if active.
+              final bool isDowngrade = isMembershipActive &&
+                  currentTier != null &&
+                  !isCurrentSelected &&
+                  selectedTier.tierLevel < currentTier.tierLevel;
+
+              final String ctaLabel = isCurrentSelected
+                  ? 'RENEW ${selectedTier.name.toUpperCase()}'
+                  : isDowngrade
+                      ? 'CANNOT DOWNGRADE PLAN'
+                      : isMembershipActive
+                          ? 'UPGRADE TO ${selectedTier.name.toUpperCase()}'
+                          : isMembershipExpired
+                              ? (currentTier != null &&
+                                      selectedTier.tierLevel >
+                                          currentTier.tierLevel
+                                  ? 'UPGRADE TO ${selectedTier.name.toUpperCase()}'
+                                  : 'RENEW ${selectedTier.name.toUpperCase()}')
+                              : 'ACTIVATE ${selectedTier.name.toUpperCase()}';
+
+              return Column(
+                children: [
+                  const SizedBox(height: 16),
+
+                  // ── Brand Header ─────────────────────────────────────────
+                  _buildBrandHeader(),
+
+                  if (currentTier != null) ...[
+                    const SizedBox(height: 16),
+                    _buildCurrentPlanBanner(
+                        currentTier, profile, isMembershipExpired),
+                  ],
+
+                  const SizedBox(height: 24),
+
+                  // ── Title ────────────────────────────────────────────────
+                  Text(
+                    isMembershipExpired
+                        ? 'MEMBERSHIP EXPIRED'
+                        : isMembershipActive
+                            ? 'MANAGE YOUR MEMBERSHIP'
+                            : 'CHOOSE YOUR MEMBERSHIP',
+                    style: GoogleFonts.poppins(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      color: isMembershipExpired
+                          ? AppColors.champagneGold
+                          : AppColors.textPrimary,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    isMembershipExpired
+                        ? 'Your club membership has expired. Renew your plan below to restore access.'
+                        : isMembershipActive
+                            ? 'Renew your current plan or upgrade to a higher tier'
+                            : 'Unlock exclusive rewards across every TigerBay venue',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // ── Swipeable Tier Cards ─────────────────────────────────
+                  Expanded(
+                    child: PageView.builder(
+                      controller: _pageController,
+                      itemCount: tiers.length,
+                      onPageChanged: (i) {
+                        HapticFeedback.selectionClick();
+                        setState(() => _currentPage = i);
+                      },
+                      itemBuilder: (_, index) {
+                        final isSelected = index == safeIndex;
+                        return _TierCard(
+                          tier: tiers[index],
+                          isSelected: isSelected,
+                          isCurrentTier: tiers[index].id == currentTier?.id,
+                        );
+                      },
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // ── Page Dots ────────────────────────────────────────────
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(tiers.length, (index) {
+                      final isActive = index == safeIndex;
+                      return AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        width: isActive ? 24 : 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: isActive ? AppColors.gold : AppColors.border,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      );
+                    }),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // ── CTA Button ───────────────────────────────────────────
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: 54,
+                      child: ElevatedButton(
+                        onPressed: isBusy || isDowngrade
+                            ? null
+                            : () => _activateMembership(selectedTier),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isDowngrade
+                              ? AppColors.surfaceLight
+                              : AppColors.gold,
+                          disabledBackgroundColor: isDowngrade
+                              ? AppColors.surfaceLight
+                              : AppColors.gold.withValues(alpha: 0.4),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: isBusy
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (isDowngrade) ...[
+                                    const Icon(Icons.lock_outline_rounded,
+                                        size: 16, color: AppColors.textHint),
+                                    const SizedBox(width: 8),
+                                  ],
+                                  Text(
+                                    ctaLabel,
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      color: isDowngrade
+                                          ? AppColors.textHint
+                                          : Colors.white,
+                                      letterSpacing: 1,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+                ],
+              );
+            },
+          ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Widget _buildBrandHeader() {
     return Padding(
@@ -511,7 +539,8 @@ class _MembershipPaywallScreenState
     );
   }
 
-  Widget _buildCurrentPlanBanner(MembershipTier tier, dynamic profile, bool isExpired) {
+  Widget _buildCurrentPlanBanner(
+      MembershipTier tier, dynamic profile, bool isExpired) {
     final expiresAt = profile?.membershipExpiresAt;
     final dateStr = expiresAt != null
         ? '${DateTime.parse(expiresAt.toString()).toLocal().day} '
@@ -533,13 +562,16 @@ class _MembershipPaywallScreenState
           gradient: isExpired ? null : AppColors.goldGradient,
           borderRadius: BorderRadius.circular(14),
           border: isExpired
-              ? Border.all(color: AppColors.brandRed.withValues(alpha: 0.5), width: 1)
+              ? Border.all(
+                  color: AppColors.brandRed.withValues(alpha: 0.5), width: 1)
               : null,
         ),
         child: Row(
           children: [
             Icon(
-              isExpired ? CupertinoIcons.exclamationmark_circle_fill : Icons.workspace_premium,
+              isExpired
+                  ? CupertinoIcons.exclamationmark_circle_fill
+                  : Icons.workspace_premium,
               color: isExpired ? AppColors.brandRed : Colors.black,
               size: 20,
             ),
@@ -564,7 +596,9 @@ class _MembershipPaywallScreenState
                       expiryText,
                       style: GoogleFonts.poppins(
                         fontSize: 11,
-                        color: isExpired ? AppColors.textSecondary : Colors.black.withValues(alpha: 0.7),
+                        color: isExpired
+                            ? AppColors.textSecondary
+                            : Colors.black.withValues(alpha: 0.7),
                       ),
                     ),
                 ],
@@ -686,8 +720,7 @@ class _TierCard extends StatelessWidget {
 
           // ── Strips Rate ──────────────────────────────────────────────
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: AppColors.gold),
