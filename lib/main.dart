@@ -112,7 +112,7 @@ Future<void> main() async {
   // ── Init Supabase ────────────────────────────────────────────────────────
   await Supabase.initialize(
     url: EnvConfig.supabaseUrl,
-    anonKey: EnvConfig.supabaseAnonKey,
+    publishableKey: EnvConfig.supabaseAnonKey,
   );
 
   // ── Init Stripe ──────────────────────────────────────────────────────────

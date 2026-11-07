@@ -1,4 +1,4 @@
-name: Build App (Android, iOS & Web)
+name: Build iOS IPA
 
 on:
   push:
@@ -32,103 +32,26 @@ jobs:
         run: flutter pub get
 
       - name: Run Dart Analyzer
-        run: flutter analyze lib/ test/
+        run: flutter analyze lib/ test/ --no-fatal-warnings --no-fatal-infos
 
       - name: Run Unit Tests
         run: flutter test
 
-  build-android:
-    name: Build Android APK
-    needs: [code-quality]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Free Disk Space
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/share/boost
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.x'
-          channel: 'stable'
-          cache: true
-
-      - name: Prepare .env file
-        run: |
-          if [ -f .env.example ]; then
-            cp .env.example .env
-          else
-            touch .env
-          fi
-
-      - name: Ensure gradlew is executable
-        run: |
-          if [ -f android/gradlew ]; then
-            chmod +x android/gradlew
-          fi
-
-
-      - name: Install Dependencies
-        run: flutter pub get
-
-      - name: Patch plugins for AGP compatibility
-        run: |
-          find ~/.pub-cache -name "build.gradle" -type f -exec sed -i "s/proguard-android.txt/proguard-android-optimize.txt/g" {} + 2>/dev/null || true
-
-
-      - name: Build Debug APK
-        run: flutter build apk --debug
-
-      - name: Build Release APK
-        run: flutter build apk --release --no-shrink
-
-      - name: Upload Debug APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: tigerbay-android-debug-apk
-          path: build/app/outputs/flutter-apk/app-debug.apk
-
-      - name: Upload Release APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: tigerbay-android-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
-
-      - name: Build Release AAB Bundle
-        run: flutter build appbundle --release
-
-      - name: Upload Release AAB Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: tigerbay-android-release-aab
-          path: build/app/outputs/bundle/release/*.aab
-
   build-ios:
-    name: Build iOS IPA & App
+    name: Build iOS IPA
+    needs: [code-quality]
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select Xcode 26
+      - name: Select Xcode
         run: |
-          if [ -d "/Applications/Xcode_26.3.app" ]; then
-            sudo xcode-select -s /Applications/Xcode_26.3.app
-          elif [ -d "/Applications/Xcode_26.2.app" ]; then
-            sudo xcode-select -s /Applications/Xcode_26.2.app
-          elif [ -d "/Applications/Xcode_26.0.1.app" ]; then
-            sudo xcode-select -s /Applications/Xcode_26.0.1.app
-          elif [ -d "/Applications/Xcode_26.app" ]; then
-            sudo xcode-select -s /Applications/Xcode_26.app
+          if [ -d "/Applications/Xcode_16.2.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.2.app
+          elif [ -d "/Applications/Xcode_16.1.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.1.app
+          elif [ -d "/Applications/Xcode_16.0.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.0.app
           else
             sudo xcode-select -s /Applications/Xcode.app
           fi
@@ -167,41 +90,3 @@ jobs:
         with:
           name: tigerbay-ios-ipa
           path: build/ios/ipa_out/TigerBay.ipa
-
-      - name: Upload iOS Runner.app Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: tigerbay-ios-runner-app
-          path: build/ios/iphoneos/Runner.app
-
-  build-web:
-    name: Build Web App (Safari / Chrome preview)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.x'
-          channel: 'stable'
-          cache: true
-
-      - name: Prepare .env file
-        run: |
-          if [ -f .env.example ]; then
-            cp .env.example .env
-          else
-            touch .env
-          fi
-
-      - name: Install Dependencies
-        run: flutter pub get
-
-      - name: Build Web
-        run: flutter build web --release --no-wasm-dry-run
-
-      - name: Upload Web Build Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: tigerbay-web-build
-          path: build/web

@@ -303,15 +303,15 @@ class StripeService {
   }
 
   /// Verifies whether a PaymentIntent has succeeded on Stripe servers.
-  static const int _maxVerifyAttempts = 4;
-  static const List<int> _verifyDelaysMs = [0, 1000, 2000, 3000];
+  static const int maxVerifyAttempts = 4;
+  static const List<int> verifyDelaysMs = [0, 1000, 2000, 3000];
 
-  static Future<bool> _verifyPaymentIntentSucceeded(String intentId) async {
+  static Future<bool> verifyPaymentIntentSucceeded(String intentId) async {
     if (intentId.isEmpty || StripeConfig.secretKey.isEmpty) return false;
 
-    for (int attempt = 0; attempt < _maxVerifyAttempts; attempt++) {
-      if (_verifyDelaysMs[attempt] > 0) {
-        await Future.delayed(Duration(milliseconds: _verifyDelaysMs[attempt]));
+    for (int attempt = 0; attempt < maxVerifyAttempts; attempt++) {
+      if (verifyDelaysMs[attempt] > 0) {
+        await Future.delayed(Duration(milliseconds: verifyDelaysMs[attempt]));
       }
 
       final client = HttpClient()..connectionTimeout = const Duration(seconds: 6);
@@ -327,7 +327,7 @@ class StripeService {
           final body = await response.transform(utf8.decoder).join();
           final json = jsonDecode(body) as Map<String, dynamic>;
           final status = json['status'] as String?;
-          debugPrint('[Stripe] Verify attempt ${attempt + 1}/$_maxVerifyAttempts for $intentId: status=$status');
+          debugPrint('[Stripe] Verify attempt ${attempt + 1}/$maxVerifyAttempts for $intentId: status=$status');
           if (status == 'succeeded' || status == 'processing' || status == 'requires_capture') {
             return true;
           }
