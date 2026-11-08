@@ -111,6 +111,16 @@ class EnvConfig {
     return '887005202939-17lt5hs4rae4i8rrslc86i70velaqich.apps.googleusercontent.com';
   }
 
+  static String get googleIosClientId {
+    const compileTime = String.fromEnvironment('GOOGLE_IOS_CLIENT_ID');
+    if (compileTime.isNotEmpty) return compileTime;
+    final envVal = _resolve('GOOGLE_IOS_CLIENT_ID');
+    if (envVal.contains('.apps.googleusercontent.com')) {
+      return envVal;
+    }
+    return '';
+  }
+
   static String get appScheme {
     const compileTime = String.fromEnvironment('APP_SCHEME');
     if (compileTime.isNotEmpty) return compileTime;

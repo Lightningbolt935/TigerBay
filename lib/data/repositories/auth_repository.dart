@@ -5,6 +5,7 @@ import 'dart:math' as dart_math;
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart'
     show kIsWeb, debugPrint, defaultTargetPlatform, TargetPlatform;
+import 'package:flutter/services.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -612,23 +613,86 @@ class AuthRepository {
   /// On iOS, uses Supabase OAuth in-app browser view (Chrome/Safari sheet)
   /// which is pre-configured and reliable. On Android, attempts native Google Play
   /// Services account picker first, with seamless fallback to inAppBrowserView if needed.
+  /// Signs in with Google.
+  /// On iOS:
+  ///   - Uses the native iOS ASWebAuthenticationSession modal popup sheet (zero redirect
+  ///     to external browser / Safari, presenting seamlessly over the app).
+  ///   - If an iOS Client ID is configured, also supports native GIDSignIn.
+  /// On Android:
+  ///   - Uses the native Google Play Services bottom-sheet account picker dialog.
+  /// On Web / Other:
+  ///   - Uses standard Supabase OAuth redirect.
   Future<void> signInWithGoogle() async {
     final appScheme = EnvConfig.appScheme;
     final webClientId = EnvConfig.googleWebClientId;
+    final iosClientId = EnvConfig.googleIosClientId;
 
-    // On iOS, native google_sign_in requires an iOS Client ID in GoogleService-Info.plist
-    // and reversed client ID in Info.plist. Supabase OAuth inAppBrowserView is fully supported
-    // and requires zero client-side Google iOS SDK setup.
+    // 1. iOS: Native in-app popup dialog without redirecting to external browser
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
-      debugPrint('[TigerBay Auth] Using Supabase Google OAuth inAppBrowserView for iOS.');
-      await _client.auth.signInWithOAuth(
-        OAuthProvider.google,
-        redirectTo: '$appScheme://login-callback',
-        authScreenLaunchMode: LaunchMode.inAppBrowserView,
-      );
-      return;
+      // Attempt native GoogleSignIn SDK first if iOS Client ID is provided
+      if (iosClientId.isNotEmpty) {
+        try {
+          final googleSignIn = GoogleSignIn(
+            clientId: iosClientId,
+            serverClientId: webClientId.isNotEmpty ? webClientId : null,
+            scopes: ['email', 'profile'],
+          );
+
+          final googleUser = await googleSignIn.signIn();
+          if (googleUser == null) {
+            // User cancelled the in-app picker
+            return;
+          }
+
+          final googleAuth = await googleUser.authentication;
+          final idToken = googleAuth.idToken;
+          final accessToken = googleAuth.accessToken;
+
+          if (idToken != null) {
+            final authResponse = await _client.auth.signInWithIdToken(
+              provider: OAuthProvider.google,
+              idToken: idToken,
+              accessToken: accessToken,
+            );
+
+            if (authResponse.user != null) {
+              unawaited(_bindDevice(authResponse.user!.id));
+            }
+            return;
+          }
+        } catch (e) {
+          debugPrint('[TigerBay Auth] Native GIDSignIn failed: $e. Using native popup sheet...');
+          final errStr = e.toString().toLowerCase();
+          if (errStr.contains('cancel') || errStr.contains('abort')) {
+            return;
+          }
+        }
+      }
+
+      // Native iOS modal popup sheet (ASWebAuthenticationSession)
+      // This opens as an in-app popup sheet right on top of TigerBay,
+      // exactly like on Android, with ZERO external browser / Safari redirect.
+      try {
+        await _signInWithIosAuthSession(OAuthProvider.google);
+        return;
+      } on PlatformException catch (e) {
+        if (e.code == 'CANCELED') {
+          debugPrint('[TigerBay Auth] User cancelled iOS popup auth dialog.');
+          return;
+        }
+        debugPrint('[TigerBay Auth] iOS popup auth error: ${e.message}');
+        throw AuthException('Google Sign-In failed: ${e.message}');
+      } catch (e) {
+        debugPrint('[TigerBay Auth] iOS popup auth error: $e');
+        final errStr = e.toString().toLowerCase();
+        if (errStr.contains('cancel') || errStr.contains('abort')) {
+          return;
+        }
+        throw AuthException('Google Sign-In failed: $e');
+      }
     }
 
+    // 2. Android / Desktop: Native Google Play Services bottom-sheet account picker dialog
     try {
       final googleSignIn = GoogleSignIn(
         serverClientId: webClientId.isNotEmpty ? webClientId : null,
@@ -672,13 +736,37 @@ class AuthRepository {
         await _client.auth.signInWithOAuth(
           OAuthProvider.google,
           redirectTo: '$appScheme://login-callback',
-          authScreenLaunchMode: LaunchMode.inAppBrowserView,
+          authScreenLaunchMode: LaunchMode.platformDefault,
         );
       } catch (fallbackError) {
         debugPrint('[TigerBay Auth] Fallback Google OAuth error: $fallbackError');
         throw AuthException('Google Sign-In failed: $fallbackError');
       }
     }
+  }
+
+  /// Performs native iOS OAuth using ASWebAuthenticationSession via MethodChannel.
+  /// Displays as a clean in-app modal sheet popup on iOS without opening external Safari.
+  Future<void> _signInWithIosAuthSession(OAuthProvider provider) async {
+    const authChannel = MethodChannel('io.tigerbay.app/auth_session');
+    final appScheme = EnvConfig.appScheme;
+    final res = await _client.auth.getOAuthSignInUrl(
+      provider: provider,
+      redirectTo: '$appScheme://login-callback',
+    );
+
+    final callbackUrl = await authChannel.invokeMethod<String>('authenticate', {
+      'url': res.url,
+      'callbackUrlScheme': appScheme,
+    });
+
+    if (callbackUrl == null || callbackUrl.isEmpty) {
+      return;
+    }
+
+    final authResponse = await _client.auth.getSessionFromUrl(Uri.parse(callbackUrl));
+    final user = authResponse.session.user;
+    unawaited(_bindDevice(user.id));
   }
 
   // ── Apple ───────────────────────────────────────────────────────────────────
